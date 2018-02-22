@@ -52,7 +52,7 @@ contract Moloch is Ownable {
     require(!members[msg.sender].approved);
 
     // create ballot for voting new member in
-    address ballotAddress = MemberApplicationBallot(approvedMembers);
+    address ballotAddress = new MemberApplicationBallot(approvedMembers);
 
     members[msg.sender] = Member({ 
       approved: false,
