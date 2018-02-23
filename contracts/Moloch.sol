@@ -25,12 +25,12 @@ contract Moloch is Ownable {
   address public votingShares;
 
   event MemberApplication(
-    address indexed _memberAddress,
-    uint256 _votingSharesRequested,
-    uint256 _ethTributeAmount,
-    address _tokenTributeAddress,
-    uint256 _tokenTributeAmount,
-    address _ballotAddress
+    address indexed memberAddress,
+    uint256 votingSharesRequested,
+    uint256 ethTributeAmount,
+    address tokenTributeAddress,
+    uint256 tokenTributeAmount,
+    address ballotAddress
   );
 
   modifier onlyMember {
@@ -38,8 +38,8 @@ contract Moloch is Ownable {
     _;
   }
 
-  function Moloch(address _votingShares) {
-    votingShares = _votingShares;
+  function Moloch() {
+    votingShares = new VotingShares();
   }
 
   function submitApplication(
