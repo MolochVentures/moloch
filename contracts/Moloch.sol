@@ -22,9 +22,9 @@ contract Moloch is Ownable {
   address[] public approvedMembers;
 
   mapping (address => Member) public members;
-  address public votingShares;
+  address public votingSharesAddr;
 
-  event MemberApplication(
+  event MemberApplied(
     address indexed memberAddress,
     uint256 votingSharesRequested,
     uint256 ethTributeAmount,
@@ -33,13 +33,39 @@ contract Moloch is Ownable {
     address ballotAddress
   );
 
+  event MemberApproved(
+    address indexed memberAddress
+  );
+
   modifier onlyMember {
     require(members[msg.sender].approved);
     _;
   }
 
   function Moloch() {
-    votingShares = new VotingShares();
+    votingSharesAddr = new VotingShares();
+  }
+
+  // add founding member, auto approved
+  function addFoundingMember(
+    address _memberAddress,
+    uint256 _votingShares,
+    address _tokenTributeAddress,
+    uint256 _tokenTributeAmount
+  ) public payable 
+  {
+    members[_memberAddress] = Member(
+      true, // auto approve
+      _votingShares,
+      msg.value,
+      _tokenTributeAddress,
+      _tokenTributeAmount,
+      address(0) // no voting ballot
+    );
+    MemberApproved(_memberAddress);
+
+    approvedMembers.push(_memberAddress);
+    // TODO: TRANSFER TO GUILD BANK
   }
 
   function submitApplication(
@@ -63,7 +89,7 @@ contract Moloch is Ownable {
       ballotAddress: ballotAddress
     });
 
-    MemberApplication(
+    MemberApplied(
       msg.sender,
       _votingSharesRequested,
       msg.value,
@@ -73,7 +99,7 @@ contract Moloch is Ownable {
     );
   }
 
-  function voteOnMemberApplication(address member, bool accepted) {
+  function voteOnMemberApplication(address member, bool accepted) onlyMember {
     require(!members[member].approved);
 
     MemberApplicationBallot ballot = MemberApplicationBallot(members[member].ballotAddress);
