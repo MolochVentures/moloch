@@ -11,22 +11,22 @@ contract MemberApplicationBallot is Voting {
     requiredVoters = _requiredVoters;
     // give right to vote for all provided voters
     for (uint8 i = 0; i < _requiredVoters.length; i++) {
-      super.giveRightToVote(_requiredVoters[i]);
+      giveRightToVote(_requiredVoters[i]);
     }
   }
 
   function voteAgainst() public {
-    super.vote(0);
+    vote(0);
   }
 
   function voteFor() public {
-    super.vote(1);
+    vote(1);
   }
 
   function hasEveryoneVoted() public view returns (bool) {
     bool yes = true;
     for (uint8 i = 0; i < requiredVoters.length; i++) {
-      yes = yes && super.hasVoted(requiredVoters[i]);
+      yes = yes && hasVoted(requiredVoters[i]);
     }
 
     return yes;
@@ -34,7 +34,7 @@ contract MemberApplicationBallot is Voting {
 
   function isAccepted() public view returns (bool) {
     require(this.hasEveryoneVoted());
-    uint8 winner = super.winningProposal();
+    uint8 winner = winningProposal();
 
     if (winner == 0) {
       return false;
