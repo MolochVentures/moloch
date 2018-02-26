@@ -1,6 +1,8 @@
 pragma solidity ^0.4.0;
 
-contract Voting {
+import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
+
+contract Voting is Ownable {
 
   struct Voter {
     uint weight;
@@ -16,11 +18,18 @@ contract Voting {
   mapping(address => Voter) public voters;
   Proposal[] proposals;
 
+  event Vote(uint8 toProposal, address voter, uint weight);
+
   /// Create a new ballot with $(_numProposals) different proposals.
   function Voting(uint8 _numProposals) public {
     chairperson = msg.sender;
     voters[chairperson].weight = 1;
     proposals.length = _numProposals;
+  }
+
+  function getVoter(address _voter) public view returns(uint, bool, uint8, address) {
+    Voter memory voter = voters[_voter];
+    return (voter.weight, voter.voted, voter.vote, voter.delegate);
   }
 
   /// Give $(toVoter) the right to vote on this ballot.
@@ -62,6 +71,19 @@ contract Voting {
     sender.voted = true;
     sender.vote = toProposal;
     proposals[toProposal].voteCount += sender.weight;
+    
+    Vote(toProposal, msg.sender, sender.weight);
+  }
+
+  function proxyVote(address voter, uint8 toProposal) public onlyOwner {
+    Voter storage sender = voters[voter];
+    require(!sender.voted && toProposal < proposals.length);
+    
+    sender.voted = true;
+    sender.vote = toProposal;
+    proposals[toProposal].voteCount += sender.weight;
+    
+    Vote(toProposal, voter, sender.weight);
   }
 
   function hasVoted(address _voter) public view returns (bool) {
@@ -76,5 +98,6 @@ contract Voting {
           _winningProposal = prop;
       }
     }
+    // what about tie
   }
 }
