@@ -37,6 +37,12 @@ contract Moloch is Ownable {
     address indexed memberAddress
   );
 
+  event VotedForMember(
+    address indexed votingMember,
+    address indexed votedFor,
+    bool accepted
+  );
+
   modifier onlyMember {
     require(members[msg.sender].approved);
     _;
@@ -46,13 +52,32 @@ contract Moloch is Ownable {
     votingSharesAddr = new VotingShares();
   }
 
+  function getMember(address _memberAddress) public view returns (
+    bool,
+    uint256,
+    uint256,
+    address,
+    uint256,
+    address
+  ) {
+    Member memory member = members[_memberAddress];
+    return (
+      member.approved,
+      member.votingShares,
+      member.ethTributeAmount,
+      member.tokenTributeAddress,
+      member.tokenTributeAmount,
+      member.ballotAddress
+    );
+  }
+
   // add founding member, auto approved
   function addFoundingMember(
     address _memberAddress,
     uint256 _votingShares,
     address _tokenTributeAddress,
     uint256 _tokenTributeAmount
-  ) public payable 
+  ) public payable onlyOwner
   {
     members[_memberAddress] = Member(
       true, // auto approve
@@ -99,14 +124,16 @@ contract Moloch is Ownable {
     );
   }
 
-  function voteOnMemberApplication(address member, bool accepted) onlyMember {
-    require(!members[member].approved);
+  function voteOnMemberApplication(address prospectiveMember, bool accepted) onlyMember {
+    require(!members[prospectiveMember].approved);
 
-    MemberApplicationBallot ballot = MemberApplicationBallot(members[member].ballotAddress);
+    MemberApplicationBallot ballot = MemberApplicationBallot(members[prospectiveMember].ballotAddress);
     if (accepted) {
-      ballot.voteFor();
+      ballot.voteFor(msg.sender);
     } else {
-      ballot.voteAgainst();
+      ballot.voteAgainst(msg.sender);
     }
+
+    VotedForMember(msg.sender, prospectiveMember, accepted);
   }
 }
