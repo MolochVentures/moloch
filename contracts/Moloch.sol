@@ -5,6 +5,7 @@ import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 import 'zeppelin-solidity/contracts/token/ERC20/ERC20.sol';
 import './VotingShares.sol';
 import './MemberApplicationBallot.sol';
+import './GuildBank.sol';
 
 contract Moloch is Ownable {
   using SafeMath for uint256;
@@ -20,9 +21,10 @@ contract Moloch is Ownable {
   }
 
   address[] public approvedMembers;
-
   mapping (address => Member) public members;
-  address public votingSharesAddr;
+
+  VotingShares public votingShares;
+  GuildBank public guildBank;
 
   event MemberApplied(
     address indexed memberAddress,
@@ -33,7 +35,7 @@ contract Moloch is Ownable {
     address ballotAddress
   );
 
-  event MemberApproved(
+  event MemberAccepted(
     address indexed memberAddress
   );
 
@@ -48,8 +50,9 @@ contract Moloch is Ownable {
     _;
   }
 
-  function Moloch() {
+  function Moloch() public {
     votingSharesAddr = new VotingShares();
+    guildBank = new GuildBank();
   }
 
   function getMember(address _memberAddress) public view returns (
@@ -87,7 +90,8 @@ contract Moloch is Ownable {
       _tokenTributeAmount,
       address(0) // no voting ballot
     );
-    MemberApproved(_memberAddress);
+
+    MemberAccepted(_memberAddress);
 
     approvedMembers.push(_memberAddress);
     // TODO: TRANSFER TO GUILD BANK
@@ -124,16 +128,37 @@ contract Moloch is Ownable {
     );
   }
 
-  function voteOnMemberApplication(address prospectiveMember, bool accepted) onlyMember {
-    require(!members[prospectiveMember].approved);
+  function voteOnMemberApplication(address _prospectiveMember, bool _accepted) public onlyMember {
+    require(!members[_prospectiveMember].approved);
 
-    MemberApplicationBallot ballot = MemberApplicationBallot(members[prospectiveMember].ballotAddress);
-    if (accepted) {
+    MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
+    if (_accepted) {
       ballot.voteFor(msg.sender);
     } else {
       ballot.voteAgainst(msg.sender);
     }
 
-    VotedForMember(msg.sender, prospectiveMember, accepted);
+    VotedForMember(msg.sender, _prospectiveMember, _accepted);
+  }
+
+  function acceptMember(address _prospectiveMember) public onlyOwner {
+    // check that vote passed
+    MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
+    require(ballot.isAccepted());
+
+    Member storage newMember = members[_prospectiveMember];
+    newMember.approved = true;
+
+    // transfer tokens to guild bank
+    if (newMember.tokenTributeAddress != address(0)) {
+      ERC20 token = ERC20(newMember.tokenTributeAddress);
+      token.transfer(address(guildBank), newMember.tokenTributeAmount);
+    }
+
+    if (newMember.ethTributeAmount > 0) {
+      address(guildBank).transfer(newMember.ethTributeAmount);
+    }
+
+    MemberAccepted(_prospectiveMember);
   }
 }
