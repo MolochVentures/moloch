@@ -7,20 +7,26 @@ const SimpleToken = artifacts.require('./SimpleToken')
 const MemberApplicationBallot = artifacts.require('./MemberApplicationBallot')
 
 contract('Moloch', accounts => {
-  beforeEach('create moloch with founders', async () => {
-    const TRIBUTE = web3.toWei(10, 'ether')
+  before('create moloch with founders', async () => {
+    const TRIBUTE = web3.toWei(1, 'ether')
     const VOTING_SHARES = 100
-    this.simpleToken = await SimpleToken.new({ from: accounts[9] })
+    const FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR = accounts[9]
+    const FOUNDING_MEMBER_ETH_TRIBUTE_ADDR = accounts[8]
+
+    this.simpleToken = await SimpleToken.new({
+      from: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR
+    })
+
     this.FOUNDING_MEMBERS = [
       {
-        memberAddress: accounts[8],
+        memberAddress: FOUNDING_MEMBER_ETH_TRIBUTE_ADDR,
         votingShares: VOTING_SHARES,
         ethTributeAmount: TRIBUTE,
         tokenTributeAddr: '0x0',
         tokenTributeAmount: 0
       },
       {
-        memberAddress: accounts[9],
+        memberAddress: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR,
         votingShares: VOTING_SHARES,
         ethTributeAmount: 0,
         tokenTributeAddr: this.simpleToken.address,
@@ -29,22 +35,40 @@ contract('Moloch', accounts => {
     ]
 
     const moloch = await Moloch.deployed()
-    const promises = this.FOUNDING_MEMBERS.map(member => {
-      return moloch.addFoundingMember(
-        member.memberAddress,
-        member.votingShares,
-        member.tokenTributeAddr,
-        member.tokenTributeAmount,
-        { from: accounts[0], value: member.ethTributeAmount }
-      )
+
+    // transfer to moloch contract with application
+    await this.simpleToken.transfer(moloch.address, TRIBUTE, {
+      from: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR
     })
-    const results = await Promise.all(promises)
-    results.forEach((result, index) => {
-      const approved = result.logs.find(log => {
-        return log.event === 'MemberAccepted'
+
+    const guildBankAddr = await moloch.guildBank.call()
+    await Promise.all(
+      this.FOUNDING_MEMBERS.map(async (member, index) => {
+        const result = await moloch.addFoundingMember(
+          member.memberAddress,
+          member.votingShares,
+          member.tokenTributeAddr,
+          member.tokenTributeAmount,
+          { from: accounts[0], value: member.ethTributeAmount }
+        )
+
+        const approved = result.logs.find(log => {
+          return log.event === 'MemberAccepted'
+        })
+
+        assert.equal(
+          approved.args.memberAddress,
+          this.FOUNDING_MEMBERS[index].memberAddress
+        )
       })
-      assert.equal(approved.memberAddress, this.FOUNDING_MEMBERS.memberAddress)
-    })
+    )
+
+    // check guild bank balance
+    let balance = web3.eth.getBalance(guildBankAddr)
+    assert.equal(balance.toNumber(), TRIBUTE)
+
+    balance = await this.simpleToken.balanceOf(guildBankAddr)
+    assert.equal(balance.toNumber(), TRIBUTE)
   })
 
   it('should be owned', async () => {
@@ -53,17 +77,16 @@ contract('Moloch', accounts => {
     assert.equal(owner, accounts[0])
   })
 
-  it('should create voting shares', async () => {
-    const INITIAL_VOTING_SHARES = 10000
-
+  it('should mint voting shares', async () => {
     const moloch = await Moloch.deployed()
-    const votingSharesAddr = await moloch.votingSharesAddr.call()
+    const votingSharesAddr = await moloch.votingShares.call()
     const votingShares = await VotingShares.at(votingSharesAddr)
-    const balance = await votingShares.balanceOf.call(moloch.address)
 
-    assert.equal(
-      web3.fromWei(balance.toNumber(), 'ether'),
-      INITIAL_VOTING_SHARES
+    await Promise.all(
+      this.FOUNDING_MEMBERS.map(async (member, index) => {
+        const balance = await votingShares.balanceOf.call(member.memberAddress)
+        assert.equal(balance.toNumber(), member.votingShares)
+      })
     )
   })
 
@@ -112,7 +135,7 @@ contract('Moloch', accounts => {
     // verify ballot
     const ballot = await MemberApplicationBallot.at(log.args.ballotAddress)
     let requiredVoters = await ballot.howManyVoters.call()
-    console.log(requiredVoters.toNumber())
+    assert.equal(requiredVoters.toNumber(), this.FOUNDING_MEMBERS.length)
     await Promise.all(
       this.FOUNDING_MEMBERS.map(async (foundingMember, index) => {
         let voter = await ballot.requiredVoters.call(index)
@@ -139,7 +162,6 @@ contract('Moloch', accounts => {
       })
     )
     const isAccepted = await ballot.isAccepted()
-    console.log(isAccepted)
     assert.equal(isAccepted, true)
   })
 })
