@@ -20,7 +20,7 @@ contract VotingShares is Ownable, BasicToken {
 
   event Transfer(address indexed from, address indexed to, uint256 value);
 
-  function VotingShares() {
+  function VotingShares() public {
     totalSupply_ = INITIAL_SUPPLY;
     balances[msg.sender] = INITIAL_SUPPLY;
     Transfer(0x0, msg.sender, INITIAL_SUPPLY);
