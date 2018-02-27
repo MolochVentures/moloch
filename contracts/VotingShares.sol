@@ -2,12 +2,13 @@ pragma solidity ^0.4.18;
 
 import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
-import 'zeppelin-solidity/contracts/token/ERC20/BasicToken.sol';
+import 'zeppelin-solidity/contracts/token/ERC20/BurnableToken.sol';
+import 'zeppelin-solidity/contracts/token/ERC20/MintableToken.sol';
 
 /**
  * almost like a basic token, but not transferrable by normal people
  */
-contract VotingShares is Ownable, BasicToken {
+contract VotingShares is BurnableToken, MintableToken {
   using SafeMath for uint256;
 
   uint256 totalSupply_;
@@ -16,7 +17,7 @@ contract VotingShares is Ownable, BasicToken {
   string public constant symbol = "MOL"; // solium-disable-line uppercase
   uint8 public constant decimals = 18; // solium-disable-line uppercase
 
-  uint256 public constant INITIAL_SUPPLY = 10000 * (10 ** uint256(decimals));
+  uint256 public constant INITIAL_SUPPLY = 0 * (10 ** uint256(decimals));
 
   event Transfer(address indexed from, address indexed to, uint256 value);
 
