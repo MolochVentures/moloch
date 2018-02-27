@@ -8,4 +8,6 @@ contract GuildBank is Ownable {
   function addToken(address _tokenContractAddress) public onlyOwner {
     tokensHeld.push(_tokenContractAddress);
   }
+
+  function() public payable {}
 }
