@@ -51,7 +51,7 @@ contract Moloch is Ownable {
   }
 
   function Moloch() public {
-    votingSharesAddr = new VotingShares();
+    votingShares = new VotingShares();
     guildBank = new GuildBank();
   }
 
@@ -83,18 +83,14 @@ contract Moloch is Ownable {
   ) public payable onlyOwner
   {
     members[_memberAddress] = Member(
-      true, // auto approve
+      false,
       _votingShares,
       msg.value,
       _tokenTributeAddress,
       _tokenTributeAmount,
       address(0) // no voting ballot
     );
-
-    MemberAccepted(_memberAddress);
-
-    approvedMembers.push(_memberAddress);
-    // TODO: TRANSFER TO GUILD BANK
+    _addMember(_memberAddress);
   }
 
   function submitApplication(
@@ -141,15 +137,13 @@ contract Moloch is Ownable {
     VotedForMember(msg.sender, _prospectiveMember, _accepted);
   }
 
-  function acceptMember(address _prospectiveMember) public onlyOwner {
-    // check that vote passed
-    MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
-    require(ballot.isAccepted());
+  function _addMember(address _prospectiveMember) internal onlyOwner {
+    VotingShares votingSharesInst = VotingShares(votingShares);
 
     Member storage newMember = members[_prospectiveMember];
     newMember.approved = true;
 
-    // transfer tokens to guild bank
+    // transfer tokens and eth to guild bank
     if (newMember.tokenTributeAddress != address(0)) {
       ERC20 token = ERC20(newMember.tokenTributeAddress);
       token.transfer(address(guildBank), newMember.tokenTributeAmount);
@@ -159,6 +153,20 @@ contract Moloch is Ownable {
       address(guildBank).transfer(newMember.ethTributeAmount);
     }
 
+    // mint and transfer voting shares
+    votingSharesInst.mint(_prospectiveMember, newMember.votingShares);
+
+    approvedMembers.push(_prospectiveMember);
     MemberAccepted(_prospectiveMember);
   }
+
+  function acceptMember(address _prospectiveMember) public onlyOwner {
+    // check that vote passed
+    MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
+    require(ballot.isAccepted());
+
+    _addMember(_prospectiveMember);
+  }
+
+  function() public payable {}
 }
