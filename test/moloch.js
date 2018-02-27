@@ -41,7 +41,7 @@ contract('Moloch', accounts => {
     const results = await Promise.all(promises)
     results.forEach((result, index) => {
       const approved = result.logs.find(log => {
-        return log.event === 'MemberApproved'
+        return log.event === 'MemberAccepted'
       })
       assert.equal(approved.memberAddress, this.FOUNDING_MEMBERS.memberAddress)
     })
