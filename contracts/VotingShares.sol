@@ -14,7 +14,7 @@ contract VotingShares is BurnableToken, MintableToken {
   uint256 totalSupply_;
 
   string public constant name = "VotingShares"; // solium-disable-line uppercase
-  string public constant symbol = "MOL"; // solium-disable-line uppercase
+  string public constant symbol = "MLV"; // solium-disable-line uppercase
   uint8 public constant decimals = 18; // solium-disable-line uppercase
 
   uint256 public constant INITIAL_SUPPLY = 0 * (10 ** uint256(decimals));

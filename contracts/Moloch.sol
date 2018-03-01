@@ -6,6 +6,7 @@ import 'zeppelin-solidity/contracts/token/ERC20/ERC20.sol';
 import './VotingShares.sol';
 import './MemberApplicationBallot.sol';
 import './GuildBank.sol';
+import './LootToken.sol';
 
 contract Moloch is Ownable {
   using SafeMath for uint256;
@@ -25,6 +26,7 @@ contract Moloch is Ownable {
 
   VotingShares public votingShares;
   GuildBank public guildBank;
+  LootToken public lootToken;
 
   event MemberApplied(
     address indexed memberAddress,
@@ -50,9 +52,16 @@ contract Moloch is Ownable {
     _;
   }
 
-  function Moloch() public {
-    votingShares = new VotingShares();
-    guildBank = new GuildBank();
+  function setVotingShares(address _votingShares) public onlyOwner {
+    votingShares = VotingShares(_votingShares);
+  }
+
+  function setLootToken(address _lootToken) public onlyOwner {
+    lootToken = LootToken(_lootToken);
+  }
+
+  function setGuildBank(address _guildBank) public onlyOwner {
+    guildBank = GuildBank(_guildBank);
   }
 
   function getMember(address _memberAddress) public view returns (
@@ -138,8 +147,6 @@ contract Moloch is Ownable {
   }
 
   function _addMember(address _prospectiveMember) internal onlyOwner {
-    VotingShares votingSharesInst = VotingShares(votingShares);
-
     Member storage newMember = members[_prospectiveMember];
     newMember.approved = true;
 
@@ -154,7 +161,10 @@ contract Moloch is Ownable {
     }
 
     // mint and transfer voting shares
-    votingSharesInst.mint(_prospectiveMember, newMember.votingShares);
+    votingShares.mint(_prospectiveMember, newMember.votingShares);
+
+    // mint loot tokens 1:1 and keep them in this contract for withdrawal
+    lootToken.mint(this, newMember.votingShares);
 
     approvedMembers.push(_prospectiveMember);
     MemberAccepted(_prospectiveMember);
