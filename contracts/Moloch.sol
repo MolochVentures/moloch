@@ -47,6 +47,10 @@ contract Moloch is Ownable {
     bool accepted
   );
 
+  event MemberExit(
+    address indexed memberAddress
+  );
+
   modifier onlyMember {
     require(members[msg.sender].approved);
     _;
@@ -176,6 +180,18 @@ contract Moloch is Ownable {
     require(ballot.isAccepted());
 
     _addMember(_prospectiveMember);
+  }
+
+  function exitMoloch() public onlyMember {
+    Member memory member = members[msg.sender];
+    require(lootToken.balanceOf(this) >= member.votingShares);
+
+    lootToken.transfer(msg.sender, member.votingShares);
+
+    // TODO: burn voting shares, need to redo contract to allow without transfer
+
+    delete members[msg.sender];
+    MemberExit(msg.sender);
   }
 
   function() public payable {}
