@@ -164,10 +164,15 @@ contract('Moloch', accounts => {
     const APPLICANT_ADDRESS = accounts[1]
 
     const simpleToken = await SimpleToken.new({ from: APPLICANT_ADDRESS })
-    const balance = await simpleToken.balanceOf.call(APPLICANT_ADDRESS)
+    let balance = await simpleToken.balanceOf.call(APPLICANT_ADDRESS)
     assert.equal(balance.toNumber(), web3.toWei(10000, 'ether'))
 
     const moloch = await Moloch.deployed()
+
+    // transfer tokens for application
+    await simpleToken.transfer(moloch.address, TOKEN_TRIBUTE, {
+      from: APPLICANT_ADDRESS
+    })
 
     // submit application
     const result = await moloch.submitApplication(
@@ -199,7 +204,9 @@ contract('Moloch', accounts => {
           {
             from: foundingMember.memberAddress
           }
-        ) // vote for acceptance
+        )
+
+        // vote for acceptance
         log = vote.logs.find(log => {
           return log.event === 'VotedForMember'
         })
@@ -212,7 +219,49 @@ contract('Moloch', accounts => {
         assert.equal(voter[2].toNumber(), 1)
       })
     )
+
     const isAccepted = await ballot.isAccepted()
-    assert.equal(isAccepted, true)
+    assert.equal(isAccepted, true, 'Winning vote not accepted.')
+
+    let res = await moloch.acceptMember(APPLICANT_ADDRESS)
+
+    const votingSharesAddr = await moloch.votingShares.call()
+    const votingShares = await VotingShares.at(votingSharesAddr)
+    const lootTokenAddr = await moloch.lootToken.call()
+    const lootToken = await LootToken.at(lootTokenAddr)
+    balance = await lootToken.balanceOf(APPLICANT_ADDRESS)
+    assert.equal(
+      balance.toNumber(),
+      0,
+      'Should have no loot tokens before exit.'
+    )
+
+    balance = await votingShares.balanceOf(APPLICANT_ADDRESS)
+    assert.equal(
+      balance.toNumber(),
+      VOTING_SHARES,
+      'Should have voting shares.'
+    )
+
+    balance = await lootToken.balanceOf(moloch.address)
+    console.log('balance: ', balance.toNumber())
+
+    res = await moloch.exitMoloch({ from: APPLICANT_ADDRESS })
+    console.log('result: ', res)
+    balance = await lootToken.balanceOf(APPLICANT_ADDRESS)
+    console.log('balance: ', balance.toNumber())
+    assert.equal(
+      balance.toNumber(),
+      VOTING_SHARES,
+      'Should have loot tokens after exit.'
+    )
+
+    balance = await votingShares.balanceOf(APPLICANT_ADDRESS)
+    console.log('balance: ', balance.toNumber())
+    assert.equal(
+      balance.toNumber(),
+      0,
+      'Should have no voting shares after exit.'
+    )
   })
 })
