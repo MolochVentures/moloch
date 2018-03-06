@@ -205,7 +205,7 @@ contract('Moloch', accounts => {
   })
 
   it('should submit application with tokens', async () => {
-    const TOKEN_TRIBUTE = web3.toWei(10, 'ether')
+    const TOKEN_TRIBUTE = web3.toWei(1, 'ether')
     const VOTING_SHARES = 100
     const APPLICANT_ADDRESS = accounts[1]
 
@@ -229,7 +229,6 @@ contract('Moloch', accounts => {
     })
 
     const member = await moloch.getMember(APPLICANT_ADDRESS)
-    console.log('member: ', member)
 
     assert.equal(member[0], false)
     assert.equal(member[1].toNumber(), VOTING_SHARES)
@@ -285,14 +284,16 @@ contract('Moloch', accounts => {
 
     const moloch = await Moloch.deployed()
 
-    const member = await moloch.getMember.call(APPLICANT_ADDRESS)
-    const ballot = await MemberApplicationBallot.at(member[5])
-    const isAccepted = await ballot.isAccepted()
-    console.log('isAccepted: ', isAccepted)
+    let member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    assert.equal(member[0], false, 'Member was approved before being accepted.')
 
-    console.log('1')
-    await moloch.acceptMember(APPLICANT_ADDRESS)
-    console.log('2')
+    await moloch.acceptMember(APPLICANT_ADDRESS, {
+      from: this.FOUNDING_MEMBERS[0].memberAddress
+    })
+
+    member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    assert.equal(member[0], true, 'Member was not approved.')
+
     const votingSharesAddr = await moloch.votingShares.call()
     const votingShares = await VotingShares.at(votingSharesAddr)
     const lootTokenAddr = await moloch.lootToken.call()
@@ -311,13 +312,14 @@ contract('Moloch', accounts => {
       'Should have voting shares.'
     )
 
-    balance = await lootToken.balanceOf(moloch.address)
-    console.log('balance: ', balance.toNumber())
+    const startingLootTokenBalance = await lootToken.balanceOf(moloch.address)
 
-    let res = await moloch.exitMoloch({ from: APPLICANT_ADDRESS })
-    console.log('result: ', res)
+    await moloch.exitMoloch({ from: APPLICANT_ADDRESS })
+
+    member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    assert.equal(member[0], false, 'Member did not get removed on exit.')
+
     balance = await lootToken.balanceOf(APPLICANT_ADDRESS)
-    console.log('balance: ', balance.toNumber())
     assert.equal(
       balance.toNumber(),
       VOTING_SHARES,
@@ -325,11 +327,17 @@ contract('Moloch', accounts => {
     )
 
     balance = await votingShares.balanceOf(APPLICANT_ADDRESS)
-    console.log('balance: ', balance.toNumber())
     assert.equal(
       balance.toNumber(),
       0,
       'Should have no voting shares after exit.'
+    )
+
+    const endingLootTokenBalance = await lootToken.balanceOf(moloch.address)
+    assert.equal(
+      startingLootTokenBalance.toNumber() - endingLootTokenBalance.toNumber(),
+      VOTING_SHARES,
+      'Should remove loot tokens from the overall pot owned by Moloch contract.'
     )
   })
 })
