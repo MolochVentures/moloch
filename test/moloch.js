@@ -101,7 +101,7 @@ contract('Moloch', accounts => {
                 member.memberAddress,
                 moloch.address
               )
-              console.log('allowed: ', allowed.toNumber())
+              assert.equal(allowed, member.tokenTributeAmount[index])
             })
           )
 
@@ -189,19 +189,22 @@ contract('Moloch', accounts => {
     const APPLICANT_ADDRESS = accounts[2]
 
     const moloch = await Moloch.deployed()
-    const result = await moloch.submitApplication(VOTING_SHARES, 0x0, 0, {
-      value: ETH_TRIBUTE,
+    await moloch.offerEthTribute({
+      from: APPLICANT_ADDRESS,
+      value: ETH_TRIBUTE
+    })
+
+    await moloch.submitApplication(VOTING_SHARES, {
       from: APPLICANT_ADDRESS
     })
-    const log = result.logs.find(log => {
-      return log.event === 'MemberApplied'
-    })
 
-    assert.equal(log.args.memberAddress, APPLICANT_ADDRESS)
-    assert.equal(log.args.ethTributeAmount.toNumber(), ETH_TRIBUTE)
+    const member = await moloch.getMember(APPLICANT_ADDRESS)
+    assert.equal(member[0], false)
+    assert.equal(member[1].toNumber(), VOTING_SHARES)
+    assert.equal(member[2].toNumber(), ETH_TRIBUTE)
   })
 
-  it('should take an application and collect votes for membership', async () => {
+  it('should submit application with tokens', async () => {
     const TOKEN_TRIBUTE = web3.toWei(10, 'ether')
     const VOTING_SHARES = 100
     const APPLICANT_ADDRESS = accounts[1]
@@ -213,23 +216,26 @@ contract('Moloch', accounts => {
     const moloch = await Moloch.deployed()
 
     // transfer tokens for application
-    await simpleToken.transfer(moloch.address, TOKEN_TRIBUTE, {
+    await simpleToken.approve(moloch.address, TOKEN_TRIBUTE, {
       from: APPLICANT_ADDRESS
     })
 
-    // submit application
-    const result = await moloch.submitApplication(
-      VOTING_SHARES,
-      simpleToken.address,
-      TOKEN_TRIBUTE,
-      {
-        from: APPLICANT_ADDRESS
-      }
-    )
-    const log = result.logs.find(log => {
-      return log.event === 'MemberApplied'
+    await moloch.offerTokenTribute([simpleToken.address], [TOKEN_TRIBUTE], {
+      from: APPLICANT_ADDRESS
     })
-    assert.equal(log.args.tokenTributeAmount.toNumber(), TOKEN_TRIBUTE)
+    // submit application
+    await moloch.submitApplication(VOTING_SHARES, {
+      from: APPLICANT_ADDRESS
+    })
+
+    const member = await moloch.getMember(APPLICANT_ADDRESS)
+    console.log('member: ', member)
+
+    assert.equal(member[0], false)
+    assert.equal(member[1].toNumber(), VOTING_SHARES)
+    assert.equal(member[2].toNumber(), 0)
+    assert.equal(member[3][0], simpleToken.address)
+    assert.equal(member[4][0].toNumber(), TOKEN_TRIBUTE)
   })
 
   it('should accept votes from members', async () => {
