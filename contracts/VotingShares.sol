@@ -11,22 +11,12 @@ import 'zeppelin-solidity/contracts/token/ERC20/MintableToken.sol';
 contract VotingShares is MintableToken {
   using SafeMath for uint256;
 
-  uint256 totalSupply_;
-
   string public constant name = "VotingShares"; // solium-disable-line uppercase
   string public constant symbol = "MLV"; // solium-disable-line uppercase
   uint8 public constant decimals = 18; // solium-disable-line uppercase
 
-  uint256 public constant INITIAL_SUPPLY = 0 * (10 ** uint256(decimals));
-
   event Transfer(address indexed from, address indexed to, uint256 value);
   event Burn(address indexed burner, uint256 value);
-
-  function VotingShares() public {
-    totalSupply_ = INITIAL_SUPPLY;
-    balances[msg.sender] = INITIAL_SUPPLY;
-    Transfer(0x0, msg.sender, INITIAL_SUPPLY);
-  }
 
   /**
   * override transfer function to be only owner
@@ -46,13 +36,13 @@ contract VotingShares is MintableToken {
    * @dev Burns a specific amount of tokens.
    * @param _value The amount of token to be burned.
    */
-  function proxyBurn(address burner, uint256 _value) public onlyOwner {
-    require(_value <= balances[burner]);
+  function proxyBurn(address _burner, uint256 _value) public onlyOwner {
+    require(_value <= balances[_burner]);
     // no need to require value <= totalSupply, since that would imply the
     // sender's balance is greater than the totalSupply, which *should* be an assertion failure
 
-    balances[burner] = balances[burner].sub(_value);
+    balances[_burner] = balances[_burner].sub(_value);
     totalSupply_ = totalSupply_.sub(_value);
-    Burn(burner, _value);
+    Burn(_burner, _value);
   }
 }
