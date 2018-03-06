@@ -171,7 +171,7 @@ contract Moloch is Ownable {
     VotedForMember(msg.sender, _prospectiveMember, _accepted);
   }
 
-  function _addMember(address _prospectiveMember) internal onlyOwner {
+  function _addMember(address _prospectiveMember) internal {
     Member storage newMember = members[_prospectiveMember];
     newMember.approved = true;
 
