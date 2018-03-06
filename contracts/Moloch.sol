@@ -14,10 +14,12 @@ contract Moloch is Ownable {
   struct Member {
     bool approved;
     uint256 votingShares;
+
+    //tributes
     uint256 ethTributeAmount;
-    // token tribute
-    address tokenTributeAddress;
-    uint256 tokenTributeAmount;
+    address[] tokenTributeAddresses; 
+    uint256[] tokenTributeAmounts;
+
     address ballotAddress;
   }
 
@@ -28,12 +30,20 @@ contract Moloch is Ownable {
   GuildBank public guildBank;
   LootToken public lootToken;
 
+  event TokenTributeOffered(
+    address indexed memberAddress,
+    address[] tokenTributeAddresses,
+    uint256[] tokenTributeAmounts
+  );
+
+  event EthTributeOffered(
+    address indexed memberAddress,
+    uint256 ethTributeAmount
+  );
+
   event MemberApplied(
     address indexed memberAddress,
     uint256 votingSharesRequested,
-    uint256 ethTributeAmount,
-    address tokenTributeAddress,
-    uint256 tokenTributeAmount,
     address ballotAddress
   );
 
@@ -72,8 +82,8 @@ contract Moloch is Ownable {
     bool,
     uint256,
     uint256,
-    address,
-    uint256,
+    address[],
+    uint256[],
     address
   ) {
     Member memory member = members[_memberAddress];
@@ -81,8 +91,8 @@ contract Moloch is Ownable {
       member.approved,
       member.votingShares,
       member.ethTributeAmount,
-      member.tokenTributeAddress,
-      member.tokenTributeAmount,
+      member.tokenTributeAddresses,
+      member.tokenTributeAmounts,
       member.ballotAddress
     );
   }
@@ -90,49 +100,60 @@ contract Moloch is Ownable {
   // add founding member, auto approved
   function addFoundingMember(
     address _memberAddress,
-    uint256 _votingShares,
-    address _tokenTributeAddress,
-    uint256 _tokenTributeAmount
+    uint256 _votingShares
   ) public payable onlyOwner
   {
-    members[_memberAddress] = Member(
-      false,
-      _votingShares,
-      msg.value,
-      _tokenTributeAddress,
-      _tokenTributeAmount,
-      address(0) // no voting ballot
-    );
+    Member storage member = members[_memberAddress];
+
+    // require tribute
+    require(member.ethTributeAmount > 0 || member.tokenTributeAddresses.length > 0);
+    member.votingShares = _votingShares;
+    member.ballotAddress = address(0);
+
     _addMember(_memberAddress);
   }
 
+  function offerEthTribute() public payable {
+    Member storage member = members[msg.sender];
+    member.ethTributeAmount = msg.value;
+
+    EthTributeOffered(msg.sender, msg.value);
+  }
+
+  function offerTokenTribute(address[] _tokenContractAddresses, uint256[] _tokenTributes) public {
+    require(_tokenContractAddresses.length == _tokenTributes.length);
+
+    Member storage member = members[msg.sender];
+    member.approved = false; // should be already, but lets be safe
+
+    for (uint8 i = 0; i < _tokenContractAddresses.length; i++) {
+      member.tokenTributeAddresses.push(_tokenContractAddresses[i]);
+      member.tokenTributeAmounts.push(_tokenTributes[i]);
+    }
+
+    TokenTributeOffered(msg.sender, _tokenContractAddresses, _tokenTributes);
+  }
+
   function submitApplication(
-    uint256 _votingSharesRequested,
-    address _tokenTributeAddress,
-    uint256 _tokenTributeAmount
-  ) public payable 
+    uint256 _votingSharesRequested
+  ) public 
   {
+    Member storage member = members[msg.sender];
+
     // can't reapply if already approved
-    require(!members[msg.sender].approved);
+    require(!member.approved);
+    // require tribute offered
+    require(member.ethTributeAmount > 0 || member.tokenTributeAddresses.length > 0);
 
     // create ballot for voting new member in
     address ballotAddress = new MemberApplicationBallot(approvedMembers);
 
-    members[msg.sender] = Member({ 
-      approved: false,
-      votingShares: _votingSharesRequested,
-      ethTributeAmount: msg.value,
-      tokenTributeAddress: _tokenTributeAddress,
-      tokenTributeAmount: _tokenTributeAmount,
-      ballotAddress: ballotAddress
-    });
+    member.votingShares = _votingSharesRequested;
+    member.ballotAddress = ballotAddress;
 
     MemberApplied(
       msg.sender,
       _votingSharesRequested,
-      msg.value,
-      _tokenTributeAddress,
-      _tokenTributeAmount,
       ballotAddress
     );
   }
@@ -155,9 +176,9 @@ contract Moloch is Ownable {
     newMember.approved = true;
 
     // transfer tokens and eth to guild bank
-    if (newMember.tokenTributeAddress != address(0)) {
-      ERC20 token = ERC20(newMember.tokenTributeAddress);
-      token.transfer(address(guildBank), newMember.tokenTributeAmount);
+    for (uint8 i = 0; i < newMember.tokenTributeAddresses.length; i++) {
+      ERC20 token = ERC20(newMember.tokenTributeAddresses[i]);
+      token.transferFrom(_prospectiveMember, address(guildBank), newMember.tokenTributeAmounts[i]);
     }
 
     if (newMember.ethTributeAmount > 0) {
@@ -174,7 +195,8 @@ contract Moloch is Ownable {
     MemberAccepted(_prospectiveMember);
   }
 
-  function acceptMember(address _prospectiveMember) public onlyOwner {
+  function acceptMember(address _prospectiveMember) public onlyMember {
+    // TODO: dont require everyone to vote, count number of votes during a time limit, check against time limit
     // check that vote passed
     MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
     require(ballot.isAccepted());
@@ -187,8 +209,7 @@ contract Moloch is Ownable {
     require(lootToken.balanceOf(this) >= member.votingShares);
 
     lootToken.transfer(msg.sender, member.votingShares);
-
-    // TODO: burn voting shares, need to redo contract to allow without transfer
+    votingShares.proxyBurn(msg.sender, member.votingShares);
 
     delete members[msg.sender];
     MemberExit(msg.sender);
