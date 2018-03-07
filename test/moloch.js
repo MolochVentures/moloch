@@ -287,6 +287,12 @@ contract('Moloch', accounts => {
     let member = await moloch.getMember.call(APPLICANT_ADDRESS)
     assert.equal(member[0], false, 'Member was approved before being accepted.')
 
+    await new Promise((resolve, reject) => {
+      setTimeout(() => {
+        resolve()
+      }, 5000)
+    })
+
     await moloch.acceptMember(APPLICANT_ADDRESS, {
       from: this.FOUNDING_MEMBERS[0].memberAddress
     })

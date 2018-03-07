@@ -5,11 +5,18 @@ import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
 
 contract MemberApplicationBallot is Ownable, Voting {
   address[] public requiredVoters;
+  uint public voteCompletionTime;
 
   // standard ballot with 2 proposals
   // proposal 0 is against, 1 is for
-  function MemberApplicationBallot(address[] _requiredVoters) Voting(2) public {
+  function MemberApplicationBallot(
+    address[] _requiredVoters,
+    uint _voteDurationInSeconds
+  ) Voting(2) public 
+  {
     requiredVoters = _requiredVoters;
+    voteCompletionTime = now + _voteDurationInSeconds * 1 seconds;
+
     // give right to vote for all provided voters
     for (uint8 i = 0; i < _requiredVoters.length; i++) {
       giveRightToVote(_requiredVoters[i]);
@@ -40,6 +47,8 @@ contract MemberApplicationBallot is Ownable, Voting {
 
   function isAccepted() public view returns (bool) {
     require(this.hasEveryoneVoted());
+    require(now > voteCompletionTime);
+  
     uint8 winner = winningProposal();
 
     if (winner == 0) {

@@ -11,6 +11,8 @@ import './LootToken.sol';
 contract Moloch is Ownable {
   using SafeMath for uint256;
 
+  uint membershipVoteTimeSeconds = 5;
+
   struct Member {
     bool approved;
     uint256 votingShares;
@@ -146,7 +148,7 @@ contract Moloch is Ownable {
     require(member.ethTributeAmount > 0 || member.tokenTributeAddresses.length > 0);
 
     // create ballot for voting new member in
-    address ballotAddress = new MemberApplicationBallot(approvedMembers);
+    address ballotAddress = new MemberApplicationBallot(approvedMembers, membershipVoteTimeSeconds);
 
     member.votingShares = _votingSharesRequested;
     member.ballotAddress = ballotAddress;
