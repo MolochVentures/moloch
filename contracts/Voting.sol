@@ -2,19 +2,21 @@ pragma solidity ^0.4.18;
 
 import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
 import 'zeppelin-solidity/contracts/math/SafeMath.sol';
+import './VotingShares.sol';
 
 /**
     @title Membership Application Voting contract.
     @notice Creates simple voting structure for voting on membership applications.
     @dev This contract will be owned by the Moloch contract
  */
-contract MemberApplicationBallot is Ownable {
+contract Voting is Ownable {
     using SafeMath for uint256;
 
     /***********************************
     VARIABLES SET AT CONTRACT DEPLOYMENT
     ************************************/
     uint public voteCompletionTime;
+    VotingShares votingShares;
 
     // VOTERSHIP REQUIREMENTS
     // require half the votes
@@ -22,33 +24,35 @@ contract MemberApplicationBallot is Ownable {
     uint8 public fractionOfVotersRequiredDenominator = 2;
     uint256 public numVotesRequired;
 
-    // TODO: should we store candidate's address here
-
     /************
     VOTE TRACKING
     ************/
 
     // VOTER
     struct Voter {
-        uint weight;
+        bool allowedToVote;
         bool voted;
         uint8 vote;
     }
 
     mapping (address => Voter) public voters;
+    uint256 numberOfVoted = 0;
 
     // BALLOT
     struct Proposal {
         uint256 voteCount;
     }
 
-    Proposal[2] public ballot; // two proposals: 0 = against, 1 = for
+    Proposal[] public proposals; // two proposals: 0 = against, 1 = for
 
     /// @notice Constructor sets vote parameters
     /// @param _totalNumberOfVoters Number of people who can vote
-    function MemberApplicationBallot(
+    /// @param _voteDurationInSeconds How long does vote have to last at minimum
+    /// @param _numberOfProposals How many proposals on the ballot
+    function Voting(
         uint256 _totalNumberOfVoters,
-        uint256 _voteDurationInSeconds
+        uint256 _voteDurationInSeconds,
+        uint8 _numberOfProposals
     ) 
         public 
     {
@@ -56,6 +60,8 @@ contract MemberApplicationBallot is Ownable {
 
         // numVoters * numerator / denominator, integer division
         numVotesRequired = (_totalNumberOfVoters.mul(fractionOfVotersRequiredNumerator)).div(fractionOfVotersRequiredDenominator);
+
+        proposals.length = _numberOfProposals;
     }
 
     /// @notice Gives user the right to vote
@@ -64,40 +70,37 @@ contract MemberApplicationBallot is Ownable {
         Voter storage voter = voters[_toVoterAddress];
         require(!voter.voted);
 
-        // TODO: weighted by tokens
-        voter.weight = 1;
+        voter.allowedToVote = true;
     }
 
-    /// @notice Vote for candidate
+    /// @notice Vote for candidate, number of voting shares = number of votes
     /// @param _voterAddress Address of person who is voting
-    /// @param _voteFor Boolean to vote in favor of candidate
-    function vote(address _voterAddress, bool _voteFor) public {
+    /// @param _toProposal Which proposal to vote on
+    function vote(address _voterAddress, uint8 _toProposal) public {
         Voter storage voter = voters[_voterAddress];
 
         require(voter.voted = false);
         voter.voted = true;
 
-        if (_voteFor) {
-            ballot[1].voteCount += voter.weight;
-        } else {
-            ballot[0].voteCount += voter.weight;
-        }
+        // votes = number of voting shares
+        uint256 shares = votingShares.balanceOf(_voterAddress);
+        proposals[_toProposal].voteCount += shares;
+        numberOfVoted++;
     }
 
     /// @notice Get voter attributes
     /// @param _voterAddress Voter address
     /// @return Voter attributes
-    function getVoter(address _voterAddress) public view returns(uint, bool, uint8) {
+    function getVoter(address _voterAddress) public view returns(bool, bool, uint8) {
         Voter memory voter = voters[_voterAddress];
 
-        return (voter.weight, voter.voted, voter.vote);
+        return (voter.allowedToVote, voter.voted, voter.vote);
     }
 
     /// @notice Check if enough people have voted
     /// @return True if enough people have voted, false otherwise
     function haveEnoughVoted() public view returns (bool) {
-        uint256 totalVotes = ballot[0].voteCount + ballot[1].voteCount;
-        return totalVotes > numVotesRequired;
+        return numberOfVoted > numVotesRequired;
     }
 
     /// @notice Check if vote duration period has elapsed
@@ -109,18 +112,22 @@ contract MemberApplicationBallot is Ownable {
     /// @notice Check if candidate is accepted
     /// @dev Tie = not accepted
     /// @return True if candidate is accepted, false otherwise
-    function isCandidateAccepted() public view returns (bool) {
+    function getWinningProposal() public view returns (uint8) {
+        uint8 winningProposal;
+        uint256 winningVoteCount = 0;
+        for (uint8 i = 0; i < proposals.length; i++) {
+            if (proposals[i].voteCount > winningVoteCount) {
+                winningVoteCount = proposals[i].voteCount;
+                winningProposal = i;
+            }
+        }
+        return winningProposal;
+    }
+
+    function endOfVoteWinner() public view returns (uint8) {
         require(haveEnoughVoted());
         require(hasVoteDurationPeriodElapsed());
-
-        uint256 votesFor = ballot[1].voteCount;
-        uint256 votesAgainst = ballot[0].voteCount;
-    
-        if (votesFor > votesAgainst) {
-            return true;
-        } else {
-            return false;
-        }
+        return getWinningProposal();
     }
 }
 

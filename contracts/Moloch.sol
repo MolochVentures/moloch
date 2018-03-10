@@ -4,7 +4,7 @@ import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
 import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 import 'zeppelin-solidity/contracts/token/ERC20/ERC20.sol';
 import './VotingShares.sol';
-import './MemberApplicationBallot.sol';
+import './Voting.sol';
 import './GuildBank.sol';
 import './LootToken.sol';
 
@@ -76,7 +76,7 @@ contract Moloch is Ownable {
     }
 
     mapping (address => Member) public members; // members mapped to their address
-    address[] public memberAddresses; // array of addresses that can be iterated over
+    uint256 numberOfApprovedMembers = 0; // only need approved member count for voting participation requirements
 
     /********
     MODIFIERS
@@ -117,14 +117,7 @@ contract Moloch is Ownable {
     /// @notice Adds founding member without approval
     /// @param _memberAddress Address of member to be added
     /// @param _votingShares Number of voting shares to grant
-    function addFoundingMember(
-        address _memberAddress,
-        uint256 _votingShares
-    ) 
-        public 
-        payable 
-        onlyOwner
-    {
+    function addFoundingMember(address _memberAddress, uint256 _votingShares) public onlyOwner {
         Member storage member = members[_memberAddress];
 
         // require tribute
@@ -155,6 +148,7 @@ contract Moloch is Ownable {
         member.approved = false; // should be already, but lets be safe
 
         for (uint8 i = 0; i < _tokenContractAddresses.length; i++) {
+            // TODO: check actual approval, maybe we should transfer the tokens to here instead
             require(_tokenTributes[i] > 0); // need non zero amounts
             member.tokenTributeAddresses.push(_tokenContractAddresses[i]);
             member.tokenTributeAmounts.push(_tokenTributes[i]);
@@ -165,11 +159,7 @@ contract Moloch is Ownable {
 
     /// @notice Submit application as a prospective member
     /// @param _votingSharesRequested Number of voting shares requested
-    function submitApplication(
-        uint256 _votingSharesRequested
-    ) 
-        public 
-    {
+    function submitApplication(uint256 _votingSharesRequested) public {
         Member storage prospectiveMember = members[msg.sender];
 
         // can't reapply if already approved
@@ -177,8 +167,8 @@ contract Moloch is Ownable {
         // require tribute offered
         require(prospectiveMember.ethTributeAmount > 0 || prospectiveMember.tokenTributeAddresses.length > 0);
 
-        // create ballot for voting new member in
-        address ballotAddress = new MemberApplicationBallot(memberAddresses.length, MEMBERSHIP_VOTE_TIME_SECONDS);
+        // create ballot for voting new member in, 2 proposal vote
+        address ballotAddress = new Voting(numberOfApprovedMembers, MEMBERSHIP_VOTE_TIME_SECONDS, 2);
 
         prospectiveMember.votingSharesRequested = _votingSharesRequested;
         prospectiveMember.ballotAddress = ballotAddress;
@@ -199,9 +189,13 @@ contract Moloch is Ownable {
     function voteOnMemberApplication(address _prospectiveMemberAddress, bool _iAccept) public onlyApprovedMember {
         require(!members[_prospectiveMemberAddress].approved); // cant already be approved
 
-        MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMemberAddress].ballotAddress);
+        Voting ballot = Voting(members[_prospectiveMemberAddress].ballotAddress);
         ballot.giveRightToVote(msg.sender);
-        ballot.vote(msg.sender, _iAccept);
+        if (_iAccept) {
+            ballot.vote(msg.sender, 1); // proposal 1 accepts
+        } else {
+            ballot.vote(msg.sender, 0); // proposal 0 rejects
+        }
 
         VotedForMember(msg.sender, _prospectiveMemberAddress, _iAccept);
     }
@@ -210,9 +204,9 @@ contract Moloch is Ownable {
     /// @param _prospectiveMemberAddress Address of prospective member
      function acceptMember(address _prospectiveMemberAddress) public onlyApprovedMember {
         // check that vote passed
-        MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMemberAddress].ballotAddress);
-        require(ballot.isCandidateAccepted());
-
+        Voting ballot = Voting(members[_prospectiveMemberAddress].ballotAddress);
+        uint8 winningProposal = ballot.endOfVoteWinner();
+        require(winningProposal == 1);
         _addMember(_prospectiveMemberAddress);
     }
 
@@ -221,20 +215,20 @@ contract Moloch is Ownable {
     /// from this contract to the member
     function exitMoloch() public onlyApprovedMember {
         uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
-        require(lootToken.balanceOf(this) >= numberOfVotingShares);
+        assert(lootToken.balanceOf(this) >= numberOfVotingShares);
 
+        // TODO: wrap in require
         lootToken.transfer(msg.sender, numberOfVotingShares);
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         delete members[msg.sender];
+        numberOfApprovedMembers -= 1;
         MemberExit(msg.sender);
     }
 
     /// @notice Return member attributes
     /// @param _memberAddress Address of member
-    /// @return Array of member attributes ex:
-    /// [member.approved, member.votingSharesRequested, member.ethTributeAmount, 
-    /// member.tokenTributeAddresses, member.tokenTributeAmounts, member.ballotAddress]
+    /// @return Array of member attributes
     function getMember(address _memberAddress) public view returns (
         bool,
         uint256,
@@ -267,7 +261,8 @@ contract Moloch is Ownable {
         for (uint8 i = 0; i < newMember.tokenTributeAddresses.length; i++) {
             ERC20 token = ERC20(newMember.tokenTributeAddresses[i]);
 
-            // TODO: write a test to confirm this fails
+            // TODO: wrap in require
+            // TODO: require tokens staked in contract
             token.transferFrom(_newMemberAddress, address(guildBank), newMember.tokenTributeAmounts[i]);
         }
 
@@ -281,7 +276,7 @@ contract Moloch is Ownable {
         // mint loot tokens 1:1 and keep them in this contract for withdrawal
         lootToken.mint(this, newMember.votingSharesRequested);
 
-        memberAddresses.push(_newMemberAddress);
+        numberOfApprovedMembers += 1;
         MemberAccepted(_newMemberAddress);
     }
 }
