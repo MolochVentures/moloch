@@ -76,7 +76,6 @@ contract Moloch is Ownable {
     }
 
     mapping (address => Member) public members; // members mapped to their address
-    uint256 numberOfApprovedMembers = 0; // only need approved member count for voting participation requirements
 
     /********
     MODIFIERS
@@ -148,8 +147,14 @@ contract Moloch is Ownable {
         member.approved = false; // should be already, but lets be safe
 
         for (uint8 i = 0; i < _tokenContractAddresses.length; i++) {
-            // TODO: check actual approval, maybe we should transfer the tokens to here instead
             require(_tokenTributes[i] > 0); // need non zero amounts
+            ERC20 erc20 = ERC20(_tokenContractAddresses[i]);
+
+            // transfer tokens to this contract as tribute
+            // approval must be granted prior to this step
+            require(erc20.transferFrom(msg.sender, this, _tokenTributes[i]));
+
+            // bookkeeping
             member.tokenTributeAddresses.push(_tokenContractAddresses[i]);
             member.tokenTributeAmounts.push(_tokenTributes[i]);
         }
@@ -168,7 +173,7 @@ contract Moloch is Ownable {
         require(prospectiveMember.ethTributeAmount > 0 || prospectiveMember.tokenTributeAddresses.length > 0);
 
         // create ballot for voting new member in, 2 proposal vote
-        address ballotAddress = new Voting(numberOfApprovedMembers, MEMBERSHIP_VOTE_TIME_SECONDS, 2);
+        address ballotAddress = new Voting(address(votingShares), MEMBERSHIP_VOTE_TIME_SECONDS, 2);
 
         prospectiveMember.votingSharesRequested = _votingSharesRequested;
         prospectiveMember.ballotAddress = ballotAddress;
@@ -190,7 +195,6 @@ contract Moloch is Ownable {
         require(!members[_prospectiveMemberAddress].approved); // cant already be approved
 
         Voting ballot = Voting(members[_prospectiveMemberAddress].ballotAddress);
-        ballot.giveRightToVote(msg.sender);
         if (_iAccept) {
             ballot.vote(msg.sender, 1); // proposal 1 accepts
         } else {
@@ -205,7 +209,7 @@ contract Moloch is Ownable {
      function acceptMember(address _prospectiveMemberAddress) public onlyApprovedMember {
         // check that vote passed
         Voting ballot = Voting(members[_prospectiveMemberAddress].ballotAddress);
-        uint8 winningProposal = ballot.endOfVoteWinner();
+        uint8 winningProposal = ballot.getWinnerProposal();
         require(winningProposal == 1);
         _addMember(_prospectiveMemberAddress);
     }
@@ -215,14 +219,12 @@ contract Moloch is Ownable {
     /// from this contract to the member
     function exitMoloch() public onlyApprovedMember {
         uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
-        assert(lootToken.balanceOf(this) >= numberOfVotingShares);
 
         // TODO: wrap in require
         lootToken.transfer(msg.sender, numberOfVotingShares);
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         delete members[msg.sender];
-        numberOfApprovedMembers -= 1;
         MemberExit(msg.sender);
     }
 
@@ -261,9 +263,8 @@ contract Moloch is Ownable {
         for (uint8 i = 0; i < newMember.tokenTributeAddresses.length; i++) {
             ERC20 token = ERC20(newMember.tokenTributeAddresses[i]);
 
-            // TODO: wrap in require
-            // TODO: require tokens staked in contract
-            token.transferFrom(_newMemberAddress, address(guildBank), newMember.tokenTributeAmounts[i]);
+            // transfer tokens stored in this contract to the bank
+            require(token.transfer(address(guildBank), newMember.tokenTributeAmounts[i]));
         }
 
         if (newMember.ethTributeAmount > 0) {
@@ -276,7 +277,6 @@ contract Moloch is Ownable {
         // mint loot tokens 1:1 and keep them in this contract for withdrawal
         lootToken.mint(this, newMember.votingSharesRequested);
 
-        numberOfApprovedMembers += 1;
         MemberAccepted(_newMemberAddress);
     }
 }
