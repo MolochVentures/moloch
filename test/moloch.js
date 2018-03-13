@@ -6,7 +6,7 @@ const VotingShares = artifacts.require('./VotingShares')
 const LootToken = artifacts.require('./LootToken')
 const GuildBank = artifacts.require('./GuildBank')
 const SimpleToken = artifacts.require('./SimpleToken')
-const MemberApplicationBallot = artifacts.require('./MemberApplicationBallot')
+const Voting = artifacts.require('./Voting')
 
 contract('Moloch', accounts => {
   before('create moloch with founders', async () => {
@@ -240,40 +240,34 @@ contract('Moloch', accounts => {
   it('should accept votes from members', async () => {
     const APPLICANT_ADDRESS = accounts[1]
     const ACCEPT_MEMBER_BALLOT_PROPOSAL = 1
+    const VOTING_SHARES_FRACTION = 0.5
 
     const moloch = await Moloch.deployed()
 
+    const votingSharesAddr = await moloch.votingShares.call()
+    const votingShares = await VotingShares.at(votingSharesAddr)
+    const votingSharesSupply = await votingShares.totalSupply()
+
     // verify ballot
     const member = await moloch.getMember.call(APPLICANT_ADDRESS)
-    const ballot = await MemberApplicationBallot.at(member[5])
+    const ballot = await Voting.at(member[5])
 
-    const requiredVoters = await ballot.howManyVoters.call()
-    assert.equal(requiredVoters.toNumber(), this.FOUNDING_MEMBERS.length)
+    const votingSharesRequired = await ballot.numVotesRequired.call()
+    assert.equal(
+      votingSharesRequired.toNumber(),
+      votingSharesSupply * VOTING_SHARES_FRACTION
+    )
     await Promise.all(
       this.FOUNDING_MEMBERS.map(async (foundingMember, index) => {
-        let voter = await ballot.requiredVoters.call(index)
-        assert.equal(voter, foundingMember.memberAddress)
-
+        const v = await ballot.hasVoteDurationPeriodElapsed()
+        assert.equal(v, false)
         // submit votes
-        const vote = await moloch.voteOnMemberApplication(
-          APPLICANT_ADDRESS,
-          true,
-          {
-            from: foundingMember.memberAddress
-          }
-        )
-
-        // vote for acceptance
-        const log = vote.logs.find(log => {
-          return log.event === 'VotedForMember'
+        await moloch.voteOnMemberApplication(APPLICANT_ADDRESS, true, {
+          from: foundingMember.memberAddress
         })
-        assert.equal(log.args.votingMember, foundingMember.memberAddress)
-        assert.equal(log.args.votedFor, APPLICANT_ADDRESS)
-        assert.equal(log.args.accepted, true)
-
-        voter = await ballot.getVoter(foundingMember.memberAddress)
-        assert.equal(voter[1], true)
-        assert.equal(voter[2].toNumber(), ACCEPT_MEMBER_BALLOT_PROPOSAL)
+        const voter = await ballot.getVoter(foundingMember.memberAddress)
+        assert.equal(voter[0], true)
+        assert.equal(voter[1].toNumber(), ACCEPT_MEMBER_BALLOT_PROPOSAL)
       })
     )
   })
@@ -281,10 +275,12 @@ contract('Moloch', accounts => {
   it('should accept member after vote is complete', async () => {
     const VOTING_SHARES = 100
     const APPLICANT_ADDRESS = accounts[1]
+    const BALLOT_INDEX_OF_MEMBER_ACCEPTED = 1
 
     const moloch = await Moloch.deployed()
 
     let member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    const ballot = await Voting.at(member[5])
     assert.equal(member[0], false, 'Member was approved before being accepted.')
 
     await new Promise((resolve, reject) => {
@@ -292,6 +288,9 @@ contract('Moloch', accounts => {
         resolve()
       }, 5000)
     })
+
+    const winningProposal = await ballot.getWinnerProposal()
+    assert.equal(winningProposal, BALLOT_INDEX_OF_MEMBER_ACCEPTED)
 
     await moloch.acceptMember(APPLICANT_ADDRESS, {
       from: this.FOUNDING_MEMBERS[0].memberAddress
