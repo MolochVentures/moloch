@@ -72,8 +72,9 @@ contract Voting is Ownable {
 
         Voter storage voter = voters[_voterAddress];
 
-        require(voter.voted = false);
+        require(voter.voted == false);
         voter.voted = true;
+        voter.vote = _toProposal;
 
         // votes = number of voting shares
         uint256 shares = votingShares.balanceOf(_voterAddress);
@@ -126,7 +127,7 @@ contract Voting is Ownable {
     function getWinnerProposal() public view returns (uint8) {
         require(haveEnoughVoted());
         require(hasVoteDurationPeriodElapsed());
-        return getWinnerProposal();
+        return getLeadingProposal();
     }
 }
 
