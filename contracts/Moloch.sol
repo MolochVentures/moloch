@@ -206,7 +206,7 @@ contract Moloch is Ownable {
 
     /// @notice Check if member vote succeeded and then add member
     /// @param _prospectiveMemberAddress Address of prospective member
-     function acceptMember(address _prospectiveMemberAddress) public onlyApprovedMember {
+    function acceptMember(address _prospectiveMemberAddress) public onlyApprovedMember {
         // check that vote passed
         Voting ballot = Voting(members[_prospectiveMemberAddress].ballotAddress);
         uint8 winningProposal = ballot.getWinnerProposal();
@@ -228,6 +228,9 @@ contract Moloch is Ownable {
         MemberExit(msg.sender);
     }
 
+    /***************
+    GETTER FUNCTIONS
+    ***************/
     /// @notice Return member attributes
     /// @param _memberAddress Address of member
     /// @return Array of member attributes
@@ -248,6 +251,11 @@ contract Moloch is Ownable {
             member.tokenTributeAmounts,
             member.ballotAddress
         );
+    }
+
+    function isMemberApproved(address _memberAddress) public view returns (bool) {
+        Member memory member = members[_memberAddress];
+        return member.approved;
     }
 
     /*****************
