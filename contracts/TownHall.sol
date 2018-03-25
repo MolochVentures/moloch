@@ -93,9 +93,8 @@ contract TownHall is Ownable {
         proposal.ipfsHash = _ipfsHash;
         proposal.proposalType = _proposalType;
 
-        // append to proposal queue
-        proposals.length += 1;
-        proposals[proposals.length] = proposal;
+        // push to proposal queue, first in first out
+        proposals.push(proposal);
 
         ProposalCreated(msg.sender, _votingSharesRequested, _proposalType, ballotAddress);
     }
@@ -109,13 +108,18 @@ contract TownHall is Ownable {
     function completeProposalVote() onlyApprovedMember public {
         Proposal memory proposal = getCurrentProposal();
         Voting ballot = Voting(proposal.ballotAddress);
-        uint8 winningBallotItem = ballot.getWinnerProposal();
 
+        // get winner from ballot
+        uint8 winningBallotItem = ballot.getWinnerProposal();
         if (winningBallotItem == 1) {
             votingShares.mint(proposal.proposer, proposal.votingSharesRequested);
         } else if (winningBallotItem == 0) {
             // proposal loses
         }
+
+        // delete proposal from queue, https://ethereum.stackexchange.com/a/39302/17655
+        proposals.length--;
+
         ProposalVoteCompleted(
             proposal.proposer,
             proposal.votingSharesRequested,
@@ -126,12 +130,12 @@ contract TownHall is Ownable {
     }
 
     function getCurrentProposal() public view returns(Proposal) {
-        Proposal memory proposal = proposals[0]; // first proposal is current proposal
+        Proposal memory proposal = proposals[proposals.length]; // last proposal is current proposal
         return(proposal);
     }
 
     function getCurrentProposalDetails() public view returns(address, bytes32, ProposalTypes) {
-        Proposal memory proposal = proposals[0]; // first proposal is current proposal
+        Proposal memory proposal = getCurrentProposal();
         return(
             proposal.ballotAddress,
             proposal.ipfsHash,
