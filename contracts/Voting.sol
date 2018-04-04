@@ -1,8 +1,8 @@
 pragma solidity ^0.4.18;
 
-import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
-import 'zeppelin-solidity/contracts/math/SafeMath.sol';
-import './VotingShares.sol';
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
+import "./VotingShares.sol";
 
 /**
     @title Membership Application Voting contract.
@@ -125,9 +125,15 @@ contract Voting is Ownable {
     /// and enough votes have been cast
     /// @return uint8 of index in array
     function getWinnerProposal() public view returns (uint8) {
-        require(haveEnoughVoted());
         require(hasVoteDurationPeriodElapsed());
-        return getLeadingProposal();
+
+        // if no quorom, proposal does not pass
+        if (haveEnoughVoted()) {
+            return getLeadingProposal();
+        } else {
+            // 0 = proposal loses
+            return 0;
+        }
     }
 }
 

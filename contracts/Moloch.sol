@@ -1,12 +1,13 @@
 pragma solidity ^0.4.0;
 
-import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
-import 'zeppelin-solidity/contracts/math/SafeMath.sol';
-import 'zeppelin-solidity/contracts/token/ERC20/ERC20.sol';
-import './VotingShares.sol';
-import './Voting.sol';
-import './GuildBank.sol';
-import './LootToken.sol';
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
+import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./VotingShares.sol";
+import "./Voting.sol";
+import "./GuildBank.sol";
+import "./LootToken.sol";
+import "./TownHall.sol";
 
 /**
     @title Moloch DAO contract
@@ -62,17 +63,15 @@ contract Moloch is Ownable {
     VotingShares public votingShares; // token contract
     GuildBank public guildBank; // store guild assets
     LootToken public lootToken; // token contract
+    TownHall public townHall; // token contract
 
     /******************
     MEMBERSHIP TRACKING
     ******************/
     struct Member {
-        bool approved; // is approved or not
-        uint256 votingSharesRequested; // number of voting shares requested
         uint256 ethTributeAmount; // eth tribute provided
         address[] tokenTributeAddresses; // array of token tributes
         uint256[] tokenTributeAmounts; // array of token tributes
-        address ballotAddress; // ballot for voting on membership
     }
 
     mapping (address => Member) public members; // members mapped to their address
@@ -82,6 +81,11 @@ contract Moloch is Ownable {
     ********/
     modifier onlyApprovedMember {
         require(members[msg.sender].approved);
+        _;
+    }
+
+    modifier onlyTownHall {
+        require(address(msg.sender) == townHall);
         _;
     }
 
@@ -263,27 +267,17 @@ contract Moloch is Ownable {
     *****************/
     /// @notice Add member to guild
     /// @param _newMemberAddress Address of member to add
-    function _addMember(address _newMemberAddress) internal {
+    function _addMember(
+        address _newMemberAddress,
+        uint256 _ethTributeAmount,
+        address[] _tokenTributeAddresses,
+        uint256[] _tokenTributeAmounts
+    ) public onlyTownHall {
         Member storage newMember = members[_newMemberAddress];
-        newMember.approved = true;
-
-        // transfer tokens and eth to guild bank
-        for (uint8 i = 0; i < newMember.tokenTributeAddresses.length; i++) {
-            ERC20 token = ERC20(newMember.tokenTributeAddresses[i]);
-
-            // transfer tokens stored in this contract to the bank
-            require(token.transfer(address(guildBank), newMember.tokenTributeAmounts[i]));
-        }
-
-        if (newMember.ethTributeAmount > 0) {
-            address(guildBank).transfer(newMember.ethTributeAmount);
-        }
-
-        // mint and transfer voting shares
-        votingShares.mint(_newMemberAddress, newMember.votingSharesRequested);
-
-        // mint loot tokens 1:1 and keep them in this contract for withdrawal
-        lootToken.mint(this, newMember.votingSharesRequested);
+        
+        newMember.ethTributeAmount = _ethTributeAmount;
+        newMember.tokenTributeAddresses = _tokenTributeAddresses;
+        newMember.tokenTributeAmounts = _tokenTributeAmounts;
 
         MemberAccepted(_newMemberAddress);
     }
