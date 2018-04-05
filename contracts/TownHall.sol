@@ -5,6 +5,7 @@ import "./Voting.sol";
 import "./VotingShares.sol";
 import "./Moloch.sol";
 import "./GuildBank.sol";
+import "./LootToken.sol";
 import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 
 contract TownHall is Ownable {
@@ -15,14 +16,19 @@ contract TownHall is Ownable {
         address indexed proposer,
         uint256 votingSharesRequested,
         ProposalTypes proposalType,
-        address ballotAddress
+        uint indexInProposalQueue
     );
 
-    event ProposalVoteCompleted(
-        address indexed proposer,
-        uint256 votingSharesRequested,
-        ProposalTypes proposalType,
-        address ballotAddress,
+    event ProposalVotingStarted(
+        uint indexed indexInProposalQueue
+    );
+
+    event ProposalGracePeriodStarted(
+        uint indexed indexInProposalQueue
+    );
+
+    event ProposalCompleted(
+        uint indexed indexInProposalQueue,
         uint8 winningBallotItem
     );
 
@@ -38,10 +44,10 @@ contract TownHall is Ownable {
     /******************
     CONTRACT REFERENCES
     ******************/
-    Voting public voting;
     VotingShares public votingShares;
     Moloch public moloch;
     GuildBank public guildBank;
+    LootToken public lootToken;
 
     /******************
     PROPOSAL DEFINITION
@@ -72,19 +78,21 @@ contract TownHall is Ownable {
     }
 
     struct Proposal {
-        // COMMON ATTRIBUTES
+        // COMMON PROPOSAL ATTRIBUTES
         address proposer; // who proposed this
-        address ballotAddress; // proposal voting ballot
         ProposalTypes proposalType; // type
         uint256 votingSharesRequested; // num voting shares requested
-        ProposalPhase phase; // phase
-        uint gracePeriodStartTime; // when did grace period start
 
         // PROJECT SPECIFIC ATTRIBUTES
         ProspectiveProject prospectiveProject;
 
         // MEMBER SPECIFIC ATTRIBUTES
         ProspectiveMember prospectiveMember;
+
+        // BOOKKEEPING
+        Voting ballot; // proposal voting ballot
+        ProposalPhase phase; // phase
+        uint gracePeriodStartTime; // when did grace period start
     }
 
     Proposal[] proposals; // proposal queue
@@ -94,7 +102,7 @@ contract TownHall is Ownable {
     MODIFIERS
     ********/
     modifier onlyApprovedMember() {
-        require(moloch.isMemberApproved(msg.sender) == true);
+        require(moloch.members(msg.sender) == true);
         _;
     }
 
@@ -108,10 +116,6 @@ contract TownHall is Ownable {
     /*******************************
     SET CONTRACT REFERENCE FUNCTIONS
     *******************************/
-    function setVoting(address _votingAddress) public onlyOwner {
-        voting = Voting(_votingAddress);
-    }
-
     function setVotingShares(address _votingSharesAddress) public onlyOwner {
         votingShares = VotingShares(_votingSharesAddress);
     }
@@ -124,12 +128,16 @@ contract TownHall is Ownable {
         guildBank = GuildBank(_guildBankAddress);
     }
 
+    function setLootToken(address _lootTokenAddress) public onlyOwner {
+        lootToken = LootToken(_lootTokenAddress);
+    }
+
     /*****************
     PROPOSAL FUNCTIONS
     *****************/
     function createMemberProposal(
         address _propospectiveMemberAddress,
-        address[] _tokenContractTributeAddresses, 
+        address[] _tokenTributeAddresses, 
         uint256[] _tokenTributeAmounts,
         uint256 _votingSharesRequested
     )
@@ -138,19 +146,22 @@ contract TownHall is Ownable {
         payable
     {
         // require tribute
-        require(msg.value > 0 || _tokenContractTributeAddresses.length > 0);
+        require((msg.value > 0) || (_tokenTributeAddresses.length > 0));
+
+        // TODO DO WE NEED MIN DEPOSIT HERE?
 
         // set up proposal
         Proposal memory membershipProposal;
 
         // from inputs
         membershipProposal.votingSharesRequested = _votingSharesRequested;
-        membershipProposal.prospectiveMember.tokenTributeAddresses = _tokenContractAddresses;
+        membershipProposal.prospectiveMember.prospectiveMemberAddress = _propospectiveMemberAddress;
+        membershipProposal.prospectiveMember.tokenTributeAddresses = _tokenTributeAddresses;
         membershipProposal.prospectiveMember.tokenTributeAmounts = _tokenTributeAmounts;
 
         // attributes
         membershipProposal.proposalType = ProposalTypes.Membership;
-        proposal.phase = ProposalPhase.Proposed;
+        membershipProposal.phase = ProposalPhase.Proposed;
 
         // collect eth tribute
         if (msg.value > 0) {
@@ -158,9 +169,9 @@ contract TownHall is Ownable {
         }
 
         // collect token tribute
-        for(uint8 i = 0; i < _tokenContractTributeAddresses.length; i++) {
-            require(_tokenTributeAmounts[i] > 0); // need non zero amounts
-            ERC20 erc20 = ERC20(_tokenContractTributeAddresses[i]);
+        for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
+            require(membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0); // need non zero amounts
+            ERC20 erc20 = ERC20(membershipProposal.prospectiveMember.tokenTributeAddresses[i]);
 
             // transfer tokens to this contract as tribute
             // approval must be granted prior to this step
@@ -168,9 +179,9 @@ contract TownHall is Ownable {
         }
 
         // push to end of proposal queue
-        proposals.push(proposal);
+        proposals.push(membershipProposal);
 
-        ProposalCreated(msg.sender, _votingSharesRequested, _proposalType, ballotAddress);
+        ProposalCreated(msg.sender, _votingSharesRequested, ProposalTypes.Membership, proposals.length);
     }
 
     function createProjectProposal(
@@ -185,20 +196,20 @@ contract TownHall is Ownable {
         require(msg.value == MIN_PROPOSAL_CREATION_DEPOSIT);
 
         // set up proposal
-        Proposal memory proposal;
+        Proposal memory projectProposal;
 
         // from inputs
-        proposal.prospectiveProject.ipfsHash = _ipfsHash;
-        proposal.prospectiveProject.deposit = msg.value;
+        projectProposal.prospectiveProject.ipfsHash = _ipfsHash;
+        projectProposal.prospectiveProject.deposit = msg.value;
 
         // attributes
-        proposal.proposalType = ProposalTypes.Project;
-        proposal.phase = ProposalPhase.Proposed;
+        projectProposal.proposalType = ProposalTypes.Project;
+        projectProposal.phase = ProposalPhase.Proposed;
 
         // push to end of proposal queue
-        proposals.push(proposal);
+        proposals.push(projectProposal);
 
-        ProposalCreated(msg.sender, _votingSharesRequested, _proposalType, ballotAddress);
+        ProposalCreated(msg.sender, _votingSharesRequested, ProposalTypes.Project, proposals.length);
     }
 
     function startProposalVote() onlyApprovedMember public {
@@ -212,51 +223,34 @@ contract TownHall is Ownable {
         Proposal storage currentProposal = proposals[currentProposalIndex];
 
         // create ballot
-        Voting ballotAddress = new Voting(votingShares, PROPOSAL_VOTE_TIME_SECONDS, 2);
-        currentProposal.ballotAddress = ballotAddress;
+        Voting ballot = new Voting(votingShares, PROPOSAL_VOTE_TIME_SECONDS, 2);
+        currentProposal.ballot = ballot;
 
         // change phase
         currentProposal.phase = ProposalPhase.Voting;
+        
+        ProposalVotingStarted(currentProposalIndex);
     }
 
     function voteOnCurrentProposal(uint8 _toBallotItem) onlyApprovedMember public {
-        Proposal memory currentProposal = getCurrentProposal();
+        Proposal memory currentProposal = proposals[currentProposalIndex];
         require(currentProposal.phase == ProposalPhase.Voting);
 
-        Voting ballot = Voting(currentProposal.ballotAddress);
-        ballot.vote(msg.sender, _toBallotItem);
+        currentProposal.ballot.vote(msg.sender, _toBallotItem);
     }
 
     function transitionProposalToGracePeriod() onlyApprovedMember public {
-        Proposal storage currentProposal = getCurrentProposal();
+        Proposal storage currentProposal = proposals[currentProposalIndex];
         require(currentProposal.phase == ProposalPhase.Voting);
 
-        // get winner from ballot
-        Voting ballot = Voting(currentProposal.ballotAddress);
-        uint8 winningBallotItem = ballot.getWinnerProposal();
-
-        if (winningBallotItem == WINNING_PROPOSAL_INDEX) {
-            // transfer deposit back to proposer
-            currentProposal.proposer.transfer(currentProposal.deposit);
-
-        } else if (winningBallotItem == LOSING_PROPOSAL_INDEX) {
-            // proposal loses, burn eth
-            address(0).transfer(currentProposal.deposit);
-
-            // TODO do we need grace period in this case?
-        }
+        // require vote time completed
+        require(currentProposal.ballot.hasVoteDurationPeriodElapsed());
 
         // transition state to grace period
         currentProposal.phase = ProposalPhase.GracePeriod;
         currentProposal.gracePeriodStartTime = now;
 
-        ProposalVoteCompleted(
-            proposal.proposer,
-            proposal.votingSharesRequested,
-            proposal.proposalType,
-            proposal.ballotAddress,
-            winningBallotItem
-        );
+        ProposalGracePeriodStarted(currentProposalIndex);
     }
 
     function finishProposal() public onlyApprovedMember {
@@ -267,58 +261,116 @@ contract TownHall is Ownable {
         require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS);
 
         // get winner from ballot
-        Voting ballot = Voting(currentProposal.ballotAddress);
-        uint8 winningBallotItem = ballot.getWinnerProposal();
+        uint8 winningBallotItem = currentProposal.ballot.getWinnerProposal();
 
         if (winningBallotItem == WINNING_PROPOSAL_INDEX) {
             if (currentProposal.proposalType == ProposalTypes.Membership) {
                 // add member here
-                // collect tributes into bank
-                // collect eth tribute
-                if (currentProposal.prospectiveMember.ethTributeAmount > 0) {
-                    address(guildBank).transfer(currentProposal.prospectiveMember.ethTributeAmount, msg.value);
-                }
-
-                // collect token tribute
-                for(uint8 i = 0; i < _tokenContractTributeAddresses.length; i++) {
-                    require(_tokenTributeAmounts[i] > 0); // need non zero amounts
-                    ERC20 erc20 = ERC20(currentProposal.prospectiveMember.tokenContractTributeAddresses[i]);
-
-                    require(erc20.transfer(address(guildBank), this, currentProposal.prospectiveMember.tokenTributeAmounts[i]));
-                }
-
-                // add to moloch members
-                moloch.addMember(
-                    currentProposal.prospectiveMember.prospectiveMemberAddress,
-                    currentProposal.prospectiveMember.ethTributeAmount,
-                    currentProposal.prospectiveMember.tokenTributeAddresses, 
-                    currentProposal.prospectiveMember.tokenTributeAmounts
-                );
+                _acceptMemberProposal(currentProposal);
             } else if (currentProposal.proposalType == ProposalTypes.Project) {
-                // dilute
-                votingShares.mint(currentProposal.proposer, currentProposal.votingSharesRequested);
-
-                // mint loot tokens 1:1 and keep them in moloch contract for withdrawal
-                lootToken.mint(address(moloch), currentProposal.votingSharesRequested);
+                // accept proposal
+                _acceptProjectProposal(currentProposal);
             }
+        } else if (winningBallotItem == LOSING_PROPOSAL_INDEX) {
+            // proposal loses, burn eth
+            address(0).transfer(currentProposal.prospectiveProject.deposit);
         }
+
+        ProposalCompleted(currentProposalIndex, winningBallotItem);
 
         // close out and move on to next proposal
         currentProposal.phase = ProposalPhase.Done;
         currentProposalIndex++;
     }
 
-    function getCurrentProposal() public view returns(Proposal) {
-        Proposal memory proposal = proposals[proposals.length]; // last proposal is current proposal
-        return(proposal);
+    function addFoundingMember(address _memberAddress, uint256 _votingShares) public onlyOwner {
+        // add to moloch members
+        moloch.addMember(_memberAddress);
+
+        // dilute and grant to new member
+        votingShares.mint(_memberAddress, _votingShares);
+
+        // mint loot tokens 1:1 and keep them in moloch contract for withdrawal
+        lootToken.mint(address(moloch), _votingShares);
     }
 
-    function getCurrentProposalDetails() public view returns(address, bytes32, ProposalTypes) {
-        Proposal memory proposal = getCurrentProposal();
+    function getCurrentProposalCommonDetails() public view returns (
+        address,
+        ProposalTypes,
+        uint256,
+        Voting,
+        ProposalPhase,
+        uint
+    ) {
+        Proposal memory proposal = proposals[currentProposalIndex];
         return(
-            proposal.ballotAddress,
-            proposal.ipfsHash,
-            proposal.proposalType
+            proposal.proposer,
+            proposal.proposalType,
+            proposal.votingSharesRequested,
+            proposal.ballot,
+            proposal.phase,
+            proposal.gracePeriodStartTime
         );
+    }
+
+    function getCurrentProposalProjectDetails() public view returns (bytes32, uint256) {
+        Proposal memory proposal = proposals[currentProposalIndex];
+        return(proposal.prospectiveProject.ipfsHash, proposal.prospectiveProject.deposit);
+    }
+
+    function getCurrentProposalMemberDetails() public view returns (
+        address, 
+        uint256, 
+        address[], 
+        uint256[], 
+        address
+    ) {
+        Proposal memory proposal = proposals[currentProposalIndex];
+        return(
+            proposal.prospectiveMember.prospectiveMemberAddress,
+            proposal.prospectiveMember.ethTributeAmount,
+            proposal.prospectiveMember.tokenTributeAddresses,
+            proposal.prospectiveMember.tokenTributeAmounts,
+            proposal.prospectiveMember.ballotAddress
+        );
+    }
+
+    function _acceptMemberProposal(Proposal memberProposal) internal {
+        // collect tributes into bank
+        // collect eth tribute
+        if (memberProposal.prospectiveMember.ethTributeAmount > 0) {
+            address(guildBank).transfer(memberProposal.prospectiveMember.ethTributeAmount);
+        }
+
+        // collect token tribute
+        for(uint8 i = 0; i < memberProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
+            ERC20 erc20 = ERC20(memberProposal.prospectiveMember.tokenTributeAddresses[i]);
+            require(erc20.transfer(address(guildBank), memberProposal.prospectiveMember.tokenTributeAmounts[i]));
+        }
+
+        // add to moloch members
+        moloch.addMember(
+            memberProposal.prospectiveMember.prospectiveMemberAddress
+        );
+
+        // dilute and grant to new member
+        votingShares.mint(
+            memberProposal.prospectiveMember.prospectiveMemberAddress,
+            memberProposal.votingSharesRequested
+        );
+
+        // mint loot tokens 1:1 and keep them in moloch contract for withdrawal
+        lootToken.mint(address(moloch), memberProposal.votingSharesRequested);
+    }
+
+    function _acceptProjectProposal(Proposal projectProposal) internal {
+        // dilute
+        votingShares.mint(projectProposal.proposer, projectProposal.votingSharesRequested);
+
+        // mint loot tokens 1:1 and keep them in moloch contract for withdrawal
+        lootToken.mint(address(moloch), projectProposal.votingSharesRequested);
+
+        // transfer deposit back to proposer
+        projectProposal.proposer.transfer(projectProposal.prospectiveProject.deposit);
     }
 }
