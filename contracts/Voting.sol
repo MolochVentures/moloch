@@ -67,7 +67,7 @@ contract Voting is Ownable {
     /// @notice Vote for candidate, number of voting shares = number of votes
     /// @param _voterAddress Address of person who is voting
     /// @param _toProposal Which proposal to vote on
-    function vote(address _voterAddress, uint8 _toProposal) public {
+    function vote(address _voterAddress, uint8 _toProposal) public onlyOwner {
         require(now < votingPeriodEnds); // vote is still open
 
         Voter storage voter = voters[_voterAddress];
@@ -84,7 +84,7 @@ contract Voting is Ownable {
     /// @notice Get voter attributes
     /// @param _voterAddress Voter address
     /// @return Voter attributes
-    function getVoter(address _voterAddress) public view returns(bool, uint8) {
+    function getVoter(address _voterAddress) public view returns (bool, uint8) {
         Voter memory voter = voters[_voterAddress];
 
         return (voter.voted, voter.vote);
