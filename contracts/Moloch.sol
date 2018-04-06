@@ -61,6 +61,12 @@ contract Moloch is Ownable {
     /*******************************
     SET CONTRACT REFERENCE FUNCTIONS
     *******************************/
+    /// @notice Set reference to the deployed TownHall contract address
+    /// @param _townHallAddress Address of TownHall contract
+    function setTownHall(address _townHallAddress) public onlyOwner {
+        townHall = TownHall(_townHallAddress);
+    }
+
     /// @notice Set reference to the deployed VotingShares contract address
     /// @param _votingShares Address of VotingShares contract
     function setVotingShares(address _votingShares) public onlyOwner {
@@ -91,7 +97,7 @@ contract Moloch is Ownable {
         require(lootToken.transfer(msg.sender, numberOfVotingShares));
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
-        delete members[msg.sender];
+        members[msg.sender] = false;
         MemberExit(msg.sender);
     }
 
