@@ -1,43 +1,81 @@
 pragma solidity ^0.4.18;
 
-import 'zeppelin-solidity/contracts/math/SafeMath.sol';
-import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
-import 'zeppelin-solidity/contracts/token/ERC20/BurnableToken.sol';
-import 'zeppelin-solidity/contracts/token/ERC20/MintableToken.sol';
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 
 /**
- * almost like a basic token, but not transferrable by normal people
+ * Structured like an ERC20, but can only be burned/minted and not transferred.
  */
-contract VotingShares is BurnableToken, MintableToken {
-  using SafeMath for uint256;
+contract VotingShares is Ownable {
+    using SafeMath for uint256;
 
-  uint256 totalSupply_;
+    uint256 totalSupply_;
+    mapping(address => uint256) balances;
+    bool public mintingFinished = false;
 
-  string public constant name = "VotingShares"; // solium-disable-line uppercase
-  string public constant symbol = "MLV"; // solium-disable-line uppercase
-  uint8 public constant decimals = 18; // solium-disable-line uppercase
+    event Mint(address indexed to, uint256 amount);
+    event Burn(address indexed from, uint256 amount);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    
+    event MintFinished();
 
-  uint256 public constant INITIAL_SUPPLY = 0 * (10 ** uint256(decimals));
+    modifier canMint() {
+        require(!mintingFinished);
+        _;
+    }
 
-  event Transfer(address indexed from, address indexed to, uint256 value);
+    /**
+    * @dev total number of tokens in existence
+    */
+    function totalSupply() public view returns (uint256) {
+        return totalSupply_;
+    }
 
-  function VotingShares() public {
-    totalSupply_ = INITIAL_SUPPLY;
-    balances[msg.sender] = INITIAL_SUPPLY;
-    Transfer(0x0, msg.sender, INITIAL_SUPPLY);
-  }
+    /**
+     * @dev Burns a specific amount of tokens.
+     * @param _burner Who to burn tokens from.
+     * @param _value The amount of token to be burned.
+     */
+    function proxyBurn(address _burner, uint256 _value) public onlyOwner {
+        require(_value <= balances[_burner]);
+        // no need to require value <= totalSupply, since that would imply the
+        // sender's balance is greater than the totalSupply, which *should* be an assertion failure
 
-  /**
-  * override transfer function to be only owner
-  */
-  function transfer(address _to, uint256 _value) public onlyOwner returns (bool) {
-    require(_to != address(0));
-    require(_value <= balances[msg.sender]);
+        balances[_burner] = balances[_burner].sub(_value);
+        totalSupply_ = totalSupply_.sub(_value);
+        Burn(_burner, _value);
+    }
 
-    // SafeMath.sub will throw if there is not enough balance.
-    balances[msg.sender] = balances[msg.sender].sub(_value);
-    balances[_to] = balances[_to].add(_value);
-    Transfer(msg.sender, _to, _value);
-    return true;
-  }
+    /**
+    * @dev Gets the balance of the specified address.
+    * @param _owner The address to query the the balance of.
+    * @return An uint256 representing the amount owned by the passed address.
+    */
+    function balanceOf(address _owner) public view returns (uint256 balance) {
+        return balances[_owner];
+    }
+
+    /**
+     * @dev Function to mint tokens
+     * @param _to The address that will receive the minted tokens.
+     * @param _amount The amount of tokens to mint.
+     * @return A boolean that indicates if the operation was successful.
+     */
+    function mint(address _to, uint256 _amount) onlyOwner canMint public returns (bool) {
+        totalSupply_ = totalSupply_.add(_amount);
+        balances[_to] = balances[_to].add(_amount);
+        Mint(_to, _amount);
+        Transfer(address(0), _to, _amount);
+        return true;
+    }
+
+    /**
+     * @dev Function to stop minting new tokens.
+     * @return True if the operation was successful.
+     */
+    function finishMinting() onlyOwner canMint public returns (bool) {
+        mintingFinished = true;
+        MintFinished();
+        return true;
+    }
 }

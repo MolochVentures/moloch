@@ -6,7 +6,7 @@ const VotingShares = artifacts.require('./VotingShares')
 const LootToken = artifacts.require('./LootToken')
 const GuildBank = artifacts.require('./GuildBank')
 const SimpleToken = artifacts.require('./SimpleToken')
-const MemberApplicationBallot = artifacts.require('./MemberApplicationBallot')
+const Voting = artifacts.require('./Voting')
 
 contract('Moloch', accounts => {
   before('create moloch with founders', async () => {
@@ -14,6 +14,7 @@ contract('Moloch', accounts => {
     const VOTING_SHARES = 100
     const FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR = accounts[9]
     const FOUNDING_MEMBER_ETH_TRIBUTE_ADDR = accounts[8]
+    const MOLOCH_ADMIN = accounts[0]
 
     this.simpleToken = await SimpleToken.new({
       from: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR
@@ -24,15 +25,15 @@ contract('Moloch', accounts => {
         memberAddress: FOUNDING_MEMBER_ETH_TRIBUTE_ADDR,
         votingShares: VOTING_SHARES,
         ethTributeAmount: TRIBUTE,
-        tokenTributeAddr: '0x0',
-        tokenTributeAmount: 0
+        tokenTributeAddr: [],
+        tokenTributeAmount: []
       },
       {
         memberAddress: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR,
         votingShares: VOTING_SHARES,
         ethTributeAmount: 0,
-        tokenTributeAddr: this.simpleToken.address,
-        tokenTributeAmount: TRIBUTE
+        tokenTributeAddr: [this.simpleToken.address],
+        tokenTributeAmount: [TRIBUTE]
       }
     ]
 
@@ -43,16 +44,16 @@ contract('Moloch', accounts => {
 
     // transfer ownership of dependent contracts to moloch contract
     await Promise.all([
-      votingShares.transferOwnership(moloch.address),
-      lootToken.transferOwnership(moloch.address),
-      guildBank.transferOwnership(moloch.address)
+      votingShares.transferOwnership(moloch.address, { from: MOLOCH_ADMIN }),
+      lootToken.transferOwnership(moloch.address, { from: MOLOCH_ADMIN }),
+      guildBank.transferOwnership(moloch.address, { from: MOLOCH_ADMIN })
     ])
 
     // set moloch addresses
     await Promise.all([
-      moloch.setVotingShares(votingShares.address),
-      moloch.setLootToken(lootToken.address),
-      moloch.setGuildBank(guildBank.address)
+      moloch.setVotingShares(votingShares.address, { from: MOLOCH_ADMIN }),
+      moloch.setLootToken(lootToken.address, { from: MOLOCH_ADMIN }),
+      moloch.setGuildBank(guildBank.address, { from: MOLOCH_ADMIN })
     ])
 
     let [votingSharesAddr, lootTokenAddr, guildBankAddr] = await Promise.all([
@@ -77,21 +78,50 @@ contract('Moloch', accounts => {
       'GuildBank contract address incorrect'
     )
 
-    // transfer to moloch contract with application
-    await this.simpleToken.transfer(moloch.address, TRIBUTE, {
-      from: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR
-    })
-
     guildBankAddr = await moloch.guildBank.call()
     await Promise.all(
       this.FOUNDING_MEMBERS.map(async (member, index) => {
+        if (member.ethTributeAmount > 0) {
+          await moloch.offerEthTribute({
+            from: member.memberAddress,
+            value: member.ethTributeAmount
+          })
+        }
+
+        if (member.tokenTributeAddr.length > 0) {
+          await Promise.all(
+            member.tokenTributeAddr.map(async (addr, index) => {
+              const token = await SimpleToken.at(addr)
+              await token.approve(
+                moloch.address,
+                member.tokenTributeAmount[index],
+                { from: member.memberAddress }
+              )
+              const allowed = await token.allowance.call(
+                member.memberAddress,
+                moloch.address
+              )
+              assert.equal(allowed, member.tokenTributeAmount[index])
+            })
+          )
+
+          await moloch.offerTokenTribute(
+            member.tokenTributeAddr,
+            member.tokenTributeAmount,
+            {
+              from: member.memberAddress
+            }
+          )
+        }
+
         const result = await moloch.addFoundingMember(
           member.memberAddress,
           member.votingShares,
-          member.tokenTributeAddr,
-          member.tokenTributeAmount,
-          { from: accounts[0], value: member.ethTributeAmount }
+          { from: MOLOCH_ADMIN }
         )
+
+        const mem = await moloch.getMember(member.memberAddress)
+        assert.equal(mem[0], true)
 
         const approved = result.logs.find(log => {
           return log.event === 'MemberAccepted'
@@ -102,15 +132,27 @@ contract('Moloch', accounts => {
           this.FOUNDING_MEMBERS[index].memberAddress,
           'Member approval incorrectly logged'
         )
+        // check guild bank balance
+        if (member.ethTributeAmount > 0) {
+          const balance = web3.eth.getBalance(guildBankAddr)
+          assert.equal(
+            balance.toNumber(),
+            TRIBUTE,
+            'eth tribute not in guild bank'
+          )
+        }
+
+        if (member.tokenTributeAddr.length > 0) {
+          await Promise.all(
+            member.tokenTributeAddr.map(async (addr, index) => {
+              const token = await SimpleToken.at(addr)
+              const balance = await token.balanceOf(guildBankAddr)
+              assert.equal(balance.toNumber(), TRIBUTE)
+            })
+          )
+        }
       })
     )
-
-    // check guild bank balance
-    let balance = web3.eth.getBalance(guildBankAddr)
-    assert.equal(balance.toNumber(), TRIBUTE)
-
-    balance = await this.simpleToken.balanceOf(guildBankAddr)
-    assert.equal(balance.toNumber(), TRIBUTE)
   })
 
   it('should be owned', async () => {
@@ -144,22 +186,26 @@ contract('Moloch', accounts => {
   it('should submit application with eth', async () => {
     const ETH_TRIBUTE = web3.toWei(10, 'ether')
     const VOTING_SHARES = 100
+    const APPLICANT_ADDRESS = accounts[2]
 
     const moloch = await Moloch.deployed()
-    const result = await moloch.submitApplication(VOTING_SHARES, 0x0, 0, {
-      value: ETH_TRIBUTE,
-      from: accounts[1]
-    })
-    const log = result.logs.find(log => {
-      return log.event === 'MemberApplied'
+    await moloch.offerEthTribute({
+      from: APPLICANT_ADDRESS,
+      value: ETH_TRIBUTE
     })
 
-    assert.equal(log.args.memberAddress, accounts[1])
-    assert.equal(log.args.ethTributeAmount.toNumber(), ETH_TRIBUTE)
+    await moloch.submitApplication(VOTING_SHARES, {
+      from: APPLICANT_ADDRESS
+    })
+
+    const member = await moloch.getMember(APPLICANT_ADDRESS)
+    assert.equal(member[0], false)
+    assert.equal(member[1].toNumber(), VOTING_SHARES)
+    assert.equal(member[2].toNumber(), ETH_TRIBUTE)
   })
 
-  it('should take an application and collect votes for membership', async () => {
-    const TOKEN_TRIBUTE = web3.toWei(10, 'ether')
+  it('should submit application with tokens', async () => {
+    const TOKEN_TRIBUTE = web3.toWei(1, 'ether')
     const VOTING_SHARES = 100
     const APPLICANT_ADDRESS = accounts[1]
 
@@ -170,66 +216,94 @@ contract('Moloch', accounts => {
     const moloch = await Moloch.deployed()
 
     // transfer tokens for application
-    await simpleToken.transfer(moloch.address, TOKEN_TRIBUTE, {
+    await simpleToken.approve(moloch.address, TOKEN_TRIBUTE, {
       from: APPLICANT_ADDRESS
     })
 
-    // submit application
-    const result = await moloch.submitApplication(
-      VOTING_SHARES,
-      simpleToken.address,
-      TOKEN_TRIBUTE,
-      {
-        from: APPLICANT_ADDRESS
-      }
-    )
-    let log = result.logs.find(log => {
-      return log.event === 'MemberApplied'
+    await moloch.offerTokenTribute([simpleToken.address], [TOKEN_TRIBUTE], {
+      from: APPLICANT_ADDRESS
     })
-    assert.equal(log.args.tokenTributeAmount.toNumber(), TOKEN_TRIBUTE)
+    // submit application
+    await moloch.submitApplication(VOTING_SHARES, {
+      from: APPLICANT_ADDRESS
+    })
+
+    const member = await moloch.getMember(APPLICANT_ADDRESS)
+
+    assert.equal(member[0], false)
+    assert.equal(member[1].toNumber(), VOTING_SHARES)
+    assert.equal(member[2].toNumber(), 0)
+    assert.equal(member[3][0], simpleToken.address)
+    assert.equal(member[4][0].toNumber(), TOKEN_TRIBUTE)
+  })
+
+  it('should accept votes from members', async () => {
+    const APPLICANT_ADDRESS = accounts[1]
+    const ACCEPT_MEMBER_BALLOT_PROPOSAL = 1
+    const VOTING_SHARES_FRACTION = 0.5
+
+    const moloch = await Moloch.deployed()
+
+    const votingSharesAddr = await moloch.votingShares.call()
+    const votingShares = await VotingShares.at(votingSharesAddr)
+    const votingSharesSupply = await votingShares.totalSupply()
 
     // verify ballot
-    const ballot = await MemberApplicationBallot.at(log.args.ballotAddress)
-    let requiredVoters = await ballot.howManyVoters.call()
-    assert.equal(requiredVoters.toNumber(), this.FOUNDING_MEMBERS.length)
+    const member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    const ballot = await Voting.at(member[5])
+
+    const votingSharesRequired = await ballot.numVotesRequired.call()
+    assert.equal(
+      votingSharesRequired.toNumber(),
+      votingSharesSupply * VOTING_SHARES_FRACTION
+    )
     await Promise.all(
       this.FOUNDING_MEMBERS.map(async (foundingMember, index) => {
-        let voter = await ballot.requiredVoters.call(index)
-        assert.equal(voter, foundingMember.memberAddress)
-
+        const v = await ballot.hasVoteDurationPeriodElapsed()
+        assert.equal(v, false)
         // submit votes
-        let vote = await moloch.voteOnMemberApplication(
-          APPLICANT_ADDRESS,
-          true,
-          {
-            from: foundingMember.memberAddress
-          }
-        )
-
-        // vote for acceptance
-        log = vote.logs.find(log => {
-          return log.event === 'VotedForMember'
+        await moloch.voteOnMemberApplication(APPLICANT_ADDRESS, true, {
+          from: foundingMember.memberAddress
         })
-        assert.equal(log.args.votingMember, foundingMember.memberAddress)
-        assert.equal(log.args.votedFor, APPLICANT_ADDRESS)
-        assert.equal(log.args.accepted, true)
-
-        voter = await ballot.getVoter(foundingMember.memberAddress)
-        assert.equal(voter[1], true)
-        assert.equal(voter[2].toNumber(), 1)
+        const voter = await ballot.getVoter(foundingMember.memberAddress)
+        assert.equal(voter[0], true)
+        assert.equal(voter[1].toNumber(), ACCEPT_MEMBER_BALLOT_PROPOSAL)
       })
     )
+  })
 
-    const isAccepted = await ballot.isAccepted()
-    assert.equal(isAccepted, true, 'Winning vote not accepted.')
+  it('should accept member after vote is complete', async () => {
+    const VOTING_SHARES = 100
+    const APPLICANT_ADDRESS = accounts[1]
+    const BALLOT_INDEX_OF_MEMBER_ACCEPTED = 1
 
-    let res = await moloch.acceptMember(APPLICANT_ADDRESS)
+    const moloch = await Moloch.deployed()
+
+    let member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    const ballot = await Voting.at(member[5])
+    assert.equal(member[0], false, 'Member was approved before being accepted.')
+
+    await new Promise((resolve, reject) => {
+      setTimeout(() => {
+        resolve()
+      }, 5000)
+    })
+
+    const winningProposal = await ballot.getWinnerProposal()
+    assert.equal(winningProposal, BALLOT_INDEX_OF_MEMBER_ACCEPTED)
+
+    await moloch.acceptMember(APPLICANT_ADDRESS, {
+      from: this.FOUNDING_MEMBERS[0].memberAddress
+    })
+
+    member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    assert.equal(member[0], true, 'Member was not approved.')
 
     const votingSharesAddr = await moloch.votingShares.call()
     const votingShares = await VotingShares.at(votingSharesAddr)
     const lootTokenAddr = await moloch.lootToken.call()
     const lootToken = await LootToken.at(lootTokenAddr)
-    balance = await lootToken.balanceOf(APPLICANT_ADDRESS)
+    let balance = await lootToken.balanceOf(APPLICANT_ADDRESS)
     assert.equal(
       balance.toNumber(),
       0,
@@ -243,13 +317,14 @@ contract('Moloch', accounts => {
       'Should have voting shares.'
     )
 
-    balance = await lootToken.balanceOf(moloch.address)
-    console.log('balance: ', balance.toNumber())
+    const startingLootTokenBalance = await lootToken.balanceOf(moloch.address)
 
-    res = await moloch.exitMoloch({ from: APPLICANT_ADDRESS })
-    console.log('result: ', res)
+    await moloch.exitMoloch({ from: APPLICANT_ADDRESS })
+
+    member = await moloch.getMember.call(APPLICANT_ADDRESS)
+    assert.equal(member[0], false, 'Member did not get removed on exit.')
+
     balance = await lootToken.balanceOf(APPLICANT_ADDRESS)
-    console.log('balance: ', balance.toNumber())
     assert.equal(
       balance.toNumber(),
       VOTING_SHARES,
@@ -257,11 +332,17 @@ contract('Moloch', accounts => {
     )
 
     balance = await votingShares.balanceOf(APPLICANT_ADDRESS)
-    console.log('balance: ', balance.toNumber())
     assert.equal(
       balance.toNumber(),
       0,
       'Should have no voting shares after exit.'
+    )
+
+    const endingLootTokenBalance = await lootToken.balanceOf(moloch.address)
+    assert.equal(
+      startingLootTokenBalance.toNumber() - endingLootTokenBalance.toNumber(),
+      VOTING_SHARES,
+      'Should remove loot tokens from the overall pot owned by Moloch contract.'
     )
   })
 })

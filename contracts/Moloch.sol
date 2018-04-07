@@ -1,198 +1,113 @@
 pragma solidity ^0.4.0;
 
-import 'zeppelin-solidity/contracts/ownership/Ownable.sol';
-import 'zeppelin-solidity/contracts/math/SafeMath.sol';
-import 'zeppelin-solidity/contracts/token/ERC20/ERC20.sol';
-import './VotingShares.sol';
-import './MemberApplicationBallot.sol';
-import './GuildBank.sol';
-import './LootToken.sol';
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
+import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./VotingShares.sol";
+import "./Voting.sol";
+import "./GuildBank.sol";
+import "./LootToken.sol";
+import "./TownHall.sol";
 
+/**
+    @title Moloch DAO contract
+    @notice Overseer contract for all Moloch functions, including membership, application, voting, and exiting
+    @dev Owner should be a multisig wallet
+ */
 contract Moloch is Ownable {
-  using SafeMath for uint256;
+    using SafeMath for uint256;
 
-  struct Member {
-    bool approved;
-    uint256 votingShares;
-    uint256 ethTributeAmount;
-    // token tribute
-    address tokenTributeAddress;
-    uint256 tokenTributeAmount;
-    address ballotAddress;
-  }
-
-  address[] public approvedMembers;
-  mapping (address => Member) public members;
-
-  VotingShares public votingShares;
-  GuildBank public guildBank;
-  LootToken public lootToken;
-
-  event MemberApplied(
-    address indexed memberAddress,
-    uint256 votingSharesRequested,
-    uint256 ethTributeAmount,
-    address tokenTributeAddress,
-    uint256 tokenTributeAmount,
-    address ballotAddress
-  );
-
-  event MemberAccepted(
-    address indexed memberAddress
-  );
-
-  event VotedForMember(
-    address indexed votingMember,
-    address indexed votedFor,
-    bool accepted
-  );
-
-  event MemberExit(
-    address indexed memberAddress
-  );
-
-  modifier onlyMember {
-    require(members[msg.sender].approved);
-    _;
-  }
-
-  function setVotingShares(address _votingShares) public onlyOwner {
-    votingShares = VotingShares(_votingShares);
-  }
-
-  function setLootToken(address _lootToken) public onlyOwner {
-    lootToken = LootToken(_lootToken);
-  }
-
-  function setGuildBank(address _guildBank) public onlyOwner {
-    guildBank = GuildBank(_guildBank);
-  }
-
-  function getMember(address _memberAddress) public view returns (
-    bool,
-    uint256,
-    uint256,
-    address,
-    uint256,
-    address
-  ) {
-    Member memory member = members[_memberAddress];
-    return (
-      member.approved,
-      member.votingShares,
-      member.ethTributeAmount,
-      member.tokenTributeAddress,
-      member.tokenTributeAmount,
-      member.ballotAddress
+    /*****
+    EVENTS
+    *****/
+    event MemberAccepted(
+        address indexed memberAddress
     );
-  }
 
-  // add founding member, auto approved
-  function addFoundingMember(
-    address _memberAddress,
-    uint256 _votingShares,
-    address _tokenTributeAddress,
-    uint256 _tokenTributeAmount
-  ) public payable onlyOwner
-  {
-    members[_memberAddress] = Member(
-      false,
-      _votingShares,
-      msg.value,
-      _tokenTributeAddress,
-      _tokenTributeAmount,
-      address(0) // no voting ballot
+    event MemberExit(
+        address indexed memberAddress
     );
-    _addMember(_memberAddress);
-  }
 
-  function submitApplication(
-    uint256 _votingSharesRequested,
-    address _tokenTributeAddress,
-    uint256 _tokenTributeAmount
-  ) public payable 
-  {
-    // can't reapply if already approved
-    require(!members[msg.sender].approved);
+    /******************
+    CONTRACT REFERENCES
+    ******************/
+    VotingShares public votingShares; // token contract
+    GuildBank public guildBank; // store guild assets
+    LootToken public lootToken; // token contract
+    TownHall public townHall; // token contract
 
-    // create ballot for voting new member in
-    address ballotAddress = new MemberApplicationBallot(approvedMembers);
+    /******************
+    MEMBERSHIP TRACKING
+    ******************/
+    mapping (address => bool) public members; // members mapped to their address
 
-    members[msg.sender] = Member({ 
-      approved: false,
-      votingShares: _votingSharesRequested,
-      ethTributeAmount: msg.value,
-      tokenTributeAddress: _tokenTributeAddress,
-      tokenTributeAmount: _tokenTributeAmount,
-      ballotAddress: ballotAddress
-    });
-
-    MemberApplied(
-      msg.sender,
-      _votingSharesRequested,
-      msg.value,
-      _tokenTributeAddress,
-      _tokenTributeAmount,
-      ballotAddress
-    );
-  }
-
-  function voteOnMemberApplication(address _prospectiveMember, bool _accepted) public onlyMember {
-    require(!members[_prospectiveMember].approved);
-
-    MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
-    if (_accepted) {
-      ballot.voteFor(msg.sender);
-    } else {
-      ballot.voteAgainst(msg.sender);
+    /********
+    MODIFIERS
+    ********/
+    modifier onlyApprovedMember {
+        require(members[msg.sender] == true);
+        _;
     }
 
-    VotedForMember(msg.sender, _prospectiveMember, _accepted);
-  }
-
-  function _addMember(address _prospectiveMember) internal onlyOwner {
-    Member storage newMember = members[_prospectiveMember];
-    newMember.approved = true;
-
-    // transfer tokens and eth to guild bank
-    if (newMember.tokenTributeAddress != address(0)) {
-      ERC20 token = ERC20(newMember.tokenTributeAddress);
-      token.transfer(address(guildBank), newMember.tokenTributeAmount);
+    modifier onlyTownHall {
+        require(address(msg.sender) == address(townHall));
+        _;
     }
 
-    if (newMember.ethTributeAmount > 0) {
-      address(guildBank).transfer(newMember.ethTributeAmount);
+    /***************
+    PUBLIC FUNCTIONS
+    ***************/
+
+    /*******************************
+    SET CONTRACT REFERENCE FUNCTIONS
+    *******************************/
+    /// @notice Set reference to the deployed TownHall contract address
+    /// @param _townHallAddress Address of TownHall contract
+    function setTownHall(address _townHallAddress) public onlyOwner {
+        townHall = TownHall(_townHallAddress);
     }
 
-    // mint and transfer voting shares
-    votingShares.mint(_prospectiveMember, newMember.votingShares);
+    /// @notice Set reference to the deployed VotingShares contract address
+    /// @param _votingShares Address of VotingShares contract
+    function setVotingShares(address _votingShares) public onlyOwner {
+        votingShares = VotingShares(_votingShares);
+    }
 
-    // mint loot tokens 1:1 and keep them in this contract for withdrawal
-    lootToken.mint(this, newMember.votingShares);
+    /// @notice Set reference to the deployed LootToken contract address
+    /// @param _lootToken Address of LootToken contract
+    function setLootToken(address _lootToken) public onlyOwner {
+        lootToken = LootToken(_lootToken);
+    }
 
-    approvedMembers.push(_prospectiveMember);
-    MemberAccepted(_prospectiveMember);
-  }
+    /// @notice Set reference to the deployed GuildBank contract address
+    /// @param _guildBank Address of GuildBank contract
+    function setGuildBank(address _guildBank) public onlyOwner {
+        guildBank = GuildBank(_guildBank);
+    }
 
-  function acceptMember(address _prospectiveMember) public onlyOwner {
-    // check that vote passed
-    MemberApplicationBallot ballot = MemberApplicationBallot(members[_prospectiveMember].ballotAddress);
-    require(ballot.isAccepted());
+    /**************
+    GUILD FUNCTIONS
+    **************/
+    /// @notice Cash out voting shares for loot tokens
+    /// @dev Voting shares are burned, loot tokens are transferred
+    /// from this contract to the member
+    function exitMoloch() public onlyApprovedMember {
+        uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
 
-    _addMember(_prospectiveMember);
-  }
+        require(lootToken.transfer(msg.sender, numberOfVotingShares));
+        votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
-  function exitMoloch() public onlyMember {
-    Member memory member = members[msg.sender];
-    require(lootToken.balanceOf(this) >= member.votingShares);
+        members[msg.sender] = false;
+        MemberExit(msg.sender);
+    }
 
-    lootToken.transfer(msg.sender, member.votingShares);
-
-    // TODO: burn voting shares, need to redo contract to allow without transfer
-
-    delete members[msg.sender];
-    MemberExit(msg.sender);
-  }
-
-  function() public payable {}
+    /*****************
+    INTERNAL FUNCTIONS
+    *****************/
+    /// @notice Add member to guild, only TownHall contract can do this
+    /// @param _newMemberAddress Address of member to add
+    function addMember(address _newMemberAddress) public onlyTownHall {
+        members[_newMemberAddress] = true;
+        MemberAccepted(_newMemberAddress);
+    }
 }
