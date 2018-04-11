@@ -1,7 +1,7 @@
-pragma solidity ^0.4.18;
+pragma solidity 0.4.21;
 
 
-import "zeppelin-solidity/contracts/token/ERC20/StandardToken.sol";
+import "./StandardToken.sol";
 
 
 /**
@@ -24,7 +24,7 @@ contract SimpleToken is StandardToken {
   function SimpleToken() public {
     totalSupply_ = INITIAL_SUPPLY;
     balances[msg.sender] = INITIAL_SUPPLY;
-    Transfer(0x0, msg.sender, INITIAL_SUPPLY);
+    emit Transfer(0x0, msg.sender, INITIAL_SUPPLY);
   }
 
 }
