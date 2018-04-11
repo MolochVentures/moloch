@@ -63,26 +63,33 @@ contract Moloch is Ownable {
     *******************************/
     /// @notice Set reference to the deployed TownHall contract address
     /// @param _townHallAddress Address of TownHall contract
-    function setTownHall(address _townHallAddress) public onlyOwner {
+    // function setTownHall(address _townHallAddress) public onlyOwner {
+    //     townHall = TownHall(_townHallAddress);
+    // }
+
+    // /// @notice Set reference to the deployed VotingShares contract address
+    // /// @param _votingShares Address of VotingShares contract
+    // function setVotingShares(address _votingShares) public onlyOwner {
+    //     votingShares = VotingShares(_votingShares);
+    // }
+
+    // /// @notice Set reference to the deployed LootToken contract address
+    // /// @param _lootToken Address of LootToken contract
+    // function setLootToken(address _lootToken) public onlyOwner {
+    //     lootToken = LootToken(_lootToken);
+    // }
+
+    // /// @notice Set reference to the deployed GuildBank contract address
+    // /// @param _guildBank Address of GuildBank contract
+    // function setGuildBank(address _guildBank) public onlyOwner {
+    //     guildBank = GuildBank(_guildBank);
+    // }
+
+    function Moloch(address _townHallAddress, address _votingSharesAddress, address _lootTokenAddress, address _guildBankAddress) public {
         townHall = TownHall(_townHallAddress);
-    }
-
-    /// @notice Set reference to the deployed VotingShares contract address
-    /// @param _votingShares Address of VotingShares contract
-    function setVotingShares(address _votingShares) public onlyOwner {
-        votingShares = VotingShares(_votingShares);
-    }
-
-    /// @notice Set reference to the deployed LootToken contract address
-    /// @param _lootToken Address of LootToken contract
-    function setLootToken(address _lootToken) public onlyOwner {
-        lootToken = LootToken(_lootToken);
-    }
-
-    /// @notice Set reference to the deployed GuildBank contract address
-    /// @param _guildBank Address of GuildBank contract
-    function setGuildBank(address _guildBank) public onlyOwner {
-        guildBank = GuildBank(_guildBank);
+        votingShares = VotingShares(_votingSharesAddress);
+        lootToken = LootToken(_lootTokenAddress);
+        guildBank = GuildBank(_guildBankAddress);
     }
 
     /**************

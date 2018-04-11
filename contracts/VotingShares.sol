@@ -43,7 +43,7 @@ contract VotingShares is Ownable {
 
         balances[_burner] = balances[_burner].sub(_value);
         totalSupply_ = totalSupply_.sub(_value);
-        Burn(_burner, _value);
+        emit Burn(_burner, _value);
     }
 
     /**
@@ -64,8 +64,8 @@ contract VotingShares is Ownable {
     function mint(address _to, uint256 _amount) onlyOwner canMint public returns (bool) {
         totalSupply_ = totalSupply_.add(_amount);
         balances[_to] = balances[_to].add(_amount);
-        Mint(_to, _amount);
-        Transfer(address(0), _to, _amount);
+        emit Mint(_to, _amount);
+        emit Transfer(address(0), _to, _amount);
         return true;
     }
 
@@ -75,7 +75,7 @@ contract VotingShares is Ownable {
      */
     function finishMinting() onlyOwner canMint public returns (bool) {
         mintingFinished = true;
-        MintFinished();
+        emit MintFinished();
         return true;
     }
 }

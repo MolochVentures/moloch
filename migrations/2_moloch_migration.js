@@ -4,6 +4,7 @@ const Moloch = artifacts.require('./Moloch.sol')
 const VotingShares = artifacts.require('./VotingShares.sol')
 const LootToken = artifacts.require('./LootToken.sol')
 const GuildBank = artifacts.require('./GuildBank.sol')
+const TownHall = artifacts.require('./TownHall.sol')
 
 module.exports = (deployer, network, accounts) => {
   deployer.deploy(VotingShares)
@@ -11,9 +12,12 @@ module.exports = (deployer, network, accounts) => {
     return deployer.deploy(LootToken)
   })
   .then(() => {
+    return deployer.deploy(TownHall)
+  })  
+  .then(() => {
     return deployer.deploy(GuildBank, LootToken.address)
   })
   .then(() => {
-    return deployer.deploy(Moloch)
+    return deployer.deploy(Moloch, TownHall.address, VotingShares.address, LootToken.address, GuildBank.address)
   })
 }
