@@ -1,7 +1,7 @@
-pragma solidity ^0.4.18;
+pragma solidity 0.4.21;
 
-import "zeppelin-solidity/contracts/math/SafeMath.sol";
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "./SafeMath.sol";
+import "./Ownable.sol";
 
 /**
  * Structured like an ERC20, but can only be burned/minted and not transferred.

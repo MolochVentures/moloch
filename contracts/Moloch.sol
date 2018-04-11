@@ -1,8 +1,8 @@
-pragma solidity ^0.4.0;
+pragma solidity 0.4.21;
 
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
-import "zeppelin-solidity/contracts/math/SafeMath.sol";
-import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./Ownable.sol";
+import "./SafeMath.sol";
+import "./ERC20.sol";
 import "./VotingShares.sol";
 import "./Voting.sol";
 import "./GuildBank.sol";
@@ -98,7 +98,7 @@ contract Moloch is Ownable {
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         members[msg.sender] = false;
-        MemberExit(msg.sender);
+        emit MemberExit(msg.sender);
     }
 
     /*****************
@@ -108,6 +108,6 @@ contract Moloch is Ownable {
     /// @param _newMemberAddress Address of member to add
     function addMember(address _newMemberAddress) public onlyTownHall {
         members[_newMemberAddress] = true;
-        MemberAccepted(_newMemberAddress);
+        emit MemberAccepted(_newMemberAddress);
     }
 }

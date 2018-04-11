@@ -1,15 +1,15 @@
-pragma solidity ^0.4.0;
+pragma solidity 0.4.21;
 
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
-import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./Ownable.sol";
+import "./ERC20.sol";
 import "./LootToken.sol";
 
 contract GuildBank is Ownable {
     ERC20[] public tokensHeld; // array of token contracts that are held by bank. any better way to do this?
     LootToken public lootToken;
 
-    function GuildBank(_lootTokenAddress) public {
-        lootToken = LootToken(_lootTokenAddress);
+    function GuildBank(address _lootokenAddress) public {
+        lootToken = LootToken(_lootokenAddress);
     }
 
     function offerTokens(ERC20 _tokenContract, uint256 _amount) public {
@@ -17,9 +17,9 @@ contract GuildBank is Ownable {
         tokensHeld.push(_tokenContract);
     }
 
-    function convertLootTokensToLoot() public {
+    // function convertLootTokensToLoot() public {
 
-    }
+    // }
 
     function() public payable {}
 }

@@ -1,12 +1,12 @@
-pragma solidity ^0.4.0;
+pragma solidity 0.4.21;
 
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "./Ownable.sol";
 import "./Voting.sol";
 import "./VotingShares.sol";
 import "./Moloch.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
-import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./ERC20.sol";
 
 contract TownHall is Ownable {
     /*****
@@ -184,7 +184,7 @@ contract TownHall is Ownable {
         // push to end of proposal queue
         proposals.push(membershipProposal);
 
-        ProposalCreated(msg.sender, _votingSharesRequested, ProposalTypes.Membership, proposals.length);
+        emit ProposalCreated(msg.sender, _votingSharesRequested, ProposalTypes.Membership, proposals.length);
     }
 
     // PROJECT PROPOSAL
@@ -213,7 +213,7 @@ contract TownHall is Ownable {
         // push to end of proposal queue
         proposals.push(projectProposal);
 
-        ProposalCreated(msg.sender, _votingSharesRequested, ProposalTypes.Project, proposals.length);
+        emit ProposalCreated(msg.sender, _votingSharesRequested, ProposalTypes.Project, proposals.length);
     }
 
     /***************
@@ -238,7 +238,7 @@ contract TownHall is Ownable {
         // change phase
         currentProposal.phase = ProposalPhase.Voting;
         
-        ProposalVotingStarted(currentProposalIndex);
+        emit ProposalVotingStarted(currentProposalIndex);
     }
 
     // VOTE
@@ -264,7 +264,7 @@ contract TownHall is Ownable {
         currentProposal.phase = ProposalPhase.GracePeriod;
         currentProposal.gracePeriodStartTime = now;
 
-        ProposalGracePeriodStarted(currentProposalIndex);
+        emit ProposalGracePeriodStarted(currentProposalIndex);
     }
 
     /*****
@@ -294,7 +294,7 @@ contract TownHall is Ownable {
             address(0).transfer(currentProposal.prospectiveProject.deposit);
         }
 
-        ProposalCompleted(currentProposalIndex, winningBallotItem);
+        emit ProposalCompleted(currentProposalIndex, winningBallotItem);
 
         // close out and move on to next proposal
         currentProposal.phase = ProposalPhase.Done;
