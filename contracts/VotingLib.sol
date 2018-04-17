@@ -38,6 +38,7 @@ library VotingLib {
         self.votingEndDate = block.timestamp + votingPeriodLength;
         uint256 totalVotingShares = votingShares.totalSupply();
         self.minVotesRequired = (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR);
+        self.votingShares = votingShares;
     }
 
     function vote(Ballot storage _ballot, uint _lineItem) public {
@@ -72,7 +73,7 @@ library VotingLib {
         return !voteEnded(_ballot);
     }
 
-    function getLeadingProposal(Ballot storage _ballot) public view returns (uint8) {
+    function getLeadingProposal(Ballot storage _ballot) public view returns (uint) {
         uint leadingProposal = 0;
         uint leadingCount = 0;
         for (uint8 i = 0; i < _ballot.lineItems.length; i++) {
@@ -81,10 +82,10 @@ library VotingLib {
                 leadingProposal = i;
             }
         }
-        return i;
+        return leadingProposal;
     }
 
-    function getWinningProposal(Ballot storage _ballot) public view returns (uint8) {
+    function getWinningProposal(Ballot storage _ballot) public view returns (uint) {
         require(block.timestamp > _ballot.votingEndDate);
         if (haveEnoughVoted(_ballot)) {
             return getLeadingProposal(_ballot);

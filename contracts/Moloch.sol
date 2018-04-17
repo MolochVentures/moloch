@@ -166,6 +166,7 @@ contract Moloch is Ownable {
         view
         returns (
             uint,
+            uint,
             uint
         )
     {
