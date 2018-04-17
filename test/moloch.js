@@ -9,57 +9,40 @@ const SimpleToken = artifacts.require('./SimpleToken')
 const Voting = artifacts.require('./Voting')
 
 contract('Moloch', accounts => {
-  before('create moloch with founders', async () => {
-    const TRIBUTE = web3.toWei(1, 'ether')
-    const VOTING_SHARES = 100
-    const FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR = accounts[9]
-    const FOUNDING_MEMBER_ETH_TRIBUTE_ADDR = accounts[8]
-    const MOLOCH_ADMIN = accounts[0]
+  const FOUNDING_MEMBER_1 = accounts[9]
+  const FOUNDING_MEMBER_2 = accounts[8]
+  const MOLOCH_ADMIN = accounts[0]
 
-    this.simpleToken = await SimpleToken.new({
-      from: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR
-    })
-
+  before('should add founding members moloch with founders', async () => {
     this.FOUNDING_MEMBERS = [
       {
-        memberAddress: FOUNDING_MEMBER_ETH_TRIBUTE_ADDR,
-        votingShares: VOTING_SHARES,
-        ethTributeAmount: TRIBUTE,
-        tokenTributeAddr: [],
-        tokenTributeAmount: []
+        memberAddress: FOUNDING_MEMBER_1,
+        votingShares: 100
       },
       {
-        memberAddress: FOUNDING_MEMBER_TOKEN_TRIBUTE_ADDR,
-        votingShares: VOTING_SHARES,
-        ethTributeAmount: 0,
-        tokenTributeAddr: [this.simpleToken.address],
-        tokenTributeAmount: [TRIBUTE]
+        memberAddress: FOUNDING_MEMBER_2,
+        votingShares: 200
       }
     ]
 
-    const moloch = await Moloch.deployed()
+    this.moloch = await Moloch.deployed()
     const votingShares = await VotingShares.deployed()
     const lootToken = await LootToken.deployed()
     const guildBank = await GuildBank.deployed()
 
     // transfer ownership of dependent contracts to moloch contract
     await Promise.all([
-      votingShares.transferOwnership(moloch.address, { from: MOLOCH_ADMIN }),
-      lootToken.transferOwnership(moloch.address, { from: MOLOCH_ADMIN }),
-      guildBank.transferOwnership(moloch.address, { from: MOLOCH_ADMIN })
-    ])
-
-    // set moloch addresses
-    await Promise.all([
-      moloch.setVotingShares(votingShares.address, { from: MOLOCH_ADMIN }),
-      moloch.setLootToken(lootToken.address, { from: MOLOCH_ADMIN }),
-      moloch.setGuildBank(guildBank.address, { from: MOLOCH_ADMIN })
+      votingShares.transferOwnership(this.moloch.address, {
+        from: MOLOCH_ADMIN
+      }),
+      lootToken.transferOwnership(this.moloch.address, { from: MOLOCH_ADMIN }),
+      guildBank.transferOwnership(this.moloch.address, { from: MOLOCH_ADMIN })
     ])
 
     let [votingSharesAddr, lootTokenAddr, guildBankAddr] = await Promise.all([
-      moloch.votingShares.call(),
-      moloch.lootToken.call(),
-      moloch.guildBank.call()
+      this.moloch.votingShares.call(),
+      this.moloch.lootToken.call(),
+      this.moloch.guildBank.call()
     ])
 
     assert.equal(
@@ -78,132 +61,118 @@ contract('Moloch', accounts => {
       'GuildBank contract address incorrect'
     )
 
-    guildBankAddr = await moloch.guildBank.call()
     await Promise.all(
       this.FOUNDING_MEMBERS.map(async (member, index) => {
-        if (member.ethTributeAmount > 0) {
-          await moloch.offerEthTribute({
-            from: member.memberAddress,
-            value: member.ethTributeAmount
-          })
-        }
+        let mem = await this.moloch.getMember.call(member.memberAddress)
+        assert.equal(mem, false, 'Member was approved before adding to guild')
 
-        if (member.tokenTributeAddr.length > 0) {
-          await Promise.all(
-            member.tokenTributeAddr.map(async (addr, index) => {
-              const token = await SimpleToken.at(addr)
-              await token.approve(
-                moloch.address,
-                member.tokenTributeAmount[index],
-                { from: member.memberAddress }
-              )
-              const allowed = await token.allowance.call(
-                member.memberAddress,
-                moloch.address
-              )
-              assert.equal(allowed, member.tokenTributeAmount[index])
-            })
-          )
-
-          await moloch.offerTokenTribute(
-            member.tokenTributeAddr,
-            member.tokenTributeAmount,
-            {
-              from: member.memberAddress
-            }
-          )
-        }
-
-        const result = await moloch.addFoundingMember(
+        await this.moloch.addFoundingMember(
           member.memberAddress,
           member.votingShares,
           { from: MOLOCH_ADMIN }
         )
 
-        const mem = await moloch.getMember(member.memberAddress)
-        assert.equal(mem[0], true)
-
-        const approved = result.logs.find(log => {
-          return log.event === 'MemberAccepted'
-        })
-
-        assert.equal(
-          approved.args.memberAddress,
-          this.FOUNDING_MEMBERS[index].memberAddress,
-          'Member approval incorrectly logged'
-        )
-        // check guild bank balance
-        if (member.ethTributeAmount > 0) {
-          const balance = web3.eth.getBalance(guildBankAddr)
-          assert.equal(
-            balance.toNumber(),
-            TRIBUTE,
-            'eth tribute not in guild bank'
-          )
-        }
-
-        if (member.tokenTributeAddr.length > 0) {
-          await Promise.all(
-            member.tokenTributeAddr.map(async (addr, index) => {
-              const token = await SimpleToken.at(addr)
-              const balance = await token.balanceOf(guildBankAddr)
-              assert.equal(balance.toNumber(), TRIBUTE)
-            })
-          )
-        }
+        mem = await this.moloch.getMember.call(member.memberAddress)
+        assert.equal(mem, true, 'Member was not approved after adding to guild')
       })
     )
   })
 
   it('should be owned', async () => {
-    const moloch = await Moloch.deployed()
-    const owner = await moloch.owner.call()
-    assert.equal(owner, accounts[0])
+    const owner = await this.moloch.owner.call()
+    assert.equal(owner, MOLOCH_ADMIN, 'Owner is incorrect')
   })
 
   it('should mint voting shares and loot tokens', async () => {
-    const moloch = await Moloch.deployed()
-    const votingSharesAddr = await moloch.votingShares.call()
+    const votingSharesAddr = await this.moloch.votingShares.call()
     const votingShares = await VotingShares.at(votingSharesAddr)
-    const lootTokenAddr = await moloch.lootToken.call()
+    const lootTokenAddr = await this.moloch.lootToken.call()
     const lootToken = await LootToken.at(lootTokenAddr)
 
     await Promise.all(
       this.FOUNDING_MEMBERS.map(async (member, index) => {
         const balance = await votingShares.balanceOf.call(member.memberAddress)
-        assert.equal(balance.toNumber(), member.votingShares)
+        assert.equal(
+          balance.toNumber(),
+          member.votingShares,
+          'Voting shares incorrectly minted'
+        )
       })
     )
 
-    const lootTokens = await lootToken.balanceOf(moloch.address)
+    const lootTokens = await lootToken.balanceOf(this.moloch.address)
     const totalLootTokens = this.FOUNDING_MEMBERS.reduce(
       (total, member) => total + member.votingShares,
       0
     )
-    assert.equal(lootTokens.toNumber(), totalLootTokens)
+    assert.equal(
+      lootTokens.toNumber(),
+      totalLootTokens,
+      'Loot tokens incorrectly minted'
+    )
   })
+
+  const PROPOSAL_TYPE_MEMBERSHIP = 0
+  const PROPOSAL_PHASE_PROPOSED = 0
+  const PROPOSAL_PHASE_VOTING = 1
 
   it('should submit application with eth', async () => {
-    const ETH_TRIBUTE = web3.toWei(10, 'ether')
-    const VOTING_SHARES = 100
+    const ETH_TRIBUTE = web3.toWei(1, 'ether')
+    const VOTING_SHARES = 1000
     const APPLICANT_ADDRESS = accounts[2]
 
-    const moloch = await Moloch.deployed()
-    await moloch.offerEthTribute({
-      from: APPLICANT_ADDRESS,
-      value: ETH_TRIBUTE
-    })
+    // check current proposal index
+    const index = await this.moloch.getCurrentProposalIndex.call()
+    assert.equal(index, 0, 'Current proposal index did not start at 0')
 
-    await moloch.submitApplication(VOTING_SHARES, {
-      from: APPLICANT_ADDRESS
-    })
+    await this.moloch.createMemberProposal(
+      APPLICANT_ADDRESS,
+      [],
+      [],
+      VOTING_SHARES,
+      {
+        from: FOUNDING_MEMBER_1,
+        value: ETH_TRIBUTE
+      }
+    )
 
-    const member = await moloch.getMember(APPLICANT_ADDRESS)
-    assert.equal(member[0], false)
-    assert.equal(member[1].toNumber(), VOTING_SHARES)
-    assert.equal(member[2].toNumber(), ETH_TRIBUTE)
+    const proposal = await this.moloch.getCurrentProposalCommonDetails.call()
+    assert.equal(proposal[0], FOUNDING_MEMBER_1, 'Proposer address incorrect')
+    assert.equal(
+      proposal[1],
+      PROPOSAL_TYPE_MEMBERSHIP,
+      'Proposal type is not "membership"'
+    )
+    assert.equal(proposal[2], VOTING_SHARES, 'Proposal voting shares incorrect')
+    assert.equal(
+      proposal[3],
+      PROPOSAL_PHASE_PROPOSED,
+      'Proposal phase is not "proposed"'
+    )
   })
 
+  it('should start voting process', async () => {
+    let votingSharesAddr = await this.moloch.votingShares.call()
+    console.log('votingSharesAddr: ', votingSharesAddr)
+
+    await this.moloch.startProposalVote({ from: FOUNDING_MEMBER_2 })
+
+    const proposal = await this.moloch.getCurrentProposalCommonDetails.call()
+    assert.equal(
+      proposal[3],
+      PROPOSAL_PHASE_VOTING,
+      'Proposal phase is not "voting"'
+    )
+
+    votingSharesAddr = await this.moloch.votingShares.call()
+    console.log('votingSharesAddr: ', votingSharesAddr)
+    // const votingShares = await VotingShares.at(votingSharesAddr)
+
+    const ballot = await this.moloch.getCurrentProposalBallot.call()
+    console.log('ballot: ', ballot)
+  })
+
+  /*
   it('should submit application with tokens', async () => {
     const TOKEN_TRIBUTE = web3.toWei(1, 'ether')
     const VOTING_SHARES = 100
@@ -344,5 +313,5 @@ contract('Moloch', accounts => {
       VOTING_SHARES,
       'Should remove loot tokens from the overall pot owned by Moloch contract.'
     )
-  })
+  }) */
 })
