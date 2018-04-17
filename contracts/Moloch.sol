@@ -77,6 +77,7 @@ contract Moloch is Ownable {
     )
         public
         payable
+        onlyApprovedMember // TODO: ONLY MEMBERS?
     {
         proposalQueue.createMemberProposal(
             _propospectiveMemberAddress,
@@ -136,5 +137,38 @@ contract Moloch is Ownable {
 
         members.approved[msg.sender] = false;
         emit MemberExit(msg.sender);
+    }
+
+    function getMember(address memberAddress) public view returns (bool) {
+        return members.getMember(memberAddress);
+    }
+
+    function getCurrentProposalIndex() public view returns (uint) {
+        return proposalQueue.getCurrentProposalIndex();
+    }
+
+    function getCurrentProposalCommonDetails() 
+        public 
+        view 
+        returns (
+            address,
+            TownHall.ProposalTypes,
+            uint256,
+            TownHall.ProposalPhase,
+            uint
+        ) 
+    {
+        return proposalQueue.getCurrentProposalCommonDetails();
+    }
+
+    function getCurrentProposalBallot()
+        public
+        view
+        returns (
+            uint,
+            uint
+        )
+    {
+        return proposalQueue.getCurrentProposalBallot();
     }
 }
