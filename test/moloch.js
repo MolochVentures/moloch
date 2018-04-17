@@ -199,7 +199,7 @@ contract('Moloch', accounts => {
     )
   })
 
-  const VOTING_PERIOD_DURATION = 5 * 1000
+  const VOTING_PERIOD_DURATION = 1 * 1000
   const PROPOSAL_PHASE_GRACE_PERIOD = 2
   it('should allow start grace period once voting is completed', async () => {
     await new Promise(resolve => {
@@ -217,6 +217,44 @@ contract('Moloch', accounts => {
       proposal[3],
       PROPOSAL_PHASE_GRACE_PERIOD,
       'Proposal phase is not "GracePeriod"'
+    )
+  })
+
+  const GRACE_PERIOD_DURATION = 1 * 1000
+  it('should complete vote and accept member', async () => {
+    const APPLICANT_ADDRESS = accounts[2]
+    const VOTING_SHARES = 1000
+
+    await new Promise(resolve => {
+      setTimeout(() => {
+        resolve()
+      }, GRACE_PERIOD_DURATION + 1000)
+    })
+
+    let member = await this.moloch.getMember(APPLICANT_ADDRESS)
+    assert.equal(member, false, 'member was accepted before being voted in')
+
+    const lootTokenAddr = await this.moloch.lootToken.call()
+    const lootToken = await LootToken.at(lootTokenAddr)
+    const startingLootToken = await lootToken.balanceOf(this.moloch.address)
+
+    await this.moloch.finishProposal({
+      from: FOUNDING_MEMBER_2
+    })
+
+    member = await this.moloch.getMember(APPLICANT_ADDRESS)
+    assert.equal(member, true, 'member was accepted')
+
+    const votingSharesAddr = await this.moloch.votingShares.call()
+    const votingShares = await VotingShares.at(votingSharesAddr)
+    const balance = await votingShares.balanceOf(APPLICANT_ADDRESS)
+    assert.equal(balance, VOTING_SHARES, 'voting shares were not granted')
+
+    const endingLootTokens = await lootToken.balanceOf(this.moloch.address)
+    assert.equal(
+      endingLootTokens.minus(startingLootToken),
+      VOTING_SHARES,
+      'incorrect number of loot tokens minted'
     )
   })
 
