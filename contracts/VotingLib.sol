@@ -31,7 +31,10 @@ library VotingLib {
     ) 
         public
     {
-        self.lineItems.length = numProposals;
+        // self.lineItems.length = numProposals; TODO: THIS DOESN'T WORK
+        for (uint8 i = 0; i < numProposals; i++) {
+            self.lineItems.push(0);
+        }
         self.votingEndDate = block.timestamp + votingPeriodLength;
         uint256 totalVotingShares = votingShares.totalSupply();
         self.minVotesRequired = (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR);
