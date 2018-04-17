@@ -1,45 +1,52 @@
-pragma solidity 0.4.21;
+pragma solidity ^0.4.21;
 
-import "./Ownable.sol";
-import "./SafeMath.sol";
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
 import "./VotingShares.sol";
 
 library VotingLib {
     using SafeMath for uint256;
+
+    uint8 constant QUORUM_NUMERATOR = 1;
+    uint8 constant QUORUM_DENOMINATOR = 2;
 
     struct Voter {
         bool voted;
         uint vote;
     }
 
-    struct Proposal {
-        address proposalAddress;
-        uint voteCount;
-    }
-
     struct Ballot { 
         uint votingEndDate;
         uint minVotesRequired;
         mapping (address => Voter) voter;
-        mapping (uint => Proposal) proposal;
-        address votingSharesAddress;
-        uint proposalCount;
+        uint[] lineItems;
+        VotingShares votingShares;
     }
 
-    function submitProposal(Ballot storage _ballot, address _proposalAddress) public {
-        _ballot.proposalCount += 1;
-        _ballot.proposal[_ballot.proposalCount].proposalAddress = _proposalAddress;
-        _ballot.proposal[_ballot.proposalCount].voteCount = 0;
+    function initialize(
+        Ballot storage self,
+        uint8 numProposals,
+        uint votingPeriodLength,
+        VotingShares votingShares
+    ) 
+        public
+    {
+        self.lineItems.length = numProposals;
+        self.votingEndDate = block.timestamp + votingPeriodLength;
+        uint256 totalVotingShares = votingShares.totalSupply();
+        self.minVotesRequired = (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR);
     }
 
-    function vote(Ballot storage _ballot, uint _proposal) public {
+    function vote(Ballot storage _ballot, uint _lineItem) public {
         require(block.timestamp < _ballot.votingEndDate);
         require(_ballot.voter[msg.sender].voted == false);
-        require(_ballot.proposal[_proposal].proposalAddress != 0);
+        require(_lineItem < _ballot.lineItems.length);
+
         _ballot.voter[msg.sender].voted = true;
-        _ballot.voter[msg.sender].vote = _proposal;
-        uint numOfVotingShares = VotingShares(_ballot.votingSharesAddress).balanceOf(msg.sender);
-        _ballot.proposal[_proposal].voteCount += numOfVotingShares;
+        _ballot.voter[msg.sender].vote = _lineItem;
+        uint numOfVotingShares = _ballot.votingShares.balanceOf(msg.sender);
+
+        _ballot.lineItems[_lineItem] += numOfVotingShares;
     }
 
     function getVoter(Ballot storage _ballot) public view {
@@ -48,31 +55,38 @@ library VotingLib {
 
     function haveEnoughVoted(Ballot storage _ballot) public view returns (bool) {
         uint totalVotes = 0;
-        for (uint i=0; i < _ballot.proposalCount; i++) {
-            totalVotes += _ballot.proposal[i].voteCount;
+        for (uint i = 0; i < _ballot.lineItems.length; i++) {
+            totalVotes += _ballot.lineItems[i];
         }
         return totalVotes > _ballot.minVotesRequired;
     }
 
-    function canVote(Ballot storage _ballot) public view returns (bool) {
-        return _ballot.votingEndDate > block.timestamp;
+    function voteEnded(Ballot storage _ballot) public view returns (bool) {
+        return block.timestamp > _ballot.votingEndDate;
     }
 
-    function getLeadingProposal(Ballot storage _ballot) public view returns (uint) {
+    function canVote(Ballot storage _ballot) public view returns (bool) {
+        return !voteEnded(_ballot);
+    }
+
+    function getLeadingProposal(Ballot storage _ballot) public view returns (uint8) {
         uint leadingProposal = 0;
         uint leadingCount = 0;
-        for (uint i=0; i < _ballot.proposalCount; i++) {
-            if (_ballot.proposal[i].voteCount > leadingCount) {
-                leadingCount = _ballot.proposal[i].voteCount;
+        for (uint8 i = 0; i < _ballot.lineItems.length; i++) {
+            if (_ballot.lineItems[i] > leadingCount) {
+                leadingCount = _ballot.lineItems[i];
                 leadingProposal = i;
             }
         }
         return i;
     }
 
-    function getWinningProposal(Ballot storage _ballot) public view returns (uint) {
+    function getWinningProposal(Ballot storage _ballot) public view returns (uint8) {
         require(block.timestamp > _ballot.votingEndDate);
-        require(haveEnoughVoted(_ballot));
-        return getLeadingProposal(_ballot);
+        if (haveEnoughVoted(_ballot)) {
+            return getLeadingProposal(_ballot);
+        } else {
+            return 0; // if no quorom, default to 0
+        }
     }
 }
