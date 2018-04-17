@@ -37,8 +37,8 @@ library TownHall {
     /********
     CONSTANTS
     ********/
-    uint constant PROPOSAL_VOTE_TIME_SECONDS = 5;
-    uint constant GRACE_PERIOD_SECONDS = 5;
+    uint constant PROPOSAL_VOTE_TIME_SECONDS = 1;
+    uint constant GRACE_PERIOD_SECONDS = 1;
     uint constant MIN_PROPOSAL_CREATION_DEPOSIT = 10 ether;
     uint constant LOSING_PROPOSAL_INDEX = 0;
     uint constant WINNING_PROPOSAL_INDEX = 1;
