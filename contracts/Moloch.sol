@@ -1,10 +1,9 @@
-pragma solidity 0.4.21;
+pragma solidity ^0.4.21;
 
-import "./Ownable.sol";
-import "./SafeMath.sol";
-import "./ERC20.sol";
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/math/SafeMath.sol";
+import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 import "./VotingShares.sol";
-import "./Voting.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
 import "./TownHall.sol";
@@ -16,6 +15,8 @@ import "./TownHall.sol";
  */
 contract Moloch is Ownable {
     using SafeMath for uint256;
+    using TownHall for TownHall.ProposalQueue;
+    using TownHall for TownHall.Members;
 
     /*****
     EVENTS
@@ -39,18 +40,14 @@ contract Moloch is Ownable {
     /******************
     MEMBERSHIP TRACKING
     ******************/
-    mapping (address => bool) public members; // members mapped to their address
+    TownHall.Members members;
+    TownHall.ProposalQueue proposalQueue;
 
     /********
     MODIFIERS
     ********/
     modifier onlyApprovedMember {
-        require(members[msg.sender] == true);
-        _;
-    }
-
-    modifier onlyTownHall {
-        require(address(msg.sender) == address(townHall));
+        require(members.approved[msg.sender] == true);
         _;
     }
 
@@ -58,38 +55,67 @@ contract Moloch is Ownable {
     PUBLIC FUNCTIONS
     ***************/
 
-    /*******************************
-    SET CONTRACT REFERENCE FUNCTIONS
-    *******************************/
-    /// @notice Set reference to the deployed TownHall contract address
-    /// @param _townHallAddress Address of TownHall contract
-    // function setTownHall(address _townHallAddress) public onlyOwner {
-    //     townHall = TownHall(_townHallAddress);
-    // }
-
-    // /// @notice Set reference to the deployed VotingShares contract address
-    // /// @param _votingShares Address of VotingShares contract
-    // function setVotingShares(address _votingShares) public onlyOwner {
-    //     votingShares = VotingShares(_votingShares);
-    // }
-
-    // /// @notice Set reference to the deployed LootToken contract address
-    // /// @param _lootToken Address of LootToken contract
-    // function setLootToken(address _lootToken) public onlyOwner {
-    //     lootToken = LootToken(_lootToken);
-    // }
-
-    // /// @notice Set reference to the deployed GuildBank contract address
-    // /// @param _guildBank Address of GuildBank contract
-    // function setGuildBank(address _guildBank) public onlyOwner {
-    //     guildBank = GuildBank(_guildBank);
-    // }
-
     function Moloch(address _townHallAddress, address _votingSharesAddress, address _lootTokenAddress, address _guildBankAddress) public {
         townHall = TownHall(_townHallAddress);
         votingShares = VotingShares(_votingSharesAddress);
         lootToken = LootToken(_lootTokenAddress);
         guildBank = GuildBank(_guildBankAddress);
+    }
+
+    /*****************
+    PROPOSAL FUNCTIONS
+    *****************/
+    function createMemberProposal(
+        address _propospectiveMemberAddress,
+        address[] _tokenTributeAddresses, 
+        uint256[] _tokenTributeAmounts,
+        uint256 _votingSharesRequested
+    )
+        public
+        payable
+    {
+        proposalQueue.createMemberProposal(
+            _propospectiveMemberAddress,
+            msg.value,
+            _tokenTributeAddresses, 
+            _tokenTributeAmounts,
+            _votingSharesRequested
+        );
+    }
+
+    function createProjectProposal(
+        bytes32 _ipfsHash,
+        uint256 _votingSharesRequested
+    )
+        public
+        payable
+        onlyApprovedMember
+    {
+        proposalQueue.createProjectProposal(
+            msg.value,
+            _ipfsHash,
+            _votingSharesRequested
+        );
+    }
+
+    function startProposalVote() public onlyApprovedMember {
+        proposalQueue.startProposalVote(votingShares);
+    }
+
+    function voteOnCurrentProposal(uint8 _toBallotItem) public onlyApprovedMember {
+        proposalQueue.voteOnCurrentProposal(_toBallotItem);
+    }
+
+    function transitionProposalToGracePeriod() public onlyApprovedMember {
+        proposalQueue.transitionProposalToGracePeriod();
+    }
+
+    function finishProposal() public onlyApprovedMember {
+        proposalQueue.finishProposal(members, guildBank, votingShares, lootToken);
+    }
+
+    function addFoundingMember(address _memberAddress, uint256 _votingSharesToGrant) public onlyOwner {
+        members.addFoundingMember(votingShares, lootToken, _memberAddress, _votingSharesToGrant);
     }
 
     /**************
@@ -104,17 +130,7 @@ contract Moloch is Ownable {
         require(lootToken.transfer(msg.sender, numberOfVotingShares));
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
-        members[msg.sender] = false;
+        members.approved[msg.sender] = false;
         emit MemberExit(msg.sender);
-    }
-
-    /*****************
-    INTERNAL FUNCTIONS
-    *****************/
-    /// @notice Add member to guild, only TownHall contract can do this
-    /// @param _newMemberAddress Address of member to add
-    function addMember(address _newMemberAddress) public onlyTownHall {
-        members[_newMemberAddress] = true;
-        emit MemberAccepted(_newMemberAddress);
     }
 }
