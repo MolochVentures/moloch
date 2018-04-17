@@ -31,7 +31,7 @@ library TownHall {
 
     event ProposalCompleted(
         uint indexed indexInProposalQueue,
-        uint8 winningBallotItem
+        uint winningBallotItem
     );
 
     /********
@@ -234,8 +234,7 @@ library TownHall {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
         require(currentProposal.phase == ProposalPhase.Voting);
 
-        VotingLib.Ballot storage ballot = currentProposal.ballot;
-        ballot.vote(_toBallotItem);
+        currentProposal.ballot.vote(_toBallotItem);
     }
 
     /***********
@@ -280,7 +279,7 @@ library TownHall {
         require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS);
 
         // get winner from ballot
-        uint8 winningBallotItem = currentProposal.ballot.getWinningProposal();
+        uint winningBallotItem = currentProposal.ballot.getWinningProposal();
 
         if (winningBallotItem == WINNING_PROPOSAL_INDEX) {
             if (currentProposal.proposalType == ProposalTypes.Membership) {
@@ -392,12 +391,16 @@ library TownHall {
         view 
         returns (
             uint,
+            uint,
             uint
         ) 
     {
         Proposal storage proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        VotingLib.Ballot storage ballot = proposal.ballot;
-        return (ballot.votingEndDate, ballot.minVotesRequired);
+        return (
+            proposal.ballot.votingEndDate,
+            proposal.ballot.minVotesRequired,
+            proposal.ballot.getLeadingProposal()
+        );
     }
 
     function getMember(Members storage members, address memberAddress) public view returns (bool) {
