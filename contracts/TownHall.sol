@@ -135,6 +135,7 @@ library TownHall {
         membershipProposal.prospectiveMember.tokenTributeAmounts = _tokenTributeAmounts;
 
         // attributes
+        membershipProposal.proposer = msg.sender;
         membershipProposal.proposalType = ProposalTypes.Membership;
         membershipProposal.phase = ProposalPhase.Proposed;
 
@@ -182,6 +183,7 @@ library TownHall {
         projectProposal.prospectiveProject.deposit = _ethDepositAmount;
 
         // attributes
+        projectProposal.proposer = msg.sender;
         projectProposal.proposalType = ProposalTypes.Project;
         projectProposal.phase = ProposalPhase.Proposed;
 
@@ -345,6 +347,10 @@ library TownHall {
         );
     }
 
+    function getCurrentProposalIndex(ProposalQueue storage proposalQueue) public view returns (uint) {
+        return proposalQueue.currentProposalIndex;
+    }
+
     // GET PROJECT PROPOSAL SPECIFIC ATTRIBUTES
     function getCurrentProposalProjectDetails(
         ProposalQueue storage proposalQueue
@@ -377,6 +383,25 @@ library TownHall {
             proposal.prospectiveMember.tokenTributeAddresses,
             proposal.prospectiveMember.tokenTributeAmounts
         );
+    }
+
+    function getCurrentProposalBallot(
+        ProposalQueue storage proposalQueue
+    )
+        public 
+        view 
+        returns (
+            uint,
+            uint
+        ) 
+    {
+        Proposal storage proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        VotingLib.Ballot storage ballot = proposal.ballot;
+        return (ballot.votingEndDate, ballot.minVotesRequired);
+    }
+
+    function getMember(Members storage members, address memberAddress) public view returns (bool) {
+        return members.approved[memberAddress];
     }
 
     /*****************
@@ -418,7 +443,7 @@ library TownHall {
         votingShares.mint(_to, _numVotingShares);
 
         // mint loot tokens 1:1 and keep them in moloch contract for exit
-        lootToken.mint(address(msg.sender), _numVotingShares);
+        lootToken.mint(address(this), _numVotingShares);
     } 
 
     // ACCEPT MEMBER
