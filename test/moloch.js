@@ -152,9 +152,6 @@ contract('Moloch', accounts => {
   })
 
   it('should start voting process', async () => {
-    let votingSharesAddr = await this.moloch.votingShares.call()
-    console.log('votingSharesAddr: ', votingSharesAddr)
-
     await this.moloch.startProposalVote({ from: FOUNDING_MEMBER_2 })
 
     const proposal = await this.moloch.getCurrentProposalCommonDetails.call()
@@ -164,12 +161,12 @@ contract('Moloch', accounts => {
       'Proposal phase is not "voting"'
     )
 
-    votingSharesAddr = await this.moloch.votingShares.call()
-    console.log('votingSharesAddr: ', votingSharesAddr)
-    // const votingShares = await VotingShares.at(votingSharesAddr)
+    const votingSharesAddr = await this.moloch.votingShares.call()
+    const votingShares = await VotingShares.at(votingSharesAddr)
+    const totalSupply = await votingShares.totalSupply.call()
 
     const ballot = await this.moloch.getCurrentProposalBallot.call()
-    console.log('ballot: ', ballot)
+    assert.equal(ballot[1].toNumber(), totalSupply.div(2).toNumber())
   })
 
   /*

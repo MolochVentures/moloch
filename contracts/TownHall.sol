@@ -214,9 +214,9 @@ library TownHall {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // create ballot
-        VotingLib.Ballot storage ballot;
-        ballot.initialize(2, PROPOSAL_VOTE_TIME_SECONDS, votingShares);
+        VotingLib.Ballot memory ballot;
         currentProposal.ballot = ballot;
+        currentProposal.ballot.initialize(2, PROPOSAL_VOTE_TIME_SECONDS, votingShares);
 
         // change phase
         currentProposal.phase = ProposalPhase.Voting;
