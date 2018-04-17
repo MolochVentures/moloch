@@ -35,7 +35,6 @@ contract Moloch is Ownable {
     VotingShares public votingShares; // token contract
     GuildBank public guildBank; // store guild assets
     LootToken public lootToken; // token contract
-    TownHall public townHall; // token contract
 
     /******************
     MEMBERSHIP TRACKING
@@ -55,8 +54,13 @@ contract Moloch is Ownable {
     PUBLIC FUNCTIONS
     ***************/
 
-    function Moloch(address _townHallAddress, address _votingSharesAddress, address _lootTokenAddress, address _guildBankAddress) public {
-        townHall = TownHall(_townHallAddress);
+    function Moloch(
+        address _votingSharesAddress,
+        address _lootTokenAddress,
+        address _guildBankAddress
+    ) 
+        public 
+    {
         votingShares = VotingShares(_votingSharesAddress);
         lootToken = LootToken(_lootTokenAddress);
         guildBank = GuildBank(_guildBankAddress);
