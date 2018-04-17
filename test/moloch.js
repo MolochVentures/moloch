@@ -166,7 +166,37 @@ contract('Moloch', accounts => {
     const totalSupply = await votingShares.totalSupply.call()
 
     const ballot = await this.moloch.getCurrentProposalBallot.call()
-    assert.equal(ballot[1].toNumber(), totalSupply.div(2).toNumber())
+    assert.equal(
+      ballot[1].toNumber(),
+      totalSupply.div(2).toNumber(),
+      'Num votes required is not half of the total supply'
+    )
+  })
+
+  const VOTE_FOR = 1
+  const VOTE_AGAINST = 0
+  it('should accept votes from members', async () => {
+    await this.moloch.voteOnCurrentProposal(VOTE_AGAINST, {
+      from: FOUNDING_MEMBER_1
+    })
+
+    let ballot = await this.moloch.getCurrentProposalBallot.call()
+    assert.equal(
+      ballot[2].toNumber(),
+      VOTE_AGAINST,
+      'Votes not properly counted during voting period'
+    )
+
+    await this.moloch.voteOnCurrentProposal(VOTE_FOR, {
+      from: FOUNDING_MEMBER_2
+    })
+
+    ballot = await this.moloch.getCurrentProposalBallot.call()
+    assert.equal(
+      ballot[2].toNumber(),
+      VOTE_FOR,
+      'Votes not properly counted during voting period'
+    )
   })
 
   /*
