@@ -199,6 +199,27 @@ contract('Moloch', accounts => {
     )
   })
 
+  const VOTING_PERIOD_DURATION = 5 * 1000
+  const PROPOSAL_PHASE_GRACE_PERIOD = 2
+  it('should allow start grace period once voting is completed', async () => {
+    await new Promise(resolve => {
+      setTimeout(() => {
+        resolve()
+      }, VOTING_PERIOD_DURATION + 1000)
+    })
+
+    await this.moloch.transitionProposalToGracePeriod({
+      from: FOUNDING_MEMBER_2
+    })
+
+    const proposal = await this.moloch.getCurrentProposalCommonDetails.call()
+    assert.equal(
+      proposal[3],
+      PROPOSAL_PHASE_GRACE_PERIOD,
+      'Proposal phase is not "GracePeriod"'
+    )
+  })
+
   /*
   it('should submit application with tokens', async () => {
     const TOKEN_TRIBUTE = web3.toWei(1, 'ether')
