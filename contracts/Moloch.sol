@@ -136,6 +136,8 @@ contract Moloch is Ownable {
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         members.approved[msg.sender] = false;
+        guildBank.convertLootTokensToLoot(msg.sender);
+
         emit MemberExit(msg.sender);
     }
 

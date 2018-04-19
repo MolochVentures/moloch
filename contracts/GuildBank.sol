@@ -20,23 +20,23 @@ contract GuildBank is Ownable {
         tokensHeld.push(_tokenContract);
     }
 
-    function convertLootTokensToLoot() public {
-        uint256 myLootTokens = lootToken.balanceOf(msg.sender);
+    function convertLootTokensToLoot(address memberAddress) public {
+        uint256 myLootTokens = lootToken.balanceOf(memberAddress);
         uint256 totalLootTokens = lootToken.totalSupply();
 
         // cash out tokens
         for (uint8 i = 0; i < tokensHeld.length; i++) {
             uint256 guildBankTokens = tokensHeld[i].balanceOf(address(this));
             uint256 amtToTransfer = (guildBankTokens.mul(myLootTokens)).div(totalLootTokens);
-            require(tokensHeld[i].transfer(msg.sender, amtToTransfer));
+            require(tokensHeld[i].transfer(memberAddress, amtToTransfer));
         }
 
         // cash out ETH
         uint256 amtEthToTransfer = (address(this).balance.mul(myLootTokens)).div(totalLootTokens);
-        msg.sender.transfer(amtEthToTransfer);
+        memberAddress.transfer(amtEthToTransfer);
 
         // burn loot tokens
-        lootToken.proxyBurn(msg.sender, myLootTokens);
+        lootToken.proxyBurn(memberAddress, myLootTokens);
     }
 
     function() public payable {}
