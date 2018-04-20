@@ -5,19 +5,28 @@ const VotingShares = artifacts.require('./VotingShares.sol')
 const LootToken = artifacts.require('./LootToken.sol')
 const GuildBank = artifacts.require('./GuildBank.sol')
 const TownHall = artifacts.require('./TownHall.sol')
+const VotingLib = artifacts.require('./VotingLib.sol')
 
 module.exports = (deployer, network, accounts) => {
-  deployer.deploy(VotingShares)
-  .then(() => {
-    return deployer.deploy(LootToken)
-  })
-  .then(() => {
-    return deployer.deploy(TownHall)
-  })  
-  .then(() => {
-    return deployer.deploy(GuildBank, LootToken.address)
-  })
-  .then(() => {
-    return deployer.deploy(Moloch, TownHall.address, VotingShares.address, LootToken.address, GuildBank.address)
-  })
+  deployer
+    .deploy([VotingShares, VotingLib])
+    .then(() => {
+      deployer.link(VotingLib, TownHall)
+      return deployer.deploy(TownHall)
+    })
+    .then(() => {
+      return deployer.deploy(LootToken)
+    })
+    .then(() => {
+      return deployer.deploy(GuildBank, LootToken.address)
+    })
+    .then(() => {
+      deployer.link(TownHall, Moloch)
+      return deployer.deploy(
+        Moloch,
+        VotingShares.address,
+        LootToken.address,
+        GuildBank.address
+      )
+    })
 }
