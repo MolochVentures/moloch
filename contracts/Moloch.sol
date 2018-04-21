@@ -6,7 +6,7 @@ import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 import "./VotingShares.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
-import "./TownHall.sol";
+import "./TownHallLib.sol";
 
 /**
     @title Moloch DAO contract
@@ -15,8 +15,8 @@ import "./TownHall.sol";
  */
 contract Moloch is Ownable {
     using SafeMath for uint256;
-    using TownHall for TownHall.ProposalQueue;
-    using TownHall for TownHall.Members;
+    using TownHallLib for TownHallLib.ProposalQueue;
+    using TownHallLib for TownHallLib.Members;
 
     /*****
     EVENTS
@@ -39,8 +39,8 @@ contract Moloch is Ownable {
     /******************
     MEMBERSHIP TRACKING
     ******************/
-    TownHall.Members members;
-    TownHall.ProposalQueue proposalQueue;
+    TownHallLib.Members members;
+    TownHallLib.ProposalQueue proposalQueue;
 
     /********
     MODIFIERS
@@ -154,9 +154,9 @@ contract Moloch is Ownable {
         view 
         returns (
             address,
-            TownHall.ProposalTypes,
+            TownHallLib.ProposalTypes,
             uint256,
-            TownHall.ProposalPhase,
+            TownHallLib.ProposalPhase,
             uint
         ) 
     {

@@ -8,7 +8,7 @@ import "./GuildBank.sol";
 import "./LootToken.sol";
 import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 
-library TownHall {
+library TownHallLib {
     using VotingLib for VotingLib.Ballot;
 
     /*****
