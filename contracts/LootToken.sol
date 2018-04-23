@@ -1,4 +1,4 @@
-pragma solidity 0.4.21;
+pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/token/ERC20/BurnableToken.sol";
 import "zeppelin-solidity/contracts/token/ERC20/MintableToken.sol";
@@ -18,7 +18,7 @@ contract LootToken is MintableToken {
      * @param _value The amount of token to be burned.
      */
     function proxyBurn(address _burner, uint256 _value) public onlyOwner {
-        require(_value <= balances[_burner]);
+        require(_value <= balances[_burner], "LootToken::proxyBurn - amount to burn is greater than balance");
         // no need to require value <= totalSupply, since that would imply the
         // sender's balance is greater than the totalSupply, which *should* be an assertion failure
 

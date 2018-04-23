@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 import "./VotingLib.sol";
@@ -121,7 +121,7 @@ library TownHallLib {
         public
     {
         // require tribute
-        require((_ethTributeAmount > 0) || (_tokenTributeAddresses.length > 0));
+        require((_ethTributeAmount > 0) || (_tokenTributeAddresses.length > 0), "TownHallLib::createMemberProposal - minimum tribute not met");
 
         // TODO DO WE NEED MIN DEPOSIT HERE?
 
@@ -144,12 +144,12 @@ library TownHallLib {
 
         // collect token tribute
         for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
-            require(membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0); // need non zero amounts
+            require(membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0, "TownHallLib::createMemberProposal - minimum token tribute no met"); // need non zero amounts
             ERC20 erc20 = ERC20(membershipProposal.prospectiveMember.tokenTributeAddresses[i]);
 
             // transfer tokens to this contract as tribute
             // approval must be granted prior to this step
-            require(erc20.transferFrom(msg.sender, this, _tokenTributeAmounts[i]));
+            require(erc20.transferFrom(msg.sender, this, _tokenTributeAmounts[i]), "TownHallLib::createMemberProposal - token transfer failure");
         }
 
         // push to end of proposal queue
@@ -173,7 +173,7 @@ library TownHallLib {
         public
     {
         // require min deposit
-        require(_ethDepositAmount == MIN_PROPOSAL_CREATION_DEPOSIT);
+        require(_ethDepositAmount == MIN_PROPOSAL_CREATION_DEPOSIT, "TownHallLib::createProjectProposal - minimum ETH deposit no met");
 
         // set up proposal
         Proposal memory projectProposal;
@@ -208,7 +208,7 @@ library TownHallLib {
         if (proposalQueue.currentProposalIndex > 0) {
             // take care of initial case
             Proposal memory lastProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex - 1];
-            require(lastProposal.phase == ProposalPhase.Done); // past voting and grace period
+            require(lastProposal.phase == ProposalPhase.Done, "TownHallLib::startProposalVote - previous proposal not done"); // past voting and grace period
         }
 
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
@@ -232,7 +232,7 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(currentProposal.phase == ProposalPhase.Voting);
+        require(currentProposal.phase == ProposalPhase.Voting, "TownHallLib::voteOnCurrentProposal - curent proposal not in voting phase");
 
         currentProposal.ballot.vote(_toBallotItem);
     }
@@ -247,7 +247,7 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(currentProposal.phase == ProposalPhase.Voting);
+        require(currentProposal.phase == ProposalPhase.Voting, "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase");
 
         // require vote time completed
         require(currentProposal.ballot.voteEnded());
@@ -275,8 +275,8 @@ library TownHallLib {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // require grace period elapsed
-        require(currentProposal.phase == ProposalPhase.GracePeriod);
-        require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS);
+        require(currentProposal.phase == ProposalPhase.GracePeriod, "TownHallLib::finishProposal - curent proposal not in grace phase");
+        require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS, "TownHallLib::finishProposal - grace phase not complete");
 
         // get winner from ballot
         uint winningBallotItem = currentProposal.ballot.getWinningProposal();
@@ -428,7 +428,7 @@ library TownHallLib {
         // collect token tribute
         for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
             ERC20 erc20 = ERC20(_tokenTributeAddresses[i]);
-            require(erc20.approve(address(guildBank), _tokenTributeAmounts[i]));
+            require(erc20.approve(address(guildBank), _tokenTributeAmounts[i]), "TownHallLib::_collectTributes - could not collect token tribute");
             guildBank.offerTokens(erc20, _tokenTributeAmounts[i]);
         }
     }

@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 import "zeppelin-solidity/contracts/math/SafeMath.sol";
@@ -42,9 +42,9 @@ library VotingLib {
     }
 
     function vote(Ballot storage _ballot, uint _lineItem) public {
-        require(block.timestamp < _ballot.votingEndDate);
-        require(_ballot.voter[msg.sender].voted == false);
-        require(_lineItem < _ballot.lineItems.length);
+        require(block.timestamp < _ballot.votingEndDate, "VotingLib::vote - voting ended");
+        require(_ballot.voter[msg.sender].voted == false, "VotingLib::vote - voter already voted");
+        require(_lineItem < _ballot.lineItems.length, "VotingLib::vote - illegal lineItem");
 
         _ballot.voter[msg.sender].voted = true;
         _ballot.voter[msg.sender].vote = _lineItem;
@@ -86,7 +86,7 @@ library VotingLib {
     }
 
     function getWinningProposal(Ballot storage _ballot) public view returns (uint) {
-        require(block.timestamp > _ballot.votingEndDate);
+        require(block.timestamp > _ballot.votingEndDate, "VotingLib::getWinningProposal - voting not ended");
         if (haveEnoughVoted(_ballot)) {
             return getLeadingProposal(_ballot);
         } else {

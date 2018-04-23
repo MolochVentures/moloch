@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 import "zeppelin-solidity/contracts/math/SafeMath.sol";
@@ -46,7 +46,7 @@ contract Moloch is Ownable {
     MODIFIERS
     ********/
     modifier onlyApprovedMember {
-        require(members.approved[msg.sender] == true);
+        require(members.approved[msg.sender] == true, "Moloch::onlyApprovedMember - not a member");
         _;
     }
 
@@ -54,7 +54,7 @@ contract Moloch is Ownable {
     PUBLIC FUNCTIONS
     ***************/
 
-    function Moloch(
+    constructor(
         address _votingSharesAddress,
         address _lootTokenAddress,
         address _guildBankAddress
@@ -132,7 +132,7 @@ contract Moloch is Ownable {
     function exitMoloch() public onlyApprovedMember {
         uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
 
-        require(lootToken.transfer(msg.sender, numberOfVotingShares));
+        require(lootToken.transfer(msg.sender, numberOfVotingShares), "Moloch:exitMoloch - failed to transfer lootToken");
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         members.approved[msg.sender] = false;

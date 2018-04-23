@@ -1,4 +1,4 @@
-pragma solidity 0.4.21;
+pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
@@ -11,12 +11,12 @@ contract GuildBank is Ownable {
     ERC20[] public tokensHeld; // array of token contracts that are held by bank. any better way to do this?
     LootToken public lootToken;
 
-    function GuildBank(address _lootokenAddress) public {
+    constructor(address _lootokenAddress) public {
         lootToken = LootToken(_lootokenAddress);
     }
 
     function offerTokens(ERC20 _tokenContract, uint256 _amount) public {
-        require(_tokenContract.transferFrom(msg.sender, this, _amount));
+        require(_tokenContract.transferFrom(msg.sender, this, _amount), "GuildBank::offerTokens - failed to transfer tokens to GuildBank");
         tokensHeld.push(_tokenContract);
     }
 
@@ -28,7 +28,7 @@ contract GuildBank is Ownable {
         for (uint8 i = 0; i < tokensHeld.length; i++) {
             uint256 guildBankTokens = tokensHeld[i].balanceOf(address(this));
             uint256 amtToTransfer = (guildBankTokens.mul(myLootTokens)).div(totalLootTokens);
-            require(tokensHeld[i].transfer(memberAddress, amtToTransfer));
+            require(tokensHeld[i].transfer(memberAddress, amtToTransfer), "GuildBank::convertLootTokensToLoot - failed to transfer to member");
         }
 
         // cash out ETH
