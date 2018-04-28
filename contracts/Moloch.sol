@@ -57,13 +57,29 @@ contract Moloch is Ownable {
     constructor(
         address _votingSharesAddress,
         address _lootTokenAddress,
-        address _guildBankAddress
+        address _guildBankAddress,
+        address[] _membersArray,
+        uint[] _sharesArray
     ) 
         public 
     {
         votingShares = VotingShares(_votingSharesAddress);
         lootToken = LootToken(_lootTokenAddress);
         guildBank = GuildBank(_guildBankAddress);
+
+        require(_membersArray.length == _sharesArray.length);
+
+        for (uint i = 0; i < _membersArray.length; i++) {
+
+            address founder = _membersArray[i];
+            uint founderShares =  _sharesArray[i];
+
+            members.approved[founder] = true;
+            votingShares.mint(msg.sender, founder, founderShares);
+            lootToken.mint(msg.sender, guildBank, founderShares);
+
+            emit MemberAccepted(founder);
+        }
     }
 
     /*****************
@@ -84,7 +100,8 @@ contract Moloch is Ownable {
             msg.value,
             _tokenTributeAddresses, 
             _tokenTributeAmounts,
-            _votingSharesRequested
+            _votingSharesRequested,
+            guildBank
         );
     }
 
@@ -117,10 +134,6 @@ contract Moloch is Ownable {
 
     function finishProposal() public onlyApprovedMember {
         proposalQueue.finishProposal(members, guildBank, votingShares, lootToken);
-    }
-
-    function addFoundingMember(address _memberAddress, uint256 _votingSharesToGrant) public onlyOwner {
-        members.addFoundingMember(votingShares, lootToken, _memberAddress, _votingSharesToGrant);
     }
 
     /**************
