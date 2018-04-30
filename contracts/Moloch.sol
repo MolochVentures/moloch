@@ -158,6 +158,10 @@ contract Moloch is Ownable {
         return members.getMember(memberAddress);
     }
 
+    function getVotingShares(address memberAddress) public view returns (uint) {
+        return votingShares.balanceOf(memberAddress);
+    }
+
     function getCurrentProposalIndex() public view returns (uint) {
         return proposalQueue.getCurrentProposalIndex();
     }

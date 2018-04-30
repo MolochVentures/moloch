@@ -180,7 +180,7 @@ library TownHallLib {
         require(_ethDepositAmount == MIN_PROPOSAL_CREATION_DEPOSIT, "TownHallLib::createProjectProposal - minimum ETH deposit no met");
 
         // set up proposal
-        Proposal storage projectProposal;
+        Proposal memory projectProposal;
 
         // from inputs
         projectProposal.prospectiveProject.ipfsHash = _ipfsHash;

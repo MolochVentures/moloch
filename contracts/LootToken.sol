@@ -16,7 +16,7 @@ contract LootToken is StandardToken {
     address public owner;
     bool public mintingFinished = false;
 
-    constructor() {
+    constructor() public {
         owner = msg.sender;
     }
 
