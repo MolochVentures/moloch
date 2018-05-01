@@ -149,7 +149,8 @@ contract Moloch is Ownable {
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         members.approved[msg.sender] = false;
-        guildBank.convertLootTokensToLoot(msg.sender);
+        address[] tokenTributeAddresses = members.tokenTributeAddresses[msg.sender];
+        guildBank.convertLootTokensToLoot(msg.sender, tokenTributeAddresses);
 
         emit MemberExit(msg.sender);
     }
@@ -166,9 +167,9 @@ contract Moloch is Ownable {
         return proposalQueue.getCurrentProposalIndex();
     }
 
-    function getCurrentProposalCommonDetails() 
+    function getCurrentProposalCommonDetails()
         public 
-        view 
+        view
         returns (
             address,
             TownHallLib.ProposalTypes,

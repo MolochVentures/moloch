@@ -49,6 +49,8 @@ contract('Moloch', accounts => {
   // verify shares
   // verify tokens
 
+  // verify tokens/ETH on member application rejection
+
   // verify member exit
   // verify member exit burned voting tokens
   // verify member exit loot tokens calculation
