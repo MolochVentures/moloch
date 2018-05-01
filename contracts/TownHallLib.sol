@@ -45,7 +45,10 @@ library TownHallLib {
 
     struct Members { 
         mapping (address => bool) approved;
+        mapping (address => address[]) tokenTributeAddresses;
+        mapping (address => uint256[]) tokenTributeAmounts;
     }
+
 
     /******************
     PROPOSAL DEFINITION
@@ -455,13 +458,16 @@ library TownHallLib {
         );
 
         // add to moloch members
-        members.approved[memberProposal.prospectiveMember.prospectiveMemberAddress] = true;
+        address newMemberAddress = memberProposal.prospectiveMember.prospectiveMemberAddress;
+        members.approved[newMemberAddress] = true;
+        members.tokenTributeAddresses[newMemberAddress] = memberProposal.prospectiveMember.tokenTributeAddresses;
+        members.tokenTributeAmounts[newMemberAddress] = memberProposal.prospectiveMember.tokenTributeAmounts;
 
         // grant shares to new member
         _grantVotingShares(
             votingShares,
             lootToken,
-            memberProposal.prospectiveMember.prospectiveMemberAddress,
+            newMemberAddress,
             memberProposal.votingSharesRequested
         );
     }
