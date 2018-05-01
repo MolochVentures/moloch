@@ -8,6 +8,7 @@ const TownHallLib = artifacts.require('./TownHallLib.sol')
 const VotingLib = artifacts.require('./VotingLib.sol')
 
 const foundersJSON = require('./founders.json')
+const configJSON = require('./config.json')
 
 module.exports = (deployer, network, accounts) => {
   deployer.deploy(VotingShares)
@@ -32,7 +33,10 @@ module.exports = (deployer, network, accounts) => {
         LootToken.address,
         GuildBank.address,
         foundersJSON.addresses,
-        foundersJSON.shares
+        foundersJSON.shares,
+        configJSON.PROPOSAL_VOTE_TIME_SECONDS,
+        configJSON.GRACE_PERIOD_SECONDS,
+        configJSON.MIN_PROPOSAL_CREATION_DEPOSIT_WEI
       )
     })
 }

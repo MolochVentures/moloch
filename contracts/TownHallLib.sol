@@ -37,9 +37,6 @@ library TownHallLib {
     /********
     CONSTANTS
     ********/
-    uint constant PROPOSAL_VOTE_TIME_SECONDS = 1;
-    uint constant GRACE_PERIOD_SECONDS = 1;
-    uint constant MIN_PROPOSAL_CREATION_DEPOSIT = 10 ether;
     uint constant LOSING_PROPOSAL_INDEX = 0;
     uint constant WINNING_PROPOSAL_INDEX = 1;
 
@@ -173,21 +170,22 @@ library TownHallLib {
     // PROJECT PROPOSAL
     function createProjectProposal(
         ProposalQueue storage proposalQueue,
-        uint256 _ethDepositAmount,
+        uint256 _weiDepositAmount,
         bytes32 _ipfsHash,
-        uint256 _votingSharesRequested
+        uint256 _votingSharesRequested,
+        uint MIN_PROPOSAL_CREATION_DEPOSIT_WEI
     )
         public
     {
         // require min deposit
-        require(_ethDepositAmount == MIN_PROPOSAL_CREATION_DEPOSIT, "TownHallLib::createProjectProposal - minimum ETH deposit no met");
+        require(_weiDepositAmount == MIN_PROPOSAL_CREATION_DEPOSIT_WEI, "TownHallLib::createProjectProposal - minimum ETH deposit no met");
 
         // set up proposal
         Proposal memory projectProposal;
 
         // from inputs
         projectProposal.prospectiveProject.ipfsHash = _ipfsHash;
-        projectProposal.prospectiveProject.deposit = _ethDepositAmount;
+        projectProposal.prospectiveProject.deposit = _weiDepositAmount;
 
         // attributes
         projectProposal.proposer = msg.sender;
@@ -207,7 +205,8 @@ library TownHallLib {
     // TRANSITION STATE TO VOTING
     function startProposalVote(
         ProposalQueue storage proposalQueue,
-        VotingShares votingShares
+        VotingShares votingShares,
+        uint PROPOSAL_VOTE_TIME_SECONDS
     ) 
         public 
     {
@@ -275,7 +274,8 @@ library TownHallLib {
         Members storage members,
         GuildBank guildBank,
         VotingShares votingShares,
-        LootToken lootToken
+        LootToken lootToken,
+        uint GRACE_PERIOD_SECONDS,
     ) 
         public 
     {

@@ -42,6 +42,13 @@ contract Moloch is Ownable {
     TownHallLib.Members members;
     TownHallLib.ProposalQueue proposalQueue;
 
+    /******************
+    CONFIG PARAMETERS
+    ******************/
+    uint PROPOSAL_VOTE_TIME_SECONDS;
+    uint GRACE_PERIOD_SECONDS;
+    uint MIN_PROPOSAL_CREATION_DEPOSIT_WEI;
+
     /********
     MODIFIERS
     ********/
@@ -59,7 +66,10 @@ contract Moloch is Ownable {
         address _lootTokenAddress,
         address _guildBankAddress,
         address[] _membersArray,
-        uint[] _sharesArray
+        uint[] _sharesArray,
+        uint _PROPOSAL_VOTE_TIME_SECONDS,
+        uint _GRACE_PERIOD_SECONDS,
+        uint _MIN_PROPOSAL_CREATION_DEPOSIT_WEI
     ) 
         public 
     {
@@ -68,6 +78,13 @@ contract Moloch is Ownable {
         guildBank = GuildBank(_guildBankAddress);
 
         require(_membersArray.length == _sharesArray.length);
+        require(_PROPOSAL_VOTE_TIME_SECONDS > 0);
+        require(_GRACE_PERIOD_SECONDS > 0);
+        require(_MIN_PROPOSAL_CREATION_DEPOSIT_WEI > 0);
+
+        PROPOSAL_VOTE_TIME_SECONDS = _PROPOSAL_VOTE_TIME_SECONDS;
+        GRACE_PERIOD_SECONDS = _GRACE_PERIOD_SECONDS;
+        MIN_PROPOSAL_CREATION_DEPOSIT_WEI = _MIN_PROPOSAL_CREATION_DEPOSIT_WEI;
 
         for (uint i = 0; i < _membersArray.length; i++) {
 
@@ -116,12 +133,13 @@ contract Moloch is Ownable {
         proposalQueue.createProjectProposal(
             msg.value,
             _ipfsHash,
-            _votingSharesRequested
+            _votingSharesRequested,
+            MIN_PROPOSAL_CREATION_DEPOSIT_WEI
         );
     }
 
     function startProposalVote() public onlyApprovedMember {
-        proposalQueue.startProposalVote(votingShares);
+        proposalQueue.startProposalVote(votingShares, PROPOSAL_VOTE_TIME_SECONDS);
     }
 
     function voteOnCurrentProposal(uint8 _toBallotItem) public onlyApprovedMember {
@@ -133,7 +151,7 @@ contract Moloch is Ownable {
     }
 
     function finishProposal() public onlyApprovedMember {
-        proposalQueue.finishProposal(members, guildBank, votingShares, lootToken);
+        proposalQueue.finishProposal(members, guildBank, votingShares, lootToken, GRACE_PERIOD_SECONDS);
     }
 
     /**************
