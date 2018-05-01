@@ -1,17 +1,18 @@
 pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/math/SafeMath.sol";
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+// import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 
 /**
  * Structured like an ERC20, but can only be burned/minted and not transferred.
  */
-contract VotingShares is Ownable {
+contract VotingShares {
     using SafeMath for uint256;
 
     uint256 totalSupply_;
     mapping(address => uint256) balances;
     bool public mintingFinished = false;
+    address public owner;
 
     event Mint(address indexed to, uint256 amount);
     event Burn(address indexed from, uint256 amount);
@@ -22,6 +23,10 @@ contract VotingShares is Ownable {
     modifier canMint() {
         require(!mintingFinished, "VotingShares::canMint - minting finished");
         _;
+    }
+
+    constructor() public {
+        owner = msg.sender;
     }
 
     /**
@@ -36,7 +41,7 @@ contract VotingShares is Ownable {
      * @param _burner Who to burn tokens from.
      * @param _value The amount of token to be burned.
      */
-    function proxyBurn(address _burner, uint256 _value) public onlyOwner {
+    function proxyBurn(address _burner, uint256 _value) public {
         require(_value <= balances[_burner], "VotingShares::proxyBurn - value less than balance");
         // no need to require value <= totalSupply, since that would imply the
         // sender's balance is greater than the totalSupply, which *should* be an assertion failure
@@ -61,19 +66,21 @@ contract VotingShares is Ownable {
      * @param _amount The amount of tokens to mint.
      * @return A boolean that indicates if the operation was successful.
      */
-    function mint(address _to, uint256 _amount) onlyOwner canMint public returns (bool) {
+    function mint(address _owner, address _to, uint256 _amount) canMint public returns (address) {
+        require(owner == _owner);
         totalSupply_ = totalSupply_.add(_amount);
         balances[_to] = balances[_to].add(_amount);
         emit Mint(_to, _amount);
         emit Transfer(address(0), _to, _amount);
-        return true;
+        return owner;
     }
 
     /**
      * @dev Function to stop minting new tokens.
      * @return True if the operation was successful.
      */
-    function finishMinting() onlyOwner canMint public returns (bool) {
+    function finishMinting(address _owner) canMint public returns (bool) {
+        require(owner == _owner);
         mintingFinished = true;
         emit MintFinished();
         return true;

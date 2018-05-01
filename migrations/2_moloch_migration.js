@@ -7,9 +7,13 @@ const GuildBank = artifacts.require('./GuildBank.sol')
 const TownHallLib = artifacts.require('./TownHallLib.sol')
 const VotingLib = artifacts.require('./VotingLib.sol')
 
+const foundersJSON = require('./founders.json')
+
 module.exports = (deployer, network, accounts) => {
-  deployer
-    .deploy([VotingShares, VotingLib])
+  deployer.deploy(VotingShares)
+    .then(() => {
+      return deployer.deploy(VotingLib)
+    })
     .then(() => {
       deployer.link(VotingLib, TownHallLib)
       return deployer.deploy(TownHallLib)
@@ -26,7 +30,9 @@ module.exports = (deployer, network, accounts) => {
         Moloch,
         VotingShares.address,
         LootToken.address,
-        GuildBank.address
+        GuildBank.address,
+        foundersJSON.addresses,
+        foundersJSON.shares
       )
     })
 }

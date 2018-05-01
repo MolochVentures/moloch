@@ -116,7 +116,8 @@ library TownHallLib {
         uint256 _ethTributeAmount,
         address[] _tokenTributeAddresses, 
         uint256[] _tokenTributeAmounts,
-        uint256 _votingSharesRequested
+        uint256 _votingSharesRequested,
+        GuildBank _guildBank
     )
         public
     {
@@ -141,6 +142,7 @@ library TownHallLib {
 
         // eth tribute is in calling contract payable function
         membershipProposal.prospectiveMember.ethTributeAmount = _ethTributeAmount;
+        address(_guildBank).call.value(msg.value);
 
         // collect token tribute
         for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
@@ -149,7 +151,7 @@ library TownHallLib {
 
             // transfer tokens to this contract as tribute
             // approval must be granted prior to this step
-            require(erc20.transferFrom(msg.sender, this, _tokenTributeAmounts[i]), "TownHallLib::createMemberProposal - token transfer failure");
+            require(erc20.transferFrom(_propospectiveMemberAddress, _guildBank, _tokenTributeAmounts[i]), "TownHallLib::createMemberProposal - token transfer failure");
         }
 
         // push to end of proposal queue
@@ -161,6 +163,8 @@ library TownHallLib {
             ProposalTypes.Membership,
             proposalQueue.proposals.length
         );
+
+
     }
 
     // PROJECT PROPOSAL
@@ -301,23 +305,6 @@ library TownHallLib {
         proposalQueue.currentProposalIndex++;
     }
 
-    // ADD FOUNDING MEMBER TO BOOTSTRAP GUILD
-    function addFoundingMember(
-        Members storage members,
-        VotingShares votingShares,
-        LootToken lootToken,
-        address _memberAddress,
-        uint256 _votingShares
-    ) 
-        public 
-    {
-        // add to moloch members
-        members.approved[_memberAddress] = true;
-
-        // grant voting shares to founder
-        _grantVotingShares(votingShares, lootToken, _memberAddress, _votingShares);
-    }
-
     /***************
     GETTER FUNCTIONS
     ***************/
@@ -443,10 +430,10 @@ library TownHallLib {
         internal 
     {
         // dilute and grant 
-        votingShares.mint(_to, _numVotingShares);
+        votingShares.mint(msg.sender, _to, _numVotingShares);
 
         // mint loot tokens 1:1 and keep them in moloch contract for exit
-        lootToken.mint(address(this), _numVotingShares);
+        lootToken.mint(msg.sender, address(this), _numVotingShares);
     } 
 
     // ACCEPT MEMBER

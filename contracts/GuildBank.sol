@@ -10,8 +10,10 @@ contract GuildBank is Ownable {
 
     ERC20[] public tokensHeld; // array of token contracts that are held by bank. any better way to do this?
     LootToken public lootToken;
+    address public owner;
 
     constructor(address _lootokenAddress) public {
+        owner = msg.sender;
         lootToken = LootToken(_lootokenAddress);
     }
 
@@ -36,8 +38,8 @@ contract GuildBank is Ownable {
         memberAddress.transfer(amtEthToTransfer);
 
         // burn loot tokens
-        lootToken.proxyBurn(memberAddress, myLootTokens);
+        lootToken.proxyBurn(owner, memberAddress, myLootTokens);
     }
-
+    
     function() public payable {}
 }
