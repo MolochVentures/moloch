@@ -44,6 +44,8 @@ library TownHallLib {
         mapping (address => bool) approved;
         mapping (address => address[]) tokenTributeAddresses;
         mapping (address => uint256[]) tokenTributeAmounts;
+        mapping (address => uint256) ethAmount;
+        mapping (address => bool) hasWithdrawn;
     }
 
 
@@ -56,10 +58,10 @@ library TownHallLib {
     }
 
     enum ProposalPhase {
+        Done,
         Proposed,
         Voting,
-        GracePeriod,
-        Done
+        GracePeriod        
     }
 
     struct ProspectiveMember {
@@ -88,12 +90,12 @@ library TownHallLib {
 
         // BOOKKEEPING
         VotingLib.Ballot ballot; // proposal voting ballot
-        ProposalPhase phase; // phase
         uint gracePeriodStartTime; // when did grace period start
     }
 
     struct ProposalQueue {
         Proposal[] proposals;
+        ProposalPhase phase;
         uint256 currentProposalIndex;
     }
 
@@ -138,7 +140,7 @@ library TownHallLib {
         // attributes
         membershipProposal.proposer = msg.sender;
         membershipProposal.proposalType = ProposalTypes.Membership;
-        membershipProposal.phase = ProposalPhase.Proposed;
+        proposalQueue.phase = ProposalPhase.Proposed;
 
         // eth tribute is in calling contract payable function
         membershipProposal.prospectiveMember.ethTributeAmount = _ethTributeAmount;
@@ -163,8 +165,6 @@ library TownHallLib {
             ProposalTypes.Membership,
             proposalQueue.proposals.length
         );
-
-
     }
 
     // PROJECT PROPOSAL
@@ -190,7 +190,7 @@ library TownHallLib {
         // attributes
         projectProposal.proposer = msg.sender;
         projectProposal.proposalType = ProposalTypes.Project;
-        projectProposal.phase = ProposalPhase.Proposed;
+        proposalQueue.phase = ProposalPhase.Proposed;
 
         // push to end of proposal queue
         proposalQueue.proposals.push(projectProposal);
@@ -210,13 +210,7 @@ library TownHallLib {
     ) 
         public 
     {
-        // make sure previous proposal vote is completed
-        if (proposalQueue.currentProposalIndex > 0) {
-            // take care of initial case
-            Proposal memory lastProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex - 1];
-            require(lastProposal.phase == ProposalPhase.Done, "TownHallLib::startProposalVote - previous proposal not done"); // past voting and grace period
-        }
-
+        require(proposalQueue.phase == ProposalPhase.Done, "TownHallLib::startProposalVote - current proposal not done"); // past voting and grace period
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // create ballot
@@ -225,7 +219,7 @@ library TownHallLib {
         currentProposal.ballot.initialize(2, PROPOSAL_VOTE_TIME_SECONDS, votingShares);
 
         // change phase
-        currentProposal.phase = ProposalPhase.Voting;
+        proposalQueue.phase = ProposalPhase.Voting;
         
         emit ProposalVotingStarted(proposalQueue.currentProposalIndex);
     }
@@ -238,7 +232,7 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(currentProposal.phase == ProposalPhase.Voting, "TownHallLib::voteOnCurrentProposal - curent proposal not in voting phase");
+        require(proposalQueue.phase == ProposalPhase.Voting, "TownHallLib::voteOnCurrentProposal - curent proposal not in voting phase");
 
         currentProposal.ballot.vote(_toBallotItem);
     }
@@ -253,13 +247,13 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(currentProposal.phase == ProposalPhase.Voting, "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase");
+        require(proposalQueue.phase == ProposalPhase.Voting, "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase");
 
         // require vote time completed
         require(currentProposal.ballot.voteEnded());
 
         // transition state to grace period
-        currentProposal.phase = ProposalPhase.GracePeriod;
+        proposalQueue.phase = ProposalPhase.GracePeriod;
         currentProposal.gracePeriodStartTime = now;
 
         emit ProposalGracePeriodStarted(proposalQueue.currentProposalIndex);
@@ -275,14 +269,14 @@ library TownHallLib {
         GuildBank guildBank,
         VotingShares votingShares,
         LootToken lootToken,
-        uint GRACE_PERIOD_SECONDS,
+        uint GRACE_PERIOD_SECONDS
     ) 
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // require grace period elapsed
-        require(currentProposal.phase == ProposalPhase.GracePeriod, "TownHallLib::finishProposal - curent proposal not in grace phase");
+        require(proposalQueue.phase == ProposalPhase.GracePeriod, "TownHallLib::finishProposal - curent proposal not in grace phase");
         require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS, "TownHallLib::finishProposal - grace phase not complete");
 
         // get winner from ballot
@@ -298,13 +292,18 @@ library TownHallLib {
             }
         } else if (winningBallotItem == LOSING_PROPOSAL_INDEX) {
             // proposal loses, burn eth
-            address(0).transfer(currentProposal.prospectiveProject.deposit);
+            if (currentProposal.proposalType == ProposalTypes.Project) {
+                address(0).transfer(currentProposal.prospectiveProject.deposit);
+            }
+            else if (currentProposal.proposalType == ProposalTypes.Membership) {
+                
+            }
         }
 
         emit ProposalCompleted(proposalQueue.currentProposalIndex, winningBallotItem);
 
         // close out and move on to next proposal
-        currentProposal.phase = ProposalPhase.Done;
+        proposalQueue.phase = ProposalPhase.Done;
         proposalQueue.currentProposalIndex++;
     }
 
@@ -331,7 +330,7 @@ library TownHallLib {
             proposal.proposer,
             proposal.proposalType,
             proposal.votingSharesRequested,
-            proposal.phase,
+            proposalQueue.phase,
             proposal.gracePeriodStartTime
         );
     }
@@ -433,10 +432,10 @@ library TownHallLib {
         internal 
     {
         // dilute and grant 
-        votingShares.mint(msg.sender, _to, _numVotingShares);
+        votingShares.mint(_to, _numVotingShares);
 
         // mint loot tokens 1:1 and keep them in moloch contract for exit
-        lootToken.mint(msg.sender, address(this), _numVotingShares);
+        lootToken.mint(address(this), _numVotingShares);
     } 
 
     // ACCEPT MEMBER
@@ -460,8 +459,6 @@ library TownHallLib {
         // add to moloch members
         address newMemberAddress = memberProposal.prospectiveMember.prospectiveMemberAddress;
         members.approved[newMemberAddress] = true;
-        members.tokenTributeAddresses[newMemberAddress] = memberProposal.prospectiveMember.tokenTributeAddresses;
-        members.tokenTributeAmounts[newMemberAddress] = memberProposal.prospectiveMember.tokenTributeAmounts;
 
         // grant shares to new member
         _grantVotingShares(

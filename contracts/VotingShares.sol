@@ -1,12 +1,12 @@
 pragma solidity 0.4.23;
 
 import "zeppelin-solidity/contracts/math/SafeMath.sol";
-// import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "zeppelin-solidity/contracts/ownership/Ownable.sol";
 
 /**
  * Structured like an ERC20, but can only be burned/minted and not transferred.
  */
-contract VotingShares {
+contract VotingShares is Ownable {
     using SafeMath for uint256;
 
     uint256 totalSupply_;
@@ -66,8 +66,7 @@ contract VotingShares {
      * @param _amount The amount of tokens to mint.
      * @return A boolean that indicates if the operation was successful.
      */
-    function mint(address _owner, address _to, uint256 _amount) canMint public returns (address) {
-        require(owner == _owner);
+    function mint(address _to, uint256 _amount) onlyOwner canMint public returns (address) {
         totalSupply_ = totalSupply_.add(_amount);
         balances[_to] = balances[_to].add(_amount);
         emit Mint(_to, _amount);
@@ -79,8 +78,7 @@ contract VotingShares {
      * @dev Function to stop minting new tokens.
      * @return True if the operation was successful.
      */
-    function finishMinting(address _owner) canMint public returns (bool) {
-        require(owner == _owner);
+    function finishMinting() onlyOwner canMint public returns (bool) {
         mintingFinished = true;
         emit MintFinished();
         return true;

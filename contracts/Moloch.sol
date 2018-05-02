@@ -62,9 +62,6 @@ contract Moloch is Ownable {
     ***************/
 
     constructor(
-        address _votingSharesAddress,
-        address _lootTokenAddress,
-        address _guildBankAddress,
         address[] _membersArray,
         uint[] _sharesArray,
         uint _PROPOSAL_VOTE_TIME_SECONDS,
@@ -73,14 +70,14 @@ contract Moloch is Ownable {
     ) 
         public 
     {
-        votingShares = VotingShares(_votingSharesAddress);
-        lootToken = LootToken(_lootTokenAddress);
-        guildBank = GuildBank(_guildBankAddress);
-
         require(_membersArray.length == _sharesArray.length);
         require(_PROPOSAL_VOTE_TIME_SECONDS > 0);
         require(_GRACE_PERIOD_SECONDS > 0);
         require(_MIN_PROPOSAL_CREATION_DEPOSIT_WEI > 0);
+
+        votingShares = new VotingShares();
+        lootToken = new LootToken();
+        guildBank = new GuildBank(address(lootToken));
 
         PROPOSAL_VOTE_TIME_SECONDS = _PROPOSAL_VOTE_TIME_SECONDS;
         GRACE_PERIOD_SECONDS = _GRACE_PERIOD_SECONDS;
@@ -92,8 +89,8 @@ contract Moloch is Ownable {
             uint founderShares =  _sharesArray[i];
 
             members.approved[founder] = true;
-            votingShares.mint(msg.sender, founder, founderShares);
-            lootToken.mint(msg.sender, guildBank, founderShares);
+            votingShares.mint(founder, founderShares);
+            lootToken.mint(guildBank, founderShares);
 
             emit MemberAccepted(founder);
         }
@@ -138,19 +135,19 @@ contract Moloch is Ownable {
         );
     }
 
-    function startProposalVote() public onlyApprovedMember {
+    function startProposalVote() public {
         proposalQueue.startProposalVote(votingShares, PROPOSAL_VOTE_TIME_SECONDS);
     }
 
-    function voteOnCurrentProposal(uint8 _toBallotItem) public onlyApprovedMember {
+    function voteOnCurrentProposal(uint8 _toBallotItem) public {
         proposalQueue.voteOnCurrentProposal(_toBallotItem);
     }
 
-    function transitionProposalToGracePeriod() public onlyApprovedMember {
+    function transitionProposalToGracePeriod() public {
         proposalQueue.transitionProposalToGracePeriod();
     }
 
-    function finishProposal() public onlyApprovedMember {
+    function finishProposal() public {
         proposalQueue.finishProposal(members, guildBank, votingShares, lootToken, GRACE_PERIOD_SECONDS);
     }
 
@@ -167,10 +164,20 @@ contract Moloch is Ownable {
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
         members.approved[msg.sender] = false;
-        address[] tokenTributeAddresses = members.tokenTributeAddresses[msg.sender];
-        guildBank.convertLootTokensToLoot(msg.sender, tokenTributeAddresses);
+        guildBank.convertLootTokensToLoot(msg.sender, members.tokenTributeAddresses[msg.sender]);
 
         emit MemberExit(msg.sender);
+    }
+
+    function withdraw() public {
+        require(members.hasWithdrawn[msg.sender] = false);
+        members.hasWithdrawn[msg.sender] = true;
+        guildBank.withdraw(
+            msg.sender, 
+            members.tokenTributeAddresses[msg.sender], 
+            members.tokenTributeAmounts[msg.sender], 
+            members.ethAmount[msg.sender]
+        );
     }
 
     function getMember(address memberAddress) public view returns (bool) {

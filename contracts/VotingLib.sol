@@ -45,6 +45,7 @@ library VotingLib {
         require(block.timestamp < _ballot.votingEndDate, "VotingLib::vote - voting ended");
         require(_ballot.voter[msg.sender].voted == false, "VotingLib::vote - voter already voted");
         require(_lineItem < _ballot.lineItems.length, "VotingLib::vote - illegal lineItem");
+        require(_ballot.votingShares.balanceOf(msg.sender) > 0, "VotingLib::vote - voter has no votes");
 
         _ballot.voter[msg.sender].voted = true;
         _ballot.voter[msg.sender].vote = _lineItem;
