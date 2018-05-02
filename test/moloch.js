@@ -1,7 +1,27 @@
 const Moloch = artifacts.require('./Moloch')
 const foundersJSON = require('../migrations/founders.json')
 
-contract('Moloch', accounts => {
+/*
+TEST STATES
+1. deploy
+2. donation
+3. membership proposal (exit at any time)
+- start voting
+- voting
+- grace period
+- membership success
+- membership failure
+- finish
+4. project proposal (exit at any time)
+- start voting
+- voting
+- grace period
+- project success
+- project failure
+- finish
+*/
+
+contract('verify up to deployment', accounts => {
   before('deploy contracts', async() => {
     moloch = await Moloch.deployed()
     founders = foundersJSON
@@ -37,7 +57,7 @@ contract('Moloch', accounts => {
       const memberShares = await moloch.getVotingShares(memberAddress)
       assert.notEqual(parseInt(Math.random() * 1000), memberShares.toNumber(), 'incorrect shares saved')
     }
-  })  
+  })
 
   // verify create/failure member proposal
   // verify create/failure project proposal

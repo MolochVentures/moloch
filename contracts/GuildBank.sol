@@ -9,10 +9,8 @@ contract GuildBank is Ownable {
     using SafeMath for uint256;
 
     LootToken public lootToken;
-    address public owner;
 
     constructor(address _lootokenAddress) public {
-        owner = msg.sender;
         lootToken = LootToken(_lootokenAddress);
     }
 
@@ -40,8 +38,24 @@ contract GuildBank is Ownable {
         uint256 amtEthToTransfer = (address(this).balance.mul(myLootTokens)).div(totalLootTokens);
         memberAddress.transfer(amtEthToTransfer);
         // burn loot tokens
-        lootToken.proxyBurn(owner, memberAddress, myLootTokens);
+        lootToken.proxyBurn(memberAddress, myLootTokens);
     }
     
+    function withdraw(
+        address _address, 
+        address[] _tokenTributeAddresses, 
+        uint[] _tokenTributeAmounts, 
+        uint _ethAmount
+    ) 
+        onlyOwner 
+        public 
+        {
+            for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
+                ERC20 token = ERC20(_tokenTributeAddresses[i]);
+                require(token.transfer(_address, _tokenTributeAmounts[i]), "GuildBank::withdraw - failed to transfer to member");
+            }
+            _address.transfer(_ethAmount);
+    }
+
     function() public payable {}
 }
