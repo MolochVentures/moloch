@@ -1,25 +1,6 @@
 const Moloch = artifacts.require('./Moloch')
+const GuildBank = artifacts.require('./GuildBank')
 const foundersJSON = require('../migrations/founders.json')
-
-/*
-TEST STATES
-1. deploy
-2. donation
-3. membership proposal (exit at any time)
-- start voting
-- voting
-- grace period
-- membership success
-- membership failure
-- finish
-4. project proposal (exit at any time)
-- start voting
-- voting
-- grace period
-- project success
-- project failure
-- finish
-*/
 
 contract('verify up to deployment', accounts => {
   before('deploy contracts', async() => {
@@ -39,7 +20,7 @@ contract('verify up to deployment', accounts => {
     for (let i = 0; i < 10; i++) {
       let nonMemberAddress = accounts[i]
       const nonMember = await moloch.getMember(nonMemberAddress)
-      assert.equal(nonMember, false, 'non-member added incorrectly')
+      assert.notEqual(nonMember, true, 'non-member added incorrectly')
     }
   })
   // verify founding member shares
@@ -58,6 +39,25 @@ contract('verify up to deployment', accounts => {
       assert.notEqual(parseInt(Math.random() * 1000), memberShares.toNumber(), 'incorrect shares saved')
     }
   })
+})
+
+contract('verify up to donation', accounts => {
+  before('deploy contracts', async() => {
+    moloch = await Moloch.deployed()
+  })
+  it('donate', async() => {
+    await moloch.donateWei.sendTransaction({from:accounts[0], value:100})
+    totalWei = await moloch.getWei.call();
+    console.log('totalWei', totalWei)
+    guildBankAddress = await moloch.guildBankAddress.call()
+    console.log('guildBankAddress', guildBankAddress)
+    guildBank = await GuildBank.at(guildBankAddress)
+    bal = await guildBank.balance
+    console.log('bal', bal)
+
+  })
+})
+
 
   // verify create/failure member proposal
   // verify create/failure project proposal
@@ -76,8 +76,27 @@ contract('verify up to deployment', accounts => {
   // verify member exit loot tokens calculation
   // verify loot tokens decremented correctly on member exit
   // verify exited member no longer has voting ability
-})
 
+
+  /*
+  TEST STATES
+  1. deploy
+  2. donation
+  3. membership proposal (exit at any time)
+  - start voting
+  - voting
+  - grace period
+  - membership success
+  - membership failure
+  - finish
+  4. project proposal (exit at any time)
+  - start voting
+  - voting
+  - grace period
+  - project success
+  - project failure
+  - finish
+  */
 
 
 

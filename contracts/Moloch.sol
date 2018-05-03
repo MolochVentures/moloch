@@ -151,6 +151,18 @@ contract Moloch is Ownable {
         proposalQueue.finishProposal(members, guildBank, votingShares, lootToken, GRACE_PERIOD_SECONDS);
     }
 
+    function donateWei() public payable {
+        address(guildBank).transfer(msg.value);
+    }
+
+    function getWei() public returns(uint256) {
+        return address(guildBank).balance;
+    }
+
+    function donateTokens(ERC20 tokenAddress, uint amount) public {
+        require(tokenAddress.transferFrom(msg.sender, address(guildBank), amount), "Moloch::donateTokens - failed to transfer tokens to GuildBank");
+    }
+
     /**************
     GUILD FUNCTIONS
     **************/
