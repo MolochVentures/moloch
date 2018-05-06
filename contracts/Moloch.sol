@@ -148,19 +148,7 @@ contract Moloch is Ownable {
     }
 
     function finishProposal() public {
-        proposalQueue.finishProposal(members, guildBank, votingShares, lootToken, GRACE_PERIOD_SECONDS);
-    }
-
-    function donateWei() public payable {
-        address(guildBank).transfer(msg.value);
-    }
-
-    function getWei() public returns(uint256) {
-        return address(guildBank).balance;
-    }
-
-    function donateTokens(ERC20 tokenAddress, uint amount) public {
-        require(tokenAddress.transferFrom(msg.sender, address(guildBank), amount), "Moloch::donateTokens - failed to transfer tokens to GuildBank");
+        proposalQueue.finishProposal(members, votingShares, lootToken, GRACE_PERIOD_SECONDS);
     }
 
     /**************
@@ -182,6 +170,7 @@ contract Moloch is Ownable {
     }
 
     function withdraw() public {
+        require(members.approved[msg.sender] = false);
         require(members.hasWithdrawn[msg.sender] = false);
         members.hasWithdrawn[msg.sender] = true;
         guildBank.withdraw(
@@ -190,6 +179,10 @@ contract Moloch is Ownable {
             members.tokenTributeAmounts[msg.sender], 
             members.ethAmount[msg.sender]
         );
+    }
+
+    function getGuildBank() public view returns (GuildBank) {
+        return guildBank;
     }
 
     function getMember(address memberAddress) public view returns (bool) {

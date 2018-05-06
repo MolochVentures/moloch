@@ -1,6 +1,25 @@
+const fse = require('fs-extra')
+
+const HttpProvider = require(`ethjs-provider-http`);
+const EthRPC = require(`ethjs-rpc`);
+const ethRPC = new EthRPC(new HttpProvider(`http://localhost:8545`));
+const EthQuery = require(`ethjs-query`)
+const ethQuery = new EthQuery(new HttpProvider(`http://localhost:8545`))
+
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
+const TestCoin = artifacts.require('./StandardToken')
 const foundersJSON = require('../migrations/founders.json')
+
+
+async function mineBlocks(numBlocksToMine) {
+  for (let i = 0; i < numBlocksToMine; i++) {
+    let err =  await ethRPC.sendAsync({method: `evm_mine`})
+    if (err.length > 0) console.log('err', err)
+    let thisBlockNumber = await ethQuery.blockNumber()
+    console.log('- mining block', thisBlockNumber.toNumber())
+  }
+}
 
 contract('verify up to deployment', accounts => {
   before('deploy contracts', async() => {
@@ -41,20 +60,30 @@ contract('verify up to deployment', accounts => {
   })
 })
 
-contract('verify up to donation', accounts => {
-  before('deploy contracts', async() => {
-    moloch = await Moloch.deployed()
-  })
-  it('donate', async() => {
-    await moloch.donateWei.sendTransaction({from:accounts[0], value:100})
-    totalWei = await moloch.getWei.call();
-    console.log('totalWei', totalWei)
-    guildBankAddress = await moloch.guildBankAddress.call()
-    console.log('guildBankAddress', guildBankAddress)
-    guildBank = await GuildBank.at(guildBankAddress)
-    bal = await guildBank.balance
-    console.log('bal', bal)
+contract('donate', accounts => {
+  let moloch, guildBank
 
+  before('deploy Moloch', async() => {
+    moloch = await Moloch.deployed()
+    guildBankAddress = await moloch.getGuildBank.call()
+    guildBank = await GuildBank.at(guildBankAddress)
+  })
+
+  it('donate ETH', async()=> {
+    await guildBank.sendTransaction({from:accounts[0], value:100})
+    balance = await web3.eth.getBalance(guildBankAddress)
+    assert.equal(100, balance.toNumber(), 'transaction sent does not equal balance in Guild Bank')
+  })
+
+  it('donate tokens', async() => {
+    tokens = await fse.readJson('./test/testcoins.json')
+    token = await TestCoin.at(tokens.addresses[0])
+    token_balance = await token.balanceOf(accounts[0])
+    approve = await token.approve.call(moloch.address, 10000000, {from: accounts[0]})
+    // await mineBlocks(2)
+    // allowance = await token.allowance.call(accounts[0], moloch.address)
+    // offerTokens = await guildBank.offerTokens.call(accounts[0],tokens.addresses[0], 1, {from: accounts[0]})
+    // tokenAddresses = await guildBank.getTokenAddresses.call()
   })
 })
 

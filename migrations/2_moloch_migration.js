@@ -1,9 +1,6 @@
 /* global artifacts */
 
 const Moloch = artifacts.require('./Moloch.sol')
-const VotingShares = artifacts.require('./VotingShares.sol')
-const LootToken = artifacts.require('./LootToken.sol')
-const GuildBank = artifacts.require('./GuildBank.sol')
 const TownHallLib = artifacts.require('./TownHallLib.sol')
 const VotingLib = artifacts.require('./VotingLib.sol')
 

@@ -148,12 +148,11 @@ library TownHallLib {
 
         // collect token tribute
         for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
+            address tokenAddress = membershipProposal.prospectiveMember.tokenTributeAddresses[i];
             require(membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0, "TownHallLib::createMemberProposal - minimum token tribute no met"); // need non zero amounts
-            ERC20 erc20 = ERC20(membershipProposal.prospectiveMember.tokenTributeAddresses[i]);
-
-            // transfer tokens to this contract as tribute
+            // transfer tokens to GuildBank contract as tribute
             // approval must be granted prior to this step
-            require(erc20.transferFrom(_propospectiveMemberAddress, _guildBank, _tokenTributeAmounts[i]), "TownHallLib::createMemberProposal - token transfer failure");
+            require(_guildBank.offerTokens(_propospectiveMemberAddress, tokenAddress, _tokenTributeAmounts[i]));
         }
 
         // push to end of proposal queue
@@ -266,7 +265,6 @@ library TownHallLib {
     function finishProposal(
         ProposalQueue storage proposalQueue,
         Members storage members,
-        GuildBank guildBank,
         VotingShares votingShares,
         LootToken lootToken,
         uint GRACE_PERIOD_SECONDS
@@ -285,7 +283,7 @@ library TownHallLib {
         if (winningBallotItem == WINNING_PROPOSAL_INDEX) {
             if (currentProposal.proposalType == ProposalTypes.Membership) {
                 // add member here
-                _acceptMemberProposal(members, guildBank, votingShares, lootToken, currentProposal);
+                _acceptMemberProposal(members, votingShares, lootToken, currentProposal);
             } else if (currentProposal.proposalType == ProposalTypes.Project) {
                 // accept proposal
                 _acceptProjectProposal(votingShares, lootToken, currentProposal);
@@ -418,7 +416,6 @@ library TownHallLib {
         for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
             ERC20 erc20 = ERC20(_tokenTributeAddresses[i]);
             require(erc20.approve(address(guildBank), _tokenTributeAmounts[i]), "TownHallLib::_collectTributes - could not collect token tribute");
-            guildBank.offerTokens(erc20, _tokenTributeAmounts[i]);
         }
     }
 
@@ -441,21 +438,12 @@ library TownHallLib {
     // ACCEPT MEMBER
     function _acceptMemberProposal(
         Members storage members,
-        GuildBank guildBank,
         VotingShares votingShares,
         LootToken lootToken,
         Proposal memberProposal
     ) 
         internal 
     {
-        // collect tributes into bank
-        _collectTributes(
-            guildBank,
-            memberProposal.prospectiveMember.ethTributeAmount,
-            memberProposal.prospectiveMember.tokenTributeAddresses,
-            memberProposal.prospectiveMember.tokenTributeAmounts
-        );
-
         // add to moloch members
         address newMemberAddress = memberProposal.prospectiveMember.prospectiveMemberAddress;
         members.approved[newMemberAddress] = true;
