@@ -21,7 +21,8 @@ contract GuildBank is Ownable {
         address _tokenContract, 
         uint256 _amount
     ) 
-        public returns (bool)
+        public 
+        returns (bool)
     {
         if (knownTokenAddress[_tokenContract] == false) {
             knownTokenAddress[_tokenContract] = true;
@@ -36,7 +37,7 @@ contract GuildBank is Ownable {
         address[] tokenTributeAddresses
     )    
         public 
-        {
+    {
         uint256 myLootTokens = lootToken.balanceOf(memberAddress);
         uint256 totalLootTokens = lootToken.totalSupply();
 
@@ -62,13 +63,13 @@ contract GuildBank is Ownable {
     ) 
         onlyOwner 
         public 
-        {
-            for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
-                ERC20 token = ERC20(_tokenTributeAddresses[i]);
-                require(token.transfer(_address, _tokenTributeAmounts[i]), "GuildBank::withdraw - failed to transfer to member");
-            }
-            _address.transfer(_ethAmount);
+    {
+        for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
+            ERC20 token = ERC20(_tokenTributeAddresses[i]);
+            require(token.transfer(_address, _tokenTributeAmounts[i]), "GuildBank::withdraw - failed to transfer to member");
         }
+        _address.transfer(_ethAmount);
+    }
 
     function getTokenAddresses() view public returns (address[]) {
         return tokenAddresses;
