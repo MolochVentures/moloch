@@ -9,13 +9,26 @@ contract GuildBank is Ownable {
     using SafeMath for uint256;
 
     LootToken public lootToken;
+    mapping (address => bool) knownTokenAddress;
+    address[] public tokenAddresses;
 
     constructor(address _lootokenAddress) public {
         lootToken = LootToken(_lootokenAddress);
     }
 
-    function offerTokens(ERC20 _tokenContract, uint256 _amount) public {
-        require(_tokenContract.transferFrom(msg.sender, this, _amount), "GuildBank::offerTokens - failed to transfer tokens to GuildBank");
+    function offerTokens(
+        address _holder, 
+        address _tokenContract, 
+        uint256 _amount
+    ) 
+        public returns (bool)
+    {
+        if (knownTokenAddress[_tokenContract] == false) {
+            knownTokenAddress[_tokenContract] = true;
+            tokenAddresses.push(_tokenContract);
+        }
+        ERC20 token = ERC20(_tokenContract);
+        return (token.transferFrom(_holder, this, _amount));
     }
 
     function convertLootTokensToLoot(
@@ -55,6 +68,10 @@ contract GuildBank is Ownable {
                 require(token.transfer(_address, _tokenTributeAmounts[i]), "GuildBank::withdraw - failed to transfer to member");
             }
             _address.transfer(_ethAmount);
+        }
+
+    function getTokenAddresses() view public returns (address[]) {
+        return tokenAddresses;
     }
 
     function() public payable {}
