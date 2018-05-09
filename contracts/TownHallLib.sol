@@ -1,12 +1,12 @@
 pragma solidity 0.4.23;
 
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "./VotingLib.sol";
 import "./VotingShares.sol";
 import "./Moloch.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
-import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 
 library TownHallLib {
     using VotingLib for VotingLib.Ballot;
@@ -149,7 +149,10 @@ library TownHallLib {
         // collect token tribute
         for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
             address tokenAddress = membershipProposal.prospectiveMember.tokenTributeAddresses[i];
-            require(membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0, "TownHallLib::createMemberProposal - minimum token tribute no met"); // need non zero amounts
+            require(
+                membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0,
+                "TownHallLib::createMemberProposal - minimum token tribute no met"
+            ); // need non zero amounts
             // transfer tokens to GuildBank contract as tribute
             // approval must be granted prior to this step
             require(_guildBank.offerTokens(_propospectiveMemberAddress, tokenAddress, _tokenTributeAmounts[i]));
