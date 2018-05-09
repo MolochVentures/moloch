@@ -258,6 +258,22 @@ library TownHallLib {
         emit ProposalGracePeriodStarted(proposalQueue.currentProposalIndex);
     }
 
+    function isVotingWinner(
+        ProposalQueue storage proposalQueue
+    ) 
+        public returns (bool) 
+    {
+        Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        if(
+            proposalQueue.phase == ProposalPhase.GracePeriod &&
+            proposalQueue.proposals[proposalQueue.currentProposalIndex].ballot.getLeadingProposal() == currentProposal.ballot.voter[msg.sender].vote
+        ) 
+        {
+            return true;
+        }
+        return false;
+    }
+
     /*****
     FINISH
     *****/

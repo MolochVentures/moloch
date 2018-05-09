@@ -158,20 +158,27 @@ contract Moloch is Ownable {
     /// @dev Voting shares are burned, loot tokens are transferred
     /// from this contract to the member
     function exitMoloch() public onlyApprovedMember {
-        uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
+        require(members.approved[msg.sender] == true);
+        require(members.hasWithdrawn[msg.sender] == false);
+        require(proposalQueue.isVotingWinner());
 
+        members.hasWithdrawn[msg.sender] = true;
+        members.approved[msg.sender] = false;
+
+        uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
         require(lootToken.transfer(msg.sender, numberOfVotingShares), "Moloch:exitMoloch - failed to transfer lootToken");
+        
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
 
-        members.approved[msg.sender] = false;
+        
         guildBank.convertLootTokensToLoot(msg.sender, members.tokenTributeAddresses[msg.sender]);
 
         emit MemberExit(msg.sender);
     }
 
     function withdraw() public {
-        require(members.approved[msg.sender] = false);
-        require(members.hasWithdrawn[msg.sender] = false);
+        require(members.approved[msg.sender] == false);
+        require(members.hasWithdrawn[msg.sender] == false);
         members.hasWithdrawn[msg.sender] = true;
         guildBank.withdraw(
             msg.sender, 
