@@ -96,7 +96,7 @@ contract('donate', accounts => {
   })
 })
 
-contract('member application', accounts => {
+contract.only('member application', accounts => {
   let moloch, guildBank, guildBankAddress
   const PROSPECTIVE_MEMBERS = [accounts[9], accounts[8]]
   const VOTING_SHARES_REQUESTED = 1000
@@ -197,16 +197,12 @@ contract('member application', accounts => {
     )
 
     const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
-    console.log(
-      'currentProposalIndex: ',
-      currentProposalIndex.plus(1).toNumber()
-    )
     const [
       proposer,
       proposalType,
       votingSharesRequested,
       phase
-    ] = await moloch.getProposalCommonDetails.call(1)
+    ] = await moloch.getProposalCommonDetails.call(currentProposalIndex.plus(1))
     assert.equal(
       proposer,
       FOUNDER_ADDRESSES[0],
@@ -255,6 +251,16 @@ contract('member application', accounts => {
       TRIBUTE,
       `token tribute not recognized`
     )
+  })
+
+  it('start member proposal vote', async () => {
+    await moloch.startProposalVote()
+
+    const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
+    const proposal = await moloch.getProposalCommonDetails.call(
+      currentProposalIndex
+    )
+    assert.equal(proposal[3], PROPOSAL_PHASES.Voting)
   })
 })
 
