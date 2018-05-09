@@ -12,7 +12,7 @@
     "ethjs-query": "^0.3.7",
     "ethjs-rpc": "^0.2.0",
     "fs-extra": "^6.0.0",
-    "zeppelin-solidity": "1.7.0"
+    "openzeppelin-solidity": "^1.9.0"
   },
   "devDependencies": {
     "standard": "^11.0.0"
