@@ -1,7 +1,7 @@
 
 pragma solidity 0.4.23;
 
-import "./StandardToken.sol";
+import "zeppelin-solidity/contracts/token/ERC20/StandardToken.sol";
 
 contract TestCoin is ERC20, StandardToken {
     string public name = "TEST COIN";
