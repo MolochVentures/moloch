@@ -1,24 +1,9 @@
 const fse = require('fs-extra')
 
-const HttpProvider = require(`ethjs-provider-http`)
-const EthRPC = require(`ethjs-rpc`)
-const ethRPC = new EthRPC(new HttpProvider(`http://localhost:8545`))
-const EthQuery = require(`ethjs-query`)
-const ethQuery = new EthQuery(new HttpProvider(`http://localhost:8545`))
-
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
-const TestCoin = artifacts.require('./StandardToken')
+const TestCoin = artifacts.require('./TestCoin')
 const foundersJSON = require('../migrations/founders.json')
-
-async function mineBlocks (numBlocksToMine) {
-  for (let i = 0; i < numBlocksToMine; i++) {
-    let err = await ethRPC.sendAsync({ method: `evm_mine` })
-    if (err.length > 0) console.log('err', err)
-    let thisBlockNumber = await ethQuery.blockNumber()
-    console.log('- mining block', thisBlockNumber.toNumber())
-  }
-}
 
 contract('verify up to deployment', accounts => {
   let moloch, founders
@@ -89,12 +74,11 @@ contract('donate', accounts => {
   })
 
   it('donate tokens', async () => {
-    const tokens = await fse.readJson('./test/testcoins.json')
-    const token = await TestCoin.at(tokens.addresses[0])
+    const token = await TestCoin.deployed()
     await token.approve(guildBank.address, 10000000, {
       from: accounts[0]
     })
-    await guildBank.offerTokens(accounts[0], tokens.addresses[0], 10000000, {
+    await guildBank.offerTokens(accounts[0], token.address, 10000000, {
       from: accounts[0]
     })
     const tokenBalance = await token.balanceOf(guildBankAddress)
@@ -106,7 +90,7 @@ contract('donate', accounts => {
     const tokenAddresses = await guildBank.getTokenAddresses.call()
     assert.equal(
       tokenAddresses[0],
-      tokens.addresses[0],
+      token.address,
       'token address not added to guild bank list'
     )
   })

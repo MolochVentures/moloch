@@ -1,4 +1,5 @@
 /* global artifacts */
+const fse = require('fs-extra')
 
 const Moloch = artifacts.require('./Moloch.sol')
 const TownHallLib = artifacts.require('./TownHallLib.sol')
@@ -40,5 +41,7 @@ module.exports = (deployer, network, accounts) => {
       [accounts[0], accounts[1]],
       foundersJSON.shares
     )
+    foundersJSON.addresses = [accounts[0], accounts[1]]
+    await fse.writeJson('./founders.json', foundersJSON)
   })
 }
