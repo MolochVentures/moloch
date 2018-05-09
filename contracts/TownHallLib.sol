@@ -237,7 +237,10 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(proposalQueue.phase == ProposalPhase.Voting, "TownHallLib::voteOnCurrentProposal - curent proposal not in voting phase");
+        require(
+            proposalQueue.phase == ProposalPhase.Voting,
+            "TownHallLib::voteOnCurrentProposal - current proposal not in voting phase"
+        );
 
         currentProposal.ballot.vote(_toBallotItem);
     }
@@ -252,7 +255,10 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(proposalQueue.phase == ProposalPhase.Voting, "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase");
+        require(
+            proposalQueue.phase == ProposalPhase.Voting,
+            "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase"
+        );
 
         // require vote time completed
         require(currentProposal.ballot.voteEnded());
