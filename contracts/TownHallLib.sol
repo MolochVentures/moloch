@@ -144,7 +144,7 @@ library TownHallLib {
 
         // eth tribute is in calling contract payable function
         membershipProposal.prospectiveMember.ethTributeAmount = _ethTributeAmount;
-        address(_guildBank).call.value(msg.value);
+        address(_guildBank).transfer(_ethTributeAmount);
 
         // collect token tribute
         for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
@@ -326,8 +326,9 @@ library TownHallLib {
     ***************/
 
     // GET COMMON ATTRIBUTES
-    function getCurrentProposalCommonDetails(
-        ProposalQueue storage proposalQueue
+    function getProposalCommonDetails(
+        ProposalQueue storage proposalQueue,
+        uint index
     ) 
         public 
         view 
@@ -339,7 +340,7 @@ library TownHallLib {
             uint
         ) 
     {
-        Proposal memory proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal memory proposal = proposalQueue.proposals[index];
         return(
             proposal.proposer,
             proposal.proposalType,
@@ -354,20 +355,22 @@ library TownHallLib {
     }
 
     // GET PROJECT PROPOSAL SPECIFIC ATTRIBUTES
-    function getCurrentProposalProjectDetails(
-        ProposalQueue storage proposalQueue
+    function getProposalProjectDetails(
+        ProposalQueue storage proposalQueue,
+        uint index
     ) 
         public
         view 
         returns (bytes32, uint256) 
     {
-        Proposal memory proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal memory proposal = proposalQueue.proposals[index];
         return(proposal.prospectiveProject.ipfsHash, proposal.prospectiveProject.deposit);
     }
 
     // GET MEMBER PROPOSAL SPECIFIC ATTRIBUTES
-    function getCurrentProposalMemberDetails(
-        ProposalQueue storage proposalQueue
+    function getProposalMemberDetails(
+        ProposalQueue storage proposalQueue,
+        uint index
     ) 
         public 
         view 
@@ -378,7 +381,7 @@ library TownHallLib {
             uint256[]
         ) 
     {
-        Proposal memory proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal memory proposal = proposalQueue.proposals[index];
         return(
             proposal.prospectiveMember.prospectiveMemberAddress,
             proposal.prospectiveMember.ethTributeAmount,
@@ -387,8 +390,9 @@ library TownHallLib {
         );
     }
 
-    function getCurrentProposalBallot(
-        ProposalQueue storage proposalQueue
+    function getProposalBallot(
+        ProposalQueue storage proposalQueue,
+        uint index
     )
         public 
         view 
@@ -398,7 +402,7 @@ library TownHallLib {
             uint
         ) 
     {
-        Proposal storage proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal storage proposal = proposalQueue.proposals[index];
         return (
             proposal.ballot.votingEndDate,
             proposal.ballot.minVotesRequired,
