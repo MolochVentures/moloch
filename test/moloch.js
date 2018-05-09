@@ -1,9 +1,9 @@
-const fse = require('fs-extra')
-
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const TestCoin = artifacts.require('./TestCoin')
+const VotingShares = artifacts.require('./VotingShares')
 const foundersJSON = require('../migrations/founders.json')
+const configJSON = require('../migrations/config.json')
 
 contract('verify up to deployment', accounts => {
   let moloch, founders
@@ -97,10 +97,9 @@ contract('donate', accounts => {
 })
 
 contract.only('member application', accounts => {
-  let moloch, guildBank, guildBankAddress
+  let moloch, guildBank, guildBankAddress, founders
   const PROSPECTIVE_MEMBERS = [accounts[9], accounts[8]]
   const VOTING_SHARES_REQUESTED = 1000
-  const FOUNDER_ADDRESSES = foundersJSON.addresses
   const TRIBUTE = 10000
   const PROPOSAL_PHASES = {
     Done: 0,
@@ -112,11 +111,17 @@ contract.only('member application', accounts => {
     Membership: 0,
     Project: 1
   }
+  const BALLOT_ITEMS = {
+    Reject: 0,
+    Accept: 1
+  }
+  const QUORUM_DENOMINATOR = 2
 
   before('deploy Moloch', async () => {
     moloch = await Moloch.deployed()
     guildBankAddress = await moloch.getGuildBank.call()
     guildBank = await GuildBank.at(guildBankAddress)
+    founders = foundersJSON
   })
 
   it('member application ETH', async () => {
@@ -126,7 +131,7 @@ contract.only('member application', accounts => {
       [],
       VOTING_SHARES_REQUESTED,
       {
-        from: FOUNDER_ADDRESSES[0],
+        from: founders.addresses[0],
         value: TRIBUTE
       }
     )
@@ -140,8 +145,8 @@ contract.only('member application', accounts => {
     ] = await moloch.getProposalCommonDetails.call(currentProposalIndex)
     assert.equal(
       proposer,
-      FOUNDER_ADDRESSES[0],
-      `proposer is not ${FOUNDER_ADDRESSES[0]}`
+      founders.addresses[0],
+      `proposer is not ${founders.addresses[0]}`
     )
     assert.equal(
       proposalType,
@@ -192,7 +197,7 @@ contract.only('member application', accounts => {
       [TRIBUTE],
       VOTING_SHARES_REQUESTED,
       {
-        from: FOUNDER_ADDRESSES[0]
+        from: founders.addresses[0]
       }
     )
 
@@ -205,8 +210,8 @@ contract.only('member application', accounts => {
     ] = await moloch.getProposalCommonDetails.call(currentProposalIndex.plus(1))
     assert.equal(
       proposer,
-      FOUNDER_ADDRESSES[0],
-      `proposer is not ${FOUNDER_ADDRESSES[0]}`
+      founders.addresses[0],
+      `proposer is not ${founders.addresses[0]}`
     )
     assert.equal(
       proposalType,
@@ -260,14 +265,60 @@ contract.only('member application', accounts => {
     const proposal = await moloch.getProposalCommonDetails.call(
       currentProposalIndex
     )
-    assert.equal(proposal[3], PROPOSAL_PHASES.Voting)
+    assert.equal(
+      proposal[3],
+      PROPOSAL_PHASES.Voting,
+      `proposal phase did not transition to 'Voting'`
+    )
+
+    const totalFounderShares = founders.shares.reduce((acc, shares) => {
+      return (acc += shares)
+    }, 0)
+    const minVotesRequired = Math.trunc(totalFounderShares / QUORUM_DENOMINATOR)
+    const ballot = await moloch.getProposalBallot(currentProposalIndex)
+    assert.equal(
+      ballot[1],
+      minVotesRequired,
+      `min votes required should be total founder shares divided by QUORUM_DENOMINATOR`
+    )
+  })
+
+  it('vote on member proposal, accept', async () => {
+    const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
+    await founders.addresses.map(async founder => {
+      await moloch.voteOnCurrentProposal(BALLOT_ITEMS.Accept, { from: founder })
+    })
+    const ballot = await moloch.getProposalBallot(currentProposalIndex)
+    assert.equal(
+      ballot[2],
+      BALLOT_ITEMS.Accept,
+      `leading ballot item is not 'Accept'`
+    )
+  })
+
+  it('transition member proposal to grace period', async () => {
+    await new Promise(resolve => {
+      setTimeout(() => {
+        resolve()
+      }, (configJSON.PROPOSAL_VOTE_TIME_SECONDS + 1) * 1000)
+    })
+    await moloch.transitionProposalToGracePeriod()
+    const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
+    const proposal = await moloch.getProposalCommonDetails.call(
+      currentProposalIndex
+    )
+    assert.equal(
+      proposal[3],
+      PROPOSAL_PHASES.GracePeriod,
+      `proposal phase did not transition to 'GracePeriod'`
+    )
   })
 })
 
-// verify create/failure member proposal
+// verify failure member proposal
 // verify create/failure project proposal
-// verify create/failure start proposal vote
-// verify create/failure vote on current proposal
+// verify failure start proposal vote
+// verify failure vote on current proposal
 // verify create/failure transition proposal to grace period
 // verify create/failure finish proposal
 
