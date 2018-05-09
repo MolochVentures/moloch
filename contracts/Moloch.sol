@@ -204,7 +204,7 @@ contract Moloch is Ownable {
         return proposalQueue.getCurrentProposalIndex();
     }
 
-    function getCurrentProposalCommonDetails()
+    function getProposalCommonDetails(uint index)
         public 
         view
         returns (
@@ -215,10 +215,23 @@ contract Moloch is Ownable {
             uint
         ) 
     {
-        return proposalQueue.getCurrentProposalCommonDetails();
+        return proposalQueue.getProposalCommonDetails(index);
     }
 
-    function getCurrentProposalBallot()
+    function getProposalMemberDetails(uint index) 
+        public 
+        view 
+        returns (
+            address, 
+            uint256, 
+            address[], 
+            uint256[]
+        ) 
+    {
+        return proposalQueue.getProposalMemberDetails(index);
+    }
+
+    function getProposalBallot(uint index)
         public
         view
         returns (
@@ -227,6 +240,6 @@ contract Moloch is Ownable {
             uint
         )
     {
-        return proposalQueue.getCurrentProposalBallot();
+        return proposalQueue.getProposalBallot(index);
     }
 }
