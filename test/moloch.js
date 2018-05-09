@@ -179,25 +179,22 @@ contract('member application', accounts => {
     assert.equal(tokenTributeAmounts, false, `should not be any token tribute`)
   })
 
-  it.skip('member application tokens', async () => {
-    const tokens = await fse.readJson('./test/testcoins.json')
-    const token = await TestCoin.at(tokens.addresses[0])
+  it('member application tokens', async () => {
+    const token = await TestCoin.deployed()
     await token.approve(guildBank.address, TRIBUTE, {
       from: PROSPECTIVE_MEMBERS[1]
     })
     await token.allowance(PROSPECTIVE_MEMBERS[1], guildBank.address)
 
-    const prop = await moloch.createMemberProposal(
+    await moloch.createMemberProposal(
       PROSPECTIVE_MEMBERS[1],
-      [tokens.addresses[0]],
+      [token.address],
       [TRIBUTE],
       VOTING_SHARES_REQUESTED,
       {
         from: FOUNDER_ADDRESSES[0]
       }
     )
-
-    console.log('prop: ', prop)
 
     const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
     console.log(
@@ -236,7 +233,7 @@ contract('member application', accounts => {
       ethTributeAmount,
       tokenTributeAddresses,
       tokenTributeAmounts
-    ] = await moloch.getProposalMemberDetails.call(currentProposalIndex)
+    ] = await moloch.getProposalMemberDetails.call(currentProposalIndex.plus(1))
     assert.equal(
       prospectiveMemberAddress,
       PROSPECTIVE_MEMBERS[1],
@@ -244,18 +241,13 @@ contract('member application', accounts => {
     )
     assert.equal(ethTributeAmount, 0, `eth tribute amount incorrect`)
     assert.equal(
-      tokenTributeAddresses,
-      false,
-      `should not be any token tribute`
-    )
-    assert.equal(
       tokenTributeAddresses.length,
       1,
       `token tribute should have 1 address`
     )
     assert.equal(
       tokenTributeAddresses[0],
-      tokens.addresses[0],
+      token.address,
       `token tribute address not in contract`
     )
     assert.equal(
