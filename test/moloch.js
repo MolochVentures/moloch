@@ -1,8 +1,8 @@
 const fse = require('fs-extra')
 
-const HttpProvider = require(`ethjs-provider-http`);
-const EthRPC = require(`ethjs-rpc`);
-const ethRPC = new EthRPC(new HttpProvider(`http://localhost:8545`));
+const HttpProvider = require(`ethjs-provider-http`)
+const EthRPC = require(`ethjs-rpc`)
+const ethRPC = new EthRPC(new HttpProvider(`http://localhost:8545`))
 const EthQuery = require(`ethjs-query`)
 const ethQuery = new EthQuery(new HttpProvider(`http://localhost:8545`))
 
@@ -11,10 +11,9 @@ const GuildBank = artifacts.require('./GuildBank')
 const TestCoin = artifacts.require('./StandardToken')
 const foundersJSON = require('../migrations/founders.json')
 
-
-async function mineBlocks(numBlocksToMine) {
+async function mineBlocks (numBlocksToMine) {
   for (let i = 0; i < numBlocksToMine; i++) {
-    let err =  await ethRPC.sendAsync({method: `evm_mine`})
+    let err = await ethRPC.sendAsync({ method: `evm_mine` })
     if (err.length > 0) console.log('err', err)
     let thisBlockNumber = await ethQuery.blockNumber()
     console.log('- mining block', thisBlockNumber.toNumber())
@@ -22,12 +21,14 @@ async function mineBlocks(numBlocksToMine) {
 }
 
 contract('verify up to deployment', accounts => {
-  before('deploy contracts', async() => {
+  let moloch, founders
+
+  before('deploy contracts', async () => {
     moloch = await Moloch.deployed()
     founders = foundersJSON
   })
   // verify founding members
-  it('should save addresses from deploy', async() => {
+  it('should save addresses from deploy', async () => {
     for (let i = 0; i < founders.addresses.length; i++) {
       let memberAddress = founders.addresses[i]
       const member = await moloch.getMember(memberAddress)
@@ -35,79 +36,271 @@ contract('verify up to deployment', accounts => {
     }
   })
   // verify failure of non-founding members
-  it('should fail non deployed addresses', async() => {
-    for (let i = 0; i < 10; i++) {
+  it('should fail non deployed addresses', async () => {
+    for (let i = 2; i < 10; i++) {
       let nonMemberAddress = accounts[i]
       const nonMember = await moloch.getMember(nonMemberAddress)
       assert.notEqual(nonMember, true, 'non-member added incorrectly')
     }
   })
   // verify founding member shares
-  it('should save founder shares from deploy', async() => {
+  it('should save founder shares from deploy', async () => {
     for (let i = 0; i < founders.addresses.length; i++) {
       let memberAddress = founders.addresses[i]
       const memberShares = await moloch.getVotingShares(memberAddress)
-      assert.equal(founders.shares[i], memberShares.toNumber(), 'founding shares not saved correctly')
+      assert.equal(
+        founders.shares[i],
+        memberShares.toNumber(),
+        'founding shares not saved correctly'
+      )
     }
   })
   // verify failure of incorrect shares
-  it('should fail on incorrect shares', async() => {
+  it('should fail on incorrect shares', async () => {
     for (let i = 0; i < founders.addresses.length; i++) {
       let memberAddress = founders.addresses[i]
       const memberShares = await moloch.getVotingShares(memberAddress)
-      assert.notEqual(parseInt(Math.random() * 1000), memberShares.toNumber(), 'incorrect shares saved')
+      assert.notEqual(
+        parseInt(Math.random() * 1000),
+        memberShares.toNumber(),
+        'incorrect shares saved'
+      )
     }
   })
 })
 
 contract('donate', accounts => {
-  let moloch, guildBank
+  let moloch, guildBank, guildBankAddress
 
-  before('deploy Moloch', async() => {
+  before('deploy Moloch', async () => {
     moloch = await Moloch.deployed()
     guildBankAddress = await moloch.getGuildBank.call()
     guildBank = await GuildBank.at(guildBankAddress)
   })
 
-  it('donate ETH', async()=> {
-    await guildBank.sendTransaction({from:accounts[0], value:100})
-    balance = await web3.eth.getBalance(guildBankAddress)
-    assert.equal(100, balance.toNumber(), 'transaction sent does not equal balance in Guild Bank')
+  it('donate ETH', async () => {
+    await guildBank.sendTransaction({ from: accounts[0], value: 100 })
+    const balance = await web3.eth.getBalance(guildBankAddress)
+    assert.equal(
+      100,
+      balance.toNumber(),
+      'transaction sent does not equal balance in Guild Bank'
+    )
   })
 
-  it('donate tokens', async() => {
-    tokens = await fse.readJson('./test/testcoins.json')
-    token = await TestCoin.at(tokens.addresses[0])
-    token_balance = await token.balanceOf(accounts[0])
-    approve = await token.approve.call(moloch.address, 10000000, {from: accounts[0]})
-    // await mineBlocks(2)
-    // allowance = await token.allowance.call(accounts[0], moloch.address)
-    // offerTokens = await guildBank.offerTokens.call(accounts[0],tokens.addresses[0], 1, {from: accounts[0]})
-    // tokenAddresses = await guildBank.getTokenAddresses.call()
+  it('donate tokens', async () => {
+    const tokens = await fse.readJson('./test/testcoins.json')
+    const token = await TestCoin.at(tokens.addresses[0])
+    await token.approve(guildBank.address, 10000000, {
+      from: accounts[0]
+    })
+    await guildBank.offerTokens(accounts[0], tokens.addresses[0], 10000000, {
+      from: accounts[0]
+    })
+    const tokenBalance = await token.balanceOf(guildBankAddress)
+    assert.equal(
+      tokenBalance,
+      10000000,
+      'token donation amount does not equal guild bank balance'
+    )
+    const tokenAddresses = await guildBank.getTokenAddresses.call()
+    assert.equal(
+      tokenAddresses[0],
+      tokens.addresses[0],
+      'token address not added to guild bank list'
+    )
   })
 })
 
+contract('member application', accounts => {
+  let moloch, guildBank, guildBankAddress
+  const PROSPECTIVE_MEMBERS = [accounts[9], accounts[8]]
+  const VOTING_SHARES_REQUESTED = 1000
+  const FOUNDER_ADDRESSES = foundersJSON.addresses
+  const TRIBUTE = 10000
+  const PROPOSAL_PHASES = {
+    Done: 0,
+    Proposed: 1,
+    Voting: 2,
+    GracePeriod: 3
+  }
+  const PROPOSAL_TYPES = {
+    Membership: 0,
+    Project: 1
+  }
 
-  // verify create/failure member proposal
-  // verify create/failure project proposal
-  // verify create/failure start proposal vote
-  // verify create/failure vote on current proposal
-  // verify create/failure transition proposal to grace period
-  // verify create/failure finish proposal
-  
-  // verify shares
-  // verify tokens
+  before('deploy Moloch', async () => {
+    moloch = await Moloch.deployed()
+    guildBankAddress = await moloch.getGuildBank.call()
+    guildBank = await GuildBank.at(guildBankAddress)
+  })
 
-  // verify tokens/ETH on member application rejection
+  it('member application ETH', async () => {
+    await moloch.createMemberProposal(
+      PROSPECTIVE_MEMBERS[0],
+      [],
+      [],
+      VOTING_SHARES_REQUESTED,
+      {
+        from: FOUNDER_ADDRESSES[0],
+        value: TRIBUTE
+      }
+    )
 
-  // verify member exit
-  // verify member exit burned voting tokens
-  // verify member exit loot tokens calculation
-  // verify loot tokens decremented correctly on member exit
-  // verify exited member no longer has voting ability
+    const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
+    const [
+      proposer,
+      proposalType,
+      votingSharesRequested,
+      phase
+    ] = await moloch.getProposalCommonDetails.call(currentProposalIndex)
+    assert.equal(
+      proposer,
+      FOUNDER_ADDRESSES[0],
+      `proposer is not ${FOUNDER_ADDRESSES[0]}`
+    )
+    assert.equal(
+      proposalType,
+      PROPOSAL_TYPES.Membership,
+      `proposal types is not "Membership"`
+    )
+    assert.equal(
+      votingSharesRequested,
+      VOTING_SHARES_REQUESTED,
+      `voting shares requested is not ${VOTING_SHARES_REQUESTED}`
+    )
+    assert.equal(
+      phase,
+      PROPOSAL_PHASES.Proposed,
+      `proposal phase is not "Proposed"`
+    )
 
+    const [
+      prospectiveMemberAddress,
+      ethTributeAmount,
+      tokenTributeAddresses,
+      tokenTributeAmounts
+    ] = await moloch.getProposalMemberDetails.call(currentProposalIndex)
+    assert.equal(
+      prospectiveMemberAddress,
+      PROSPECTIVE_MEMBERS[0],
+      `Prospective member address not correct`
+    )
+    assert.equal(ethTributeAmount, TRIBUTE, `eth tribute amount incorrect`)
+    assert.equal(
+      tokenTributeAddresses,
+      false,
+      `should not be any token tribute`
+    )
+    assert.equal(tokenTributeAmounts, false, `should not be any token tribute`)
+  })
 
-  /*
+  it.skip('member application tokens', async () => {
+    const tokens = await fse.readJson('./test/testcoins.json')
+    const token = await TestCoin.at(tokens.addresses[0])
+    await token.approve(guildBank.address, TRIBUTE, {
+      from: PROSPECTIVE_MEMBERS[1]
+    })
+    await token.allowance(PROSPECTIVE_MEMBERS[1], guildBank.address)
+
+    const prop = await moloch.createMemberProposal(
+      PROSPECTIVE_MEMBERS[1],
+      [tokens.addresses[0]],
+      [TRIBUTE],
+      VOTING_SHARES_REQUESTED,
+      {
+        from: FOUNDER_ADDRESSES[0]
+      }
+    )
+
+    console.log('prop: ', prop)
+
+    const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
+    console.log(
+      'currentProposalIndex: ',
+      currentProposalIndex.plus(1).toNumber()
+    )
+    const [
+      proposer,
+      proposalType,
+      votingSharesRequested,
+      phase
+    ] = await moloch.getProposalCommonDetails.call(1)
+    assert.equal(
+      proposer,
+      FOUNDER_ADDRESSES[0],
+      `proposer is not ${FOUNDER_ADDRESSES[0]}`
+    )
+    assert.equal(
+      proposalType,
+      PROPOSAL_TYPES.Membership,
+      `proposal types is not "Membership"`
+    )
+    assert.equal(
+      votingSharesRequested,
+      VOTING_SHARES_REQUESTED,
+      `voting shares requested is not ${VOTING_SHARES_REQUESTED}`
+    )
+    assert.equal(
+      phase,
+      PROPOSAL_PHASES.Proposed,
+      `proposal phase is not "Proposed"`
+    )
+
+    const [
+      prospectiveMemberAddress,
+      ethTributeAmount,
+      tokenTributeAddresses,
+      tokenTributeAmounts
+    ] = await moloch.getProposalMemberDetails.call(currentProposalIndex)
+    assert.equal(
+      prospectiveMemberAddress,
+      PROSPECTIVE_MEMBERS[1],
+      `Prospective member address not correct`
+    )
+    assert.equal(ethTributeAmount, 0, `eth tribute amount incorrect`)
+    assert.equal(
+      tokenTributeAddresses,
+      false,
+      `should not be any token tribute`
+    )
+    assert.equal(
+      tokenTributeAddresses.length,
+      1,
+      `token tribute should have 1 address`
+    )
+    assert.equal(
+      tokenTributeAddresses[0],
+      tokens.addresses[0],
+      `token tribute address not in contract`
+    )
+    assert.equal(
+      tokenTributeAmounts[0],
+      TRIBUTE,
+      `token tribute not recognized`
+    )
+  })
+})
+
+// verify create/failure member proposal
+// verify create/failure project proposal
+// verify create/failure start proposal vote
+// verify create/failure vote on current proposal
+// verify create/failure transition proposal to grace period
+// verify create/failure finish proposal
+
+// verify shares
+// verify tokens
+
+// verify tokens/ETH on member application rejection
+
+// verify member exit
+// verify member exit burned voting tokens
+// verify member exit loot tokens calculation
+// verify loot tokens decremented correctly on member exit
+// verify exited member no longer has voting ability
+
+/*
   TEST STATES
   1. deploy
   2. donation
@@ -126,8 +319,6 @@ contract('donate', accounts => {
   - project failure
   - finish
   */
-
-
 
 /* global artifacts, contract, assert, web3 */
 /* eslint-env mocha */
