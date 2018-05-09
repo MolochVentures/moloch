@@ -212,7 +212,10 @@ library TownHallLib {
     ) 
         public 
     {
-        require(proposalQueue.phase == ProposalPhase.Done, "TownHallLib::startProposalVote - current proposal not done"); // past voting and grace period
+        require(
+            proposalQueue.phase == ProposalPhase.Proposed,
+            "TownHallLib::startProposalVote - current proposal not done"
+        ); // past voting and grace period
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // create ballot
