@@ -279,8 +279,7 @@ library TownHallLib {
         if(
             proposalQueue.phase == ProposalPhase.GracePeriod &&
             proposalQueue.proposals[proposalQueue.currentProposalIndex].ballot.getLeadingProposal() == currentProposal.ballot.voter[msg.sender].vote
-        ) 
-        {
+        ) {
             return true;
         }
         return false;
@@ -302,8 +301,14 @@ library TownHallLib {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // require grace period elapsed
-        require(proposalQueue.phase == ProposalPhase.GracePeriod, "TownHallLib::finishProposal - curent proposal not in grace phase");
-        require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS, "TownHallLib::finishProposal - grace phase not complete");
+        require(
+            proposalQueue.phase == ProposalPhase.GracePeriod,
+            "TownHallLib::finishProposal - curent proposal not in grace phase"
+        );
+        require(
+            now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS,
+            "TownHallLib::finishProposal - grace phase not complete"
+        );
 
         // get winner from ballot
         uint winningBallotItem = currentProposal.ballot.getWinningProposal();
