@@ -1,12 +1,12 @@
 pragma solidity 0.4.23;
 
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
+import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 import "./VotingLib.sol";
 import "./VotingShares.sol";
 import "./Moloch.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
-import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 
 library TownHallLib {
     using VotingLib for VotingLib.Ballot;
@@ -144,12 +144,15 @@ library TownHallLib {
 
         // eth tribute is in calling contract payable function
         membershipProposal.prospectiveMember.ethTributeAmount = _ethTributeAmount;
-        address(_guildBank).call.value(msg.value);
+        address(_guildBank).transfer(_ethTributeAmount);
 
         // collect token tribute
         for(uint8 i = 0; i < membershipProposal.prospectiveMember.tokenTributeAddresses.length; i++) {
             address tokenAddress = membershipProposal.prospectiveMember.tokenTributeAddresses[i];
-            require(membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0, "TownHallLib::createMemberProposal - minimum token tribute no met"); // need non zero amounts
+            require(
+                membershipProposal.prospectiveMember.tokenTributeAmounts[i] > 0,
+                "TownHallLib::createMemberProposal - minimum token tribute no met"
+            ); // need non zero amounts
             // transfer tokens to GuildBank contract as tribute
             // approval must be granted prior to this step
             require(_guildBank.offerTokens(_propospectiveMemberAddress, tokenAddress, _tokenTributeAmounts[i]));
@@ -209,7 +212,10 @@ library TownHallLib {
     ) 
         public 
     {
-        require(proposalQueue.phase == ProposalPhase.Done, "TownHallLib::startProposalVote - current proposal not done"); // past voting and grace period
+        require(
+            proposalQueue.phase == ProposalPhase.Proposed,
+            "TownHallLib::startProposalVote - current proposal not done"
+        ); // past voting and grace period
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // create ballot
@@ -231,7 +237,10 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(proposalQueue.phase == ProposalPhase.Voting, "TownHallLib::voteOnCurrentProposal - curent proposal not in voting phase");
+        require(
+            proposalQueue.phase == ProposalPhase.Voting,
+            "TownHallLib::voteOnCurrentProposal - current proposal not in voting phase"
+        );
 
         currentProposal.ballot.vote(_toBallotItem);
     }
@@ -246,7 +255,10 @@ library TownHallLib {
         public 
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(proposalQueue.phase == ProposalPhase.Voting, "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase");
+        require(
+            proposalQueue.phase == ProposalPhase.Voting,
+            "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase"
+        );
 
         // require vote time completed
         require(currentProposal.ballot.voteEnded());
@@ -267,8 +279,7 @@ library TownHallLib {
         if(
             proposalQueue.phase == ProposalPhase.GracePeriod &&
             proposalQueue.proposals[proposalQueue.currentProposalIndex].ballot.getLeadingProposal() == currentProposal.ballot.voter[msg.sender].vote
-        ) 
-        {
+        ) {
             return true;
         }
         return false;
@@ -290,8 +301,14 @@ library TownHallLib {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
         // require grace period elapsed
-        require(proposalQueue.phase == ProposalPhase.GracePeriod, "TownHallLib::finishProposal - curent proposal not in grace phase");
-        require(now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS, "TownHallLib::finishProposal - grace phase not complete");
+        require(
+            proposalQueue.phase == ProposalPhase.GracePeriod,
+            "TownHallLib::finishProposal - curent proposal not in grace phase"
+        );
+        require(
+            now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS,
+            "TownHallLib::finishProposal - grace phase not complete"
+        );
 
         // get winner from ballot
         uint winningBallotItem = currentProposal.ballot.getWinningProposal();
@@ -326,8 +343,9 @@ library TownHallLib {
     ***************/
 
     // GET COMMON ATTRIBUTES
-    function getCurrentProposalCommonDetails(
-        ProposalQueue storage proposalQueue
+    function getProposalCommonDetails(
+        ProposalQueue storage proposalQueue,
+        uint index
     ) 
         public 
         view 
@@ -339,7 +357,7 @@ library TownHallLib {
             uint
         ) 
     {
-        Proposal memory proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal memory proposal = proposalQueue.proposals[index];
         return(
             proposal.proposer,
             proposal.proposalType,
@@ -354,20 +372,22 @@ library TownHallLib {
     }
 
     // GET PROJECT PROPOSAL SPECIFIC ATTRIBUTES
-    function getCurrentProposalProjectDetails(
-        ProposalQueue storage proposalQueue
+    function getProposalProjectDetails(
+        ProposalQueue storage proposalQueue,
+        uint index
     ) 
         public
         view 
         returns (bytes32, uint256) 
     {
-        Proposal memory proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal memory proposal = proposalQueue.proposals[index];
         return(proposal.prospectiveProject.ipfsHash, proposal.prospectiveProject.deposit);
     }
 
     // GET MEMBER PROPOSAL SPECIFIC ATTRIBUTES
-    function getCurrentProposalMemberDetails(
-        ProposalQueue storage proposalQueue
+    function getProposalMemberDetails(
+        ProposalQueue storage proposalQueue,
+        uint index
     ) 
         public 
         view 
@@ -378,7 +398,7 @@ library TownHallLib {
             uint256[]
         ) 
     {
-        Proposal memory proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal memory proposal = proposalQueue.proposals[index];
         return(
             proposal.prospectiveMember.prospectiveMemberAddress,
             proposal.prospectiveMember.ethTributeAmount,
@@ -387,8 +407,9 @@ library TownHallLib {
         );
     }
 
-    function getCurrentProposalBallot(
-        ProposalQueue storage proposalQueue
+    function getProposalBallot(
+        ProposalQueue storage proposalQueue,
+        uint index
     )
         public 
         view 
@@ -398,7 +419,7 @@ library TownHallLib {
             uint
         ) 
     {
-        Proposal storage proposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
+        Proposal storage proposal = proposalQueue.proposals[index];
         return (
             proposal.ballot.votingEndDate,
             proposal.ballot.minVotesRequired,

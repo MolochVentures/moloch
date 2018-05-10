@@ -1,8 +1,8 @@
 pragma solidity 0.4.23;
 
-import "zeppelin-solidity/contracts/ownership/Ownable.sol";
-import "zeppelin-solidity/contracts/math/SafeMath.sol";
-import "zeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 import "./VotingShares.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
@@ -62,27 +62,36 @@ contract Moloch is Ownable {
     ***************/
 
     constructor(
-        address[] _membersArray,
-        uint[] _sharesArray,
+        address _votingSharesAddress,
+        address _lootTokenAddress,
+        address _guildBankAddress,
         uint _PROPOSAL_VOTE_TIME_SECONDS,
         uint _GRACE_PERIOD_SECONDS,
         uint _MIN_PROPOSAL_CREATION_DEPOSIT_WEI
     ) 
         public 
     {
-        require(_membersArray.length == _sharesArray.length);
         require(_PROPOSAL_VOTE_TIME_SECONDS > 0);
         require(_GRACE_PERIOD_SECONDS > 0);
         require(_MIN_PROPOSAL_CREATION_DEPOSIT_WEI > 0);
 
-        votingShares = new VotingShares();
-        lootToken = new LootToken();
-        guildBank = new GuildBank(address(lootToken));
+        votingShares = VotingShares(_votingSharesAddress);
+        lootToken = LootToken(_lootTokenAddress);
+        guildBank = GuildBank(_guildBankAddress);
 
         PROPOSAL_VOTE_TIME_SECONDS = _PROPOSAL_VOTE_TIME_SECONDS;
         GRACE_PERIOD_SECONDS = _GRACE_PERIOD_SECONDS;
         MIN_PROPOSAL_CREATION_DEPOSIT_WEI = _MIN_PROPOSAL_CREATION_DEPOSIT_WEI;
+    }
 
+    function addFoundingMembers(
+        address[] _membersArray,
+        uint[] _sharesArray
+    ) 
+        public 
+        onlyOwner 
+    {
+        require(_membersArray.length == _sharesArray.length);
         for (uint i = 0; i < _membersArray.length; i++) {
 
             address founder = _membersArray[i];
@@ -188,10 +197,6 @@ contract Moloch is Ownable {
         );
     }
 
-    function getGuildBank() public view returns (GuildBank) {
-        return guildBank;
-    }
-
     function getMember(address memberAddress) public view returns (bool) {
         return members.getMember(memberAddress);
     }
@@ -204,7 +209,7 @@ contract Moloch is Ownable {
         return proposalQueue.getCurrentProposalIndex();
     }
 
-    function getCurrentProposalCommonDetails()
+    function getProposalCommonDetails(uint index)
         public 
         view
         returns (
@@ -215,10 +220,23 @@ contract Moloch is Ownable {
             uint
         ) 
     {
-        return proposalQueue.getCurrentProposalCommonDetails();
+        return proposalQueue.getProposalCommonDetails(index);
     }
 
-    function getCurrentProposalBallot()
+    function getProposalMemberDetails(uint index) 
+        public 
+        view 
+        returns (
+            address, 
+            uint256, 
+            address[], 
+            uint256[]
+        ) 
+    {
+        return proposalQueue.getProposalMemberDetails(index);
+    }
+
+    function getProposalBallot(uint index)
         public
         view
         returns (
@@ -227,6 +245,6 @@ contract Moloch is Ownable {
             uint
         )
     {
-        return proposalQueue.getCurrentProposalBallot();
+        return proposalQueue.getProposalBallot(index);
     }
 }
