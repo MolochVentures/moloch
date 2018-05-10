@@ -197,10 +197,6 @@ contract Moloch is Ownable {
         );
     }
 
-    function getGuildBank() public view returns (GuildBank) {
-        return guildBank;
-    }
-
     function getMember(address memberAddress) public view returns (bool) {
         return members.getMember(memberAddress);
     }
