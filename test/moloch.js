@@ -1,7 +1,7 @@
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const TestCoin = artifacts.require('./TestCoin')
-const VotingShares = artifacts.require('./VotingShares')
+const LootToken = artifacts.require('./LootToken')
 const foundersJSON = require('../migrations/founders.json')
 const configJSON = require('../migrations/config.json')
 
@@ -59,7 +59,7 @@ contract('donate', accounts => {
 
   before('deploy Moloch', async () => {
     moloch = await Moloch.deployed()
-    guildBankAddress = await moloch.getGuildBank.call()
+    guildBankAddress = await moloch.guildBank.call()
     guildBank = await GuildBank.at(guildBankAddress)
   })
 
@@ -96,8 +96,8 @@ contract('donate', accounts => {
   })
 })
 
-contract.only('member application', accounts => {
-  let moloch, guildBank, guildBankAddress, founders
+contract('member application', accounts => {
+  let moloch, guildBank, guildBankAddress, founders, lootTokenAddress, lootToken
   const PROSPECTIVE_MEMBERS = [accounts[9], accounts[8]]
   const VOTING_SHARES_REQUESTED = 1000
   const TRIBUTE = 10000
@@ -119,8 +119,10 @@ contract.only('member application', accounts => {
 
   before('deploy Moloch', async () => {
     moloch = await Moloch.deployed()
-    guildBankAddress = await moloch.getGuildBank.call()
+    guildBankAddress = await moloch.guildBank.call()
     guildBank = await GuildBank.at(guildBankAddress)
+    lootTokenAddress = await moloch.lootToken.call()
+    lootToken = await LootToken.at(lootTokenAddress)
     founders = foundersJSON
   })
 
@@ -302,7 +304,9 @@ contract.only('member application', accounts => {
         resolve()
       }, (configJSON.PROPOSAL_VOTE_TIME_SECONDS + 1) * 1000)
     })
-    await moloch.transitionProposalToGracePeriod()
+    await moloch.transitionProposalToGracePeriod({
+      from: founders.addresses[0]
+    })
     const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
     const proposal = await moloch.getProposalCommonDetails.call(
       currentProposalIndex
@@ -311,6 +315,43 @@ contract.only('member application', accounts => {
       proposal[3],
       PROPOSAL_PHASES.GracePeriod,
       `proposal phase did not transition to 'GracePeriod'`
+    )
+  })
+
+  it('finish member proposal', async () => {
+    await new Promise(resolve => {
+      setTimeout(() => {
+        resolve()
+      }, (configJSON.GRACE_PERIOD_SECONDS + 1) * 1000)
+    })
+    const startingLootTokenBalance = await lootToken.balanceOf(moloch.address)
+    await moloch.finishProposal({ from: founders.addresses[0] })
+    const currentProposalIndex = await moloch.getCurrentProposalIndex.call()
+    const proposal = await moloch.getProposalCommonDetails.call(
+      currentProposalIndex
+    )
+    assert.equal(
+      proposal[3],
+      PROPOSAL_PHASES.Done,
+      `proposal phase did not transition to 'Done'`
+    )
+
+    const member = await moloch.getMember(PROSPECTIVE_MEMBERS[0])
+    assert.equal(member, true, `member was not accepted after vote`)
+    const memberVotingShares = await moloch.getVotingShares(
+      PROSPECTIVE_MEMBERS[0]
+    )
+    assert.equal(
+      memberVotingShares,
+      VOTING_SHARES_REQUESTED,
+      `member was not granted voting shares`
+    )
+
+    const endingLootTokenBalance = await lootToken.balanceOf(moloch.address)
+    assert.equal(
+      endingLootTokenBalance.minus(startingLootTokenBalance),
+      VOTING_SHARES_REQUESTED,
+      `loot tokens were not created`
     )
   })
 })
