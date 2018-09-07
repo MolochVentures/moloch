@@ -12,24 +12,24 @@ contract GuildBank is Ownable {
     mapping (address => bool) knownTokenAddress;
     address[] public tokenAddresses;
 
-    constructor(address _lootokenAddress) public {
-        lootToken = LootToken(_lootokenAddress);
+    constructor(address lootokenAddress) public {
+        lootToken = LootToken(lootokenAddress);
     }
 
     function offerTokens(
-        address _holder, 
-        address _tokenContract, 
-        uint256 _amount
+        address holder, 
+        address tokenContract, 
+        uint256 amount
     ) 
         public 
         returns (bool)
     {
-        if (knownTokenAddress[_tokenContract] == false) {
-            knownTokenAddress[_tokenContract] = true;
-            tokenAddresses.push(_tokenContract);
+        if ((knownTokenAddress[tokenContract] == false) && (tokenContract != address(lootToken)) {
+            knownTokenAddress[tokenContract] = true;
+            tokenAddresses.push(tokenContract);
         }
-        ERC20 token = ERC20(_tokenContract);
-        return (token.transferFrom(_holder, this, _amount));
+        ERC20 token = ERC20(tokenContract);
+        return (token.transferFrom(holder, this, amount));
     }
 
     function convertLootTokensToLoot(

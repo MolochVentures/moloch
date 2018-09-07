@@ -41,14 +41,14 @@ contract VotingShares is Ownable {
      * @param _burner Who to burn tokens from.
      * @param _value The amount of token to be burned.
      */
-    function proxyBurn(address _burner, uint256 _value) public {
-        require(_value <= balances[_burner], "VotingShares::proxyBurn - value less than balance");
+    function proxyBurn(address burner, uint256 value) public onlyOwner {
+        require(value <= balances[burner], "VotingShares::proxyBurn - value less than balance");
         // no need to require value <= totalSupply, since that would imply the
         // sender's balance is greater than the totalSupply, which *should* be an assertion failure
 
-        balances[_burner] = balances[_burner].sub(_value);
-        totalSupply_ = totalSupply_.sub(_value);
-        emit Burn(_burner, _value);
+        balances[burner] = balances[burner].sub(value);
+        totalSupply_ = totalSupply_.sub(value);
+        emit Burn(burner, value);
     }
 
     /**
@@ -56,8 +56,8 @@ contract VotingShares is Ownable {
     * @param _owner The address to query the the balance of.
     * @return An uint256 representing the amount owned by the passed address.
     */
-    function balanceOf(address _owner) public view returns (uint256 balance) {
-        return balances[_owner];
+    function balanceOf(address owner) public view returns (uint256 balance) {
+        return balances[owner];
     }
 
     /**
@@ -66,11 +66,11 @@ contract VotingShares is Ownable {
      * @param _amount The amount of tokens to mint.
      * @return A boolean that indicates if the operation was successful.
      */
-    function mint(address _to, uint256 _amount) onlyOwner canMint public returns (address) {
-        totalSupply_ = totalSupply_.add(_amount);
-        balances[_to] = balances[_to].add(_amount);
-        emit Mint(_to, _amount);
-        emit Transfer(address(0), _to, _amount);
+    function mint(address to, uint256 amount) public onlyOwner canMint returns (address) {
+        totalSupply_ = totalSupply_.add(amount);
+        balances[to] = balances[to].add(amount);
+        emit Mint(to, amount);
+        emit Transfer(address(0), to, amount);
         return owner;
     }
 

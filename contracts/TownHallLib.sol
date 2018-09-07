@@ -76,11 +76,22 @@ library TownHallLib {
         uint256 deposit; // deposit given
     }
 
+    struct Voter {
+        bool voted;
+        uint vote;
+    }
+
     struct Proposal {
         // COMMON PROPOSAL ATTRIBUTES
         address proposer; // who proposed this
         ProposalTypes proposalType; // type
         uint256 votingSharesRequested; // num voting shares requested
+
+        // BALLOT ATTRIBUTES
+        uint votingEndDate;
+        uint minVotesRequired;
+        mapping (address => Voter) voter;
+        uint[] lineItems;
 
         // PROJECT SPECIFIC ATTRIBUTES
         ProspectiveProject prospectiveProject;
