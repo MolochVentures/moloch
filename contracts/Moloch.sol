@@ -1,141 +1,67 @@
 pragma solidity 0.4.24;
 
-import "./oz/Ownable.sol";
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
 import "./VotingShares.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
-import "./TownHallLib.sol";
 
-/**
-    @title Moloch DAO contract
-    @notice Overseer contract for all Moloch functions, including membership, application, voting, and exiting
-    @dev Owner should be a multisig wallet
- */
-contract Moloch is Ownable {
+contract Moloch {
     using SafeMath for uint256;
 
-    /*****
-    EVENTS
-    *****/
-    event MemberAccepted(
-        address indexed memberAddress
-    );
+    uint256 public periodDuration; // default = 86400 = 1 day in seconds
+    uint256 public votingPeriodLength; // default = 7 periods
+    uint256 public gracePeriodLength; // default = 7 periods
+    uint256 public proposalDeposit; // default = $5,000 worth of ETH (units in Wei)
 
-    event MemberExit(
-        address indexed memberAddress
-    );
-
-    event ProposalCreated(
-        address indexed proposer,
-        uint256 votingSharesRequested,
-        ProposalTypes proposalType,
-        uint indexInProposalQueue
-    );
-
-    event ProposalVotingStarted(
-        uint indexed indexInProposalQueue
-    );
-
-    event ProposalGracePeriodStarted(
-        uint indexed indexInProposalQueue
-    );
-
-    event ProposalCompleted(
-        uint indexed indexInProposalQueue,
-        uint winningBallotItem
-    );
-
-    /******************
-    CONTRACT REFERENCES
-    ******************/
-    VotingShares public votingShares; // token contract
-    GuildBank public guildBank; // store guild assets
-    LootToken public lootToken; // token contract
-
-    /******************
-    MEMBERSHIP TRACKING
-    ******************/
-    TownHallLib.Members members;
-    // TownHallLib.ProposalQueue proposalQueue; (get rid of libraries)
+    enum Vote {
+        Null,
+        Yes,
+        No
+    }
 
     struct Member {
-        bool approved;
-        address[] tokenTributeAddresses;
-        uint256[] tokenTributeAmounts;
-        uint256 ethAmount;
-        bool hasWithdrawn;
-    }
-
-    /******************
-    PROPOSAL DEFINITION
-    ******************/
-    enum ProposalTypes {
-        Membership,
-        Project
-    }
-
-    enum ProposalPhase {
-        Done,
-        Proposed,
-        Voting,
-        GracePeriod
-    }
-
-    struct ProspectiveMember {
-        address prospectiveMemberAddress;
-        uint256 ethTributeAmount; // eth tribute
-        address[] tokenTributeAddresses; // array of token tributes
-        uint256[] tokenTributeAmounts; // array of token tributes
-    }
-
-    struct ProspectiveProject {
-        bytes32 ipfsHash; // information about proposal
-        uint256 deposit; // deposit given
+        uint256 votingShares;
+        mapping (uint256 => Vote) votesByProposal;
     }
 
     struct Proposal {
-        // COMMON PROPOSAL ATTRIBUTES
-        address proposer; // who proposed this
-        ProposalTypes proposalType; // type
-        uint256 votingSharesRequested; // num voting shares requested
-
-        // VOTING
-        uint votingEndTimeSeconds;
-        uint minVotesRequired;
-        mapping (address => Member) voters;
-        uint[2] lineItemVotes; // array that holds num votes (i.e. voting shares) for each line item option (0 - no, 1 - yes)
-
-        // PROJECT SPECIFIC ATTRIBUTES
-        ProspectiveProject prospectiveProject;
-
-        // MEMBER SPECIFIC ATTRIBUTES
-        ProspectiveMember prospectiveMember;
-
-        // BOOKKEEPING
-        ProposalPhase phase;
-        VotingLib.Ballot ballot; // proposal voting ballot
-        uint gracePeriodStartTime; // when did grace period start
+        address proposer;
+        address applicant;
+        uint256 votingSharesRequested;
+        uint256 startingPeriod;
+        uint256 yesVotes;
+        uint256 noVotes;
+        address[] tributeTokenAddresses;
+        uint256[] tributeTokenAmounts;
+        bool processed;
+        mapping (address => Vote) votesByMember;
     }
 
-    Proposal[] proposalQueue;
-    uint256 currentProposalIndex;
+    struct Period {
+        uint256 startTime; // the starting unix timestamp in seconds
+        uint256 endTime; // the ending unix timestamp in seconds
+    }
 
-    /******************
-    CONFIG PARAMETERS
-    ******************/
-    uint PROPOSAL_VOTE_TIME_SECONDS;
-    uint GRACE_PERIOD_SECONDS;
-    uint PROPOSAL_CREATION_DEPOSIT_WEI;
+    mapping (address => Member) public members;
+    mapping(uint256 => Period) public periods;
+    Proposal[] public proposalQueue;
+
+    uint256 public currentPeriod = 0;
+    uint256 public currentProposal = 0;
+    uint256 public totalVotingShares = 0;
+
+    GuildBank public guildBank; // guild bank contract reference
+    LootToken public lootToken; // loot token contract reference
+
     uint8 constant QUORUM_NUMERATOR = 1;
     uint8 constant QUORUM_DENOMINATOR = 2;
 
     /********
     MODIFIERS
     ********/
-    modifier onlyApprovedMember {
-        require(members[msg.sender].approved == true, "Moloch::onlyApprovedMember - not a member");
+    modifier onlyMember {
+        require(members[msg.sender].votingShares > 0, "Moloch::onlyMember - not a member");
         _;
     }
 
@@ -144,407 +70,184 @@ contract Moloch is Ownable {
     ***************/
 
     constructor(
-        address votingSharesAddress,
         address lootTokenAddress,
         address guildBankAddress,
-        address[] foundingMemberAddresses,
-        uint[] votingSharesToGrant, // corresponds with foundingMembersArray
-        uint _PROPOSAL_VOTE_TIME_SECONDS,
-        uint _GRACE_PERIOD_SECONDS,
-        uint _PROPOSAL_CREATION_DEPOSIT_WEI
+        address[] foundersAddresses,
+        uint256[] foundersVotingShares,
+        uint256 _periodDuration,
+        uint256 _votingPeriodLength,
+        uint256 _gracePeriodLength,
+        uint _proposalDeposit
     )
         public
     {
-        require(
-            _PROPOSAL_VOTE_TIME_SECONDS > 0,
-            "Moloch::consutructor - All config parameters are required and must be greater than zero."
-        );
-        require(_GRACE_PERIOD_SECONDS > 0);
-        require(_PROPOSAL_CREATION_DEPOSIT_WEI > 0);
-
-        votingShares = VotingShares(votingSharesAddress);
         lootToken = LootToken(lootTokenAddress);
         guildBank = GuildBank(guildBankAddress);
 
-        PROPOSAL_VOTE_TIME_SECONDS = _PROPOSAL_VOTE_TIME_SECONDS;
-        GRACE_PERIOD_SECONDS = _GRACE_PERIOD_SECONDS;
-        PROPOSAL_CREATION_DEPOSIT_WEI = _PROPOSAL_CREATION_DEPOSIT_WEI;
+        periodDuration = _periodDuration;
+        votingPeriodLength = _votingPeriodLength;
+        gracePeriodLength = _gracePeriodLength;
+        proposalDeposit = _proposalDeposit;
 
-        _addFoundingMembers(foundingMemberAddresses, votingSharesToGrant);
+        uint256 startTime = now;
+        periods[currentPeriod].startTime = startTime;
+        periods[currentPeriod].endTime = startTime.add(periodDuration);
+
+        _addFoundingMembers(foundersAddresses, foundersVotingShares);
     }
 
     function _addFoundingMembers(
         address[] membersArray,
-        uint[] sharesArray
+        uint256[] sharesArray
     )
         internal
     {
         require(membersArray.length == sharesArray.length, "Moloch::_addFoundingMembers - Provided arrays should match up.");
         for (uint i = 0; i < membersArray.length; i++) {
-
             address founder = membersArray[i];
-            uint founderShares = sharesArray[i];
+            uint256 shares = sharesArray[i]
 
-            members[founder].approved = true;
-            votingShares.mint(founder, founderShares);
-            lootToken.mint(guildBank, founderShares);
+            members[founder] = Member(shares);
+            totalVotingShares = totalVotingShares.add(shares);
+            lootToken.mint(this, shares);
+        }
+    }
 
-            emit MemberAccepted(founder);
+    function updatePeriod() public {
+        while (now >= periods[currentPeriod].endTime) {
+            Period memory prevPeriod = periods[currentPeriod];
+            currentPeriod += 1;
+            periods[currentPeriod].startTime = prevPeriod.endTime;
+            periods[currentPeriod].endTime = prevPeriod.endTime.add(periodDuration);
         }
     }
 
     /*****************
     PROPOSAL FUNCTIONS
     *****************/
-    function createMemberProposal(
-        address propospectiveMemberAddress,
-        address[] tokenTributeAddresses,
-        uint256[] tokenTributeAmounts,
+
+    function submitProposal(
+        address applicant,
+        address[] tributeTokenAddresses,
+        uint256[] tributeTokenAmounts,
         uint256 votingSharesRequested
     )
         public
         payable
-        onlyApprovedMember
+        onlyMember
     {
-        // require tribute
-        require(
-            (msg.value > 0) || (tokenTributeAddresses.length > 0),
-            "Moloch::createMemberProposal - minimum tribute not met"
-        );
+        updatePeriod();
 
-        // set up proposal
-        Proposal memory membershipProposal;
+        require(members[applicant].votingShares == 0, "Moloch::submitProposal - applicant is already a member");
+        require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
 
-        // from inputs
-        membershipProposal.votingSharesRequested = votingSharesRequested;
-        membershipProposal.prospectiveMember.prospectiveMemberAddress = propospectiveMemberAddress;
-        membershipProposal.prospectiveMember.tokenTributeAddresses = tokenTributeAddresses;
-        membershipProposal.prospectiveMember.tokenTributeAmounts = tokenTributeAmounts;
-
-        // attributes
-        membershipProposal.proposer = msg.sender;
-        membershipProposal.proposalType = ProposalTypes.Membership;
-        membershipProposal.phase = ProposalPhase.Proposed;
-
-        // transfer tribute to guild bank
-        membershipProposal.prospectiveMember.ethTributeAmount = msg.value;
-        guildBank.transfer(msg.value);
-
-        // collect token tribute
-        for(uint8 i = 0; i < tokenTributeAddresses.length; i++) {
-            address tokenAddress = tokenTributeAddresses[i];
-            require(
-                tokenTributeAmounts[i] > 0,
-                "Moloch::createMemberProposal - minimum token tribute no met"
-            ); // need non zero amounts
-            // transfer tokens to GuildBank contract as tribute
-            // approval must be granted prior to this step
-            require(
-                guildBank.offerTokens(propospectiveMemberAddress, tokenAddress, tokenTributeAmounts[i]),
-                "Moloch::createMemberProposal - Token offering did not complete successfully.");
+        for (uint8 i=0; i < tributeTokenAddresses.length; i++) {
+            ERC20 token = ERC20(tributeTokenAddresses[i]);
+            uint256 amount = tributeTokenAmounts[i];
+            require(amount > 0, "Moloch::submitProposal - token tribute amount is 0");
+            require(token.transferFrom(applicant, this, amount), "Moloch::submitProposal - tribute token transfer failed");
         }
 
-        // push to end of proposal queue
-        proposalQueue.push(membershipProposal);
+        uint256 startingPeriod = currentPeriod + proposalQueue.length - currentProposal + 1;
 
-        emit ProposalCreated(
-            msg.sender,
-            votingSharesRequested,
-            ProposalTypes.Membership,
-            proposalQueue.length - 1 // last array item index
-        );
+        Proposal proposal = Proposal(msg.sender, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
+        proposalQueue.push(proposal);
     }
 
-    function createProjectProposal(
-        bytes32 ipfsHash,
-        uint256 votingSharesRequested
-    )
-        public
-        payable
-        onlyApprovedMember
-    {
-        // require min deposit
-        require(
-            msg.value == PROPOSAL_CREATION_DEPOSIT_WEI,
-            "Moloch::createProjectProposal - ETH deposit no met"
-        );
+    function submitVote(uint256 proposalIndex, uint8 vote) public onlyMember {
+        updatePeriod();
 
-        // set up proposal
-        Proposal memory projectProposal;
+        Proposal proposal = proposalQueue[proposalIndex];
+        require(proposal.startingPeriod > 0, "Moloch::submitVote - proposal does not exist");
+        require(currentPeriod.sub(proposal.startingPeriod) < votingPeriodLength, "Moloch::submitVote - proposal voting period has expired");
+        require(proposal.votesByMember[msg.sender] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
+        require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
+        proposal.votesByMember[msg.sender] = vote;
 
-        // from inputs
-        projectProposal.votingSharesRequested = votingSharesRequested;
-        projectProposal.prospectiveProject.ipfsHash = ipfsHash;
-        projectProposal.prospectiveProject.deposit = msg.value;
+        Member member = members[msg.sender];
+        member.votesByProposal[proposalIndex] = vote;
 
-        // attributes
-        projectProposal.proposer = msg.sender;
-        projectProposal.proposalType = ProposalTypes.Project;
-        projectProposal.phase = ProposalPhase.Proposed;
-
-        // push to end of proposal queue
-        proposalQueue.push(projectProposal);
-
-        emit ProposalCreated(msg.sender, votingSharesRequested, ProposalTypes.Project, proposalQueue.length);
+        if (vote == Vote.Yes) {
+            proposal.yesVotes.add(member.votingShares);
+        } else if (vote == Vote.No) {
+            proposal.noVotes.add(member.votingShares);
+        }
     }
 
-    function startProposalVote() public {
-        Proposal storage currentProposal = proposalQueue[currentProposalIndex];
-        require(
-            currentProposal.phase == ProposalPhase.Proposed,
-            "TownHallLib::startProposalVote - current proposal not done"
-        ); // past voting and grace period
+    function processProposal(uint256 proposalIndex) public {
+        updatePeriod();
 
-        // create ballot
-        currentProposal.votingEndTimeSeconds = block.timestamp + PROPOSAL_VOTE_TIME_SECONDS;
-        // lock in voting quorum now, based on total supply of voting shares
-        uint256 totalVotingShares = votingShares.totalSupply();
-        currentProposal.minVotesRequired = (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR);
+        Proposal proposal = proposalQueue[proposalIndex];
+        require(proposal.startingPeriod > 0, "Moloch::processProposal - proposal does not exist");
+        require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriod.length), "Moloch::processProposal - proposal is not ready to be processed");
+        require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
 
-        // change phase
-        proposalQueue.phase = ProposalPhase.Voting;
+        proposal.processed = true;
 
-        emit ProposalVotingStarted(currentProposalIndex);
-    }
+        if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
+            // mint new voting shares
+            members[proposal.applicant] = Member(proposal.votingSharesRequested);
+            totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
+            lootToken.mint(this, proposal.votingSharesRequested);
 
-    function voteOnCurrentProposal(uint8 lineItem) public {
-        Proposal storage currentProposal = proposalQueue[currentProposalIndex];
-
-        require(!voteEnded(currentProposal), "VotingLib::vote - voting ended");
-        require(currentProposal.voters[msg.sender].voted == false, "VotingLib::vote - voter already voted");
-        require(lineItem < currentProposal.lineItemVotes.length, "VotingLib::vote - illegal lineItem");
-
-        // TODO: I dont think we need this, if there's 0 votes it wouldn't do anything
-        require(votingShares.balanceOf(msg.sender) > 0, "VotingLib::vote - voter has no votes");
-
-        currentProposal.voters[msg.sender].voted = true;
-        currentProposal.voters[msg.sender].vote = lineItem;
-        uint numOfVotingShares = votingShares.balanceOf(msg.sender);
-
-        currentProposal.lineItemVotes[lineItem] += numOfVotingShares;
-    }
-
-    function transitionProposalToGracePeriod() public {
-        Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
-        require(
-            currentProposal.phase == ProposalPhase.Voting,
-            "TownHallLib::transitionProposalToGracePeriod - curent proposal not in voting phase"
-        );
-
-        // require vote time completed
-        require(voteEnded(currentProposal), "Moloch::transitionProposalToGracePeriod - vote period not ended");
-
-        // transition state to grace period
-        currentProposal.phase = ProposalPhase.GracePeriod;
-        currentProposal.gracePeriodStartTime = now;
-
-        emit ProposalGracePeriodStarted(currentProposalIndex);
-    }
-
-    function finishProposal() public {
-        Proposal storage currentProposal = proposalQueue[currentProposalIndex];
-
-        // require grace period elapsed
-        require(
-            currentProposal.phase == ProposalPhase.GracePeriod,
-            "TownHallLib::finishProposal - curent proposal not in grace phase"
-        );
-        require(
-            now > currentProposal.gracePeriodStartTime + GRACE_PERIOD_SECONDS,
-            "TownHallLib::finishProposal - grace phase not complete"
-        );
-
-        // get winner from ballot
-        uint winningBallotItem = getWinningProposal(currentProposal);
-
-        if (winningBallotItem == WINNING_PROPOSAL_INDEX) {
-            if (currentProposal.proposalType == ProposalTypes.Membership) {
-                // add member here
-                _acceptMemberProposal(members, votingShares, lootToken, currentProposal);
-            } else if (currentProposal.proposalType == ProposalTypes.Project) {
-                // accept proposal
-                _acceptProjectProposal(votingShares, lootToken, currentProposal);
+            // deposit all tribute tokens to guild bank
+            for (uint8 i=0; i < proposal.tributeTokenAddressess.length; i++) {
+                require(depositTributeTokens(this, tributeTokenAddresses[i], tributeTokenAmounts[i]);
             }
-        } else if (winningBallotItem == LOSING_PROPOSAL_INDEX) {
-            // proposal loses, transfer eth back to proposer
-            if (currentProposal.proposalType == ProposalTypes.Project) {
-                currentProposal.proposer.transfer(currentProposal.prospectiveProject.deposit);
+        } else {
+            // return all tokens
+            for (uint8 i=0; i < proposal.tributeTokenAddressess.length; i++) {
+                ERC20 token = ERC20(tributeTokenAddresses[i]);
+                require(token.transfer(proposal.applicant, tributeTokenAmounts[i]));
             }
         }
 
-        emit ProposalCompleted(currentProposalIndex, winningBallotItem);
-
-        // close out and move on to next proposal
-        proposalQueue.phase = ProposalPhase.Done;
-        proposalQueue.currentProposalIndex++;
+        proposal.proposer.transfer(proposalDeposit);
     }
 
-    /***************
-    BALLOT FUNCTIONS
-    ***************/
-    function voteEnded(Proposal memory proposal) public view returns (bool) {
-        return block.timestamp > proposal.votingEndTimeSeconds;
-    }
+    function collectLootTokens(address treasury, uint256 lootAmount) public onlyMember {
+        updatePeriod();
 
-    /**************
-    GUILD FUNCTIONS
-    **************/
-    /// @notice Cash out voting shares for loot tokens
-    /// @dev Voting shares are burned, loot tokens are transferred
-    /// from this contract to the member
-    function exitMoloch() public onlyApprovedMember {
-        require(members.approved[msg.sender] == true);
-        require(members.hasWithdrawn[msg.sender] == false);
-        require(proposalQueue.isVotingWinner());
+        Member member = members[msg.sender];
 
-        members[msg.sender].hasWithdrawn = true;
-        members[msg.sender].approved = false;
+        require(member.votingShares >= lootAmount, "Moloch::collectLoot - insufficient voting shares");
 
-        uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
-        require(lootToken.transfer(msg.sender, numberOfVotingShares), "Moloch:exitMoloch - failed to transfer lootToken");
+        member.votingShares = member.votingShares.sub(lootAmount);
+        totalVotingShares = totalVotingShares.sub(lootAmount);
 
-        votingShares.proxyBurn(msg.sender, numberOfVotingShares);
+        require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
-        guildBank.convertLootTokensToLoot(msg.sender, members.tokenTributeAddresses[msg.sender]);
+        uint256 oldestActiveProposal = (currentProposal.sub(votingPeriodLength)).sub(gracePeriodLength);
+        for (uint256 i=currentProposal; i > oldestActiveProposal; i--) {
+            if (isActiveProposal(i)) {
+                Proposal proposal = proposalQueue[i];
+                Vote vote = member.votesByProposal[i];
+                if (vote == Vote.Null) {
+                    // member didn't vote on this proposal, skip to the next one
+                    continue;
+                }
 
-        emit MemberExit(msg.sender);
-    }
+                // member did vote, revert their votes
+                if (vote == Vote.Yes) {
+                    proposal.yesVotes = proposal.yesVotes.sub(lootAmount);
+                } else if (vote == Vote.No) {
+                    proposal.noVotes = proposal.noVotes.sub(lootAmount);
+                }
 
-    function withdraw() public {
-        require(members.approved[msg.sender] == false);
-        require(members.hasWithdrawn[msg.sender] == false);
-        members.hasWithdrawn[msg.sender] = true;
-        guildBank.withdraw(
-            msg.sender,
-            members.tokenTributeAddresses[msg.sender],
-            members.tokenTributeAmounts[msg.sender],
-            members.ethAmount[msg.sender]
-        );
-    }
-
-    function getMember(address memberAddress) public view returns (bool) {
-        return members.getMember(memberAddress);
-    }
-
-    function getVotingShares(address memberAddress) public view returns (uint) {
-        return votingShares.balanceOf(memberAddress);
-    }
-
-    function getCurrentProposalIndex() public view returns (uint) {
-        return proposalQueue.getCurrentProposalIndex();
-    }
-
-    function getProposalCommonDetails(uint index)
-        public
-        view
-        returns (
-            address,
-            TownHallLib.ProposalTypes,
-            uint256,
-            TownHallLib.ProposalPhase,
-            uint
-        )
-    {
-        return proposalQueue.getProposalCommonDetails(index);
-    }
-
-    function getProposalMemberDetails(uint index)
-        public
-        view
-        returns (
-            address,
-            uint256,
-            address[],
-            uint256[]
-        )
-    {
-        return proposalQueue.getProposalMemberDetails(index);
-    }
-
-    function getProposalBallot(uint index)
-        public
-        view
-        returns (
-            uint,
-            uint,
-            uint
-        )
-    {
-        return proposalQueue.getProposalBallot(index);
-    }
-
-    /*****************
-    INTERNAL FUNCTIONS
-    *****************/
-
-    // TRANSFER TRIBUTES TO GUILD BANK
-    /*
-    function _collectTributes(
-        uint256 _ethTributeAmount,
-        address[] _tokenTributeAddresses,
-        uint256[] _tokenTributeAmounts
-    )
-        internal
-    {
-        // collect eth tribute
-        if (_ethTributeAmount > 0) {
-            address(guildBank).transfer(_ethTributeAmount);
+                // if the member is collecting 100% of their loot, erase these vote completely
+                if (lootAmount == member.votingShares) {
+                    proposal.votesByMember[msg.sender] = Vote.Null;
+                    member.votesByProposal[i] = Vote.Null;
+                }
+            } else {
+                // reached inactive proposal, exit the loop
+                break;
+            }
         }
 
-        // collect token tribute
-        for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
-            ERC20 erc20 = ERC20(_tokenTributeAddresses[i]);
-            require(erc20.approve(address(guildBank), _tokenTributeAmounts[i]), "TownHallLib::_collectTributes - could not collect token tribute");
+        // returns true if proposal is either in voting or grace period
+        function isActiveProposal(uint256 proposalIndex) internal returns (bool) {
+            return (currentPeriod.sub(proposalQueue[proposalIndex].startingPeriod) < votingPeriodLength.add(gracePeriodLength));
         }
-    }
-    */
-
-    // DILUTE GUILD AND GRANT VOTING SHARES (MINT LOOT TOKENS)
-    function _grantVotingShares(
-        address to,
-        uint256 numVotingShares
-    )
-        internal
-    {
-        // dilute and grant
-        votingShares.mint(to, numVotingShares);
-
-        // mint loot tokens 1:1 and keep them in moloch contract for exit
-        lootToken.mint(address(this), numVotingShares);
-    }
-
-    // ACCEPT MEMBER
-    function _acceptMemberProposal(Proposal memberProposal)
-        internal
-    {
-        // add to moloch members
-        address newMemberAddress = memberProposal.prospectiveMember.prospectiveMemberAddress;
-        members.approved[newMemberAddress] = true;
-
-        // grant shares to new member
-        _grantVotingShares(
-            votingShares,
-            lootToken,
-            newMemberAddress,
-            memberProposal.votingSharesRequested
-        );
-    }
-
-    // ACCEPT PROJECT
-    function _acceptProjectProposal(
-        Proposal projectProposal
-    )
-        internal
-    {
-        // grant shares to proposer
-        _grantVotingShares(
-            votingShares,
-            lootToken,
-            projectProposal.proposer,
-            projectProposal.votingSharesRequested
-        );
-
-        // transfer deposit back to proposer
-        projectProposal.proposer.transfer(projectProposal.prospectiveProject.deposit);
     }
 }

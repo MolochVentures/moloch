@@ -9,71 +9,40 @@ contract GuildBank is Ownable {
     using SafeMath for uint256;
 
     LootToken public lootToken;
-    mapping (address => bool) knownTokenAddress;
+    mapping (address => bool) knownTokens;
     address[] public tokenAddresses;
 
     constructor(address lootokenAddress) public {
-        lootToken = LootToken(lootokenAddress);
+        lootToken = LootToken(lootTokenAddress);
     }
 
-    function offerTokens(
-        address holder,
-        address tokenContract,
-        uint256 amount
-    )
-        public
-        returns (bool)
-    {
-        if ((knownTokenAddress[tokenContract] == false) && (tokenContract != address(lootToken))) {
-            knownTokenAddress[tokenContract] = true;
-            tokenAddresses.push(tokenContract);
+    function depositTributeTokens(
+        address sender,
+        address tokenAddress,
+        uint256 tokenAmount
+    ) public returns (bool) {
+        if ((knownTokens[tokenAddress] == false) && (tokenAddress != address(lootToken))) {
+            knownTokens[tokenAddress] = true;
+            tokenAddresses.push(tokenAddress);
         }
-        ERC20 token = ERC20(tokenContract);
-        return (token.transferFrom(holder, this, amount));
+        ERC20 token = ERC20(tokenAddress);
+        return (token.transferFrom(sender, this, amount));
     }
 
-    function convertLootTokensToLoot(
-        address memberAddress,
-        address[] tokenTributeAddresses
-    )
-        public
-    {
-        uint256 myLootTokens = lootToken.balanceOf(memberAddress);
+    function redeemLootTokens(
+        address receiver,
+        uint256 lootAmount
+    ) public {
         uint256 totalLootTokens = lootToken.totalSupply();
 
-        // cash out tokens
-        for (uint8 i = 0; i < tokenTributeAddresses.length; i++) {
-            ERC20 token = ERC20(tokenTributeAddresses[i]);
-            uint256 guildBankTokens = token.balanceOf(address(this));
-            uint256 amtToTransfer = (guildBankTokens.mul(myLootTokens)).div(totalLootTokens);
-            require(token.transfer(memberAddress, amtToTransfer), "GuildBank::convertLootTokensToLoot - failed to transfer to member");
+        // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
+        lootToken.proxyBurn(msg.sender, lootAmount);
+
+        // transfer proportional share of all tokens held by the guild bank
+        for (uint8 i = 0; i < tokenAddresses.length; i++) {
+            ERC20 token = ERC20(tokenAddresses[i]);
+            uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens));
+            require(token.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
         }
-        // cash out ETH
-        uint256 amtEthToTransfer = (address(this).balance.mul(myLootTokens)).div(totalLootTokens);
-        memberAddress.transfer(amtEthToTransfer);
-        // burn loot tokens
-        lootToken.proxyBurn(memberAddress, myLootTokens);
     }
-
-    function withdraw(
-        address _address,
-        address[] _tokenTributeAddresses,
-        uint[] _tokenTributeAmounts,
-        uint _ethAmount
-    )
-        onlyOwner
-        public
-    {
-        for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
-            ERC20 token = ERC20(_tokenTributeAddresses[i]);
-            require(token.transfer(_address, _tokenTributeAmounts[i]), "GuildBank::withdraw - failed to transfer to member");
-        }
-        _address.transfer(_ethAmount);
-    }
-
-    function getTokenAddresses() view public returns (address[]) {
-        return tokenAddresses;
-    }
-
-    function() public payable {}
 }
