@@ -1,9 +1,9 @@
-pragma solidity 0.4.23;
+pragma solidity 0.4.24;
 
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
-import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./oz/Ownable.sol";
+import "./oz/ERC20.sol";
+import "./oz/SafeMath.sol";
 import "./LootToken.sol";
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 
 contract GuildBank is Ownable {
     using SafeMath for uint256;
@@ -17,14 +17,14 @@ contract GuildBank is Ownable {
     }
 
     function offerTokens(
-        address holder, 
-        address tokenContract, 
+        address holder,
+        address tokenContract,
         uint256 amount
-    ) 
-        public 
+    )
+        public
         returns (bool)
     {
-        if ((knownTokenAddress[tokenContract] == false) && (tokenContract != address(lootToken)) {
+        if ((knownTokenAddress[tokenContract] == false) && (tokenContract != address(lootToken))) {
             knownTokenAddress[tokenContract] = true;
             tokenAddresses.push(tokenContract);
         }
@@ -33,10 +33,10 @@ contract GuildBank is Ownable {
     }
 
     function convertLootTokensToLoot(
-        address memberAddress, 
+        address memberAddress,
         address[] tokenTributeAddresses
-    )    
-        public 
+    )
+        public
     {
         uint256 myLootTokens = lootToken.balanceOf(memberAddress);
         uint256 totalLootTokens = lootToken.totalSupply();
@@ -54,15 +54,15 @@ contract GuildBank is Ownable {
         // burn loot tokens
         lootToken.proxyBurn(memberAddress, myLootTokens);
     }
-    
+
     function withdraw(
-        address _address, 
-        address[] _tokenTributeAddresses, 
-        uint[] _tokenTributeAmounts, 
+        address _address,
+        address[] _tokenTributeAddresses,
+        uint[] _tokenTributeAmounts,
         uint _ethAmount
-    ) 
-        onlyOwner 
-        public 
+    )
+        onlyOwner
+        public
     {
         for (uint8 i = 0; i < _tokenTributeAddresses.length; i++) {
             ERC20 token = ERC20(_tokenTributeAddresses[i]);

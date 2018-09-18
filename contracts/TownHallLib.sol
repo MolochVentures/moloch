@@ -1,12 +1,12 @@
-pragma solidity 0.4.23;
+pragma solidity 0.4.24;
 
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
+import "./oz/Ownable.sol";
+import "./oz/ERC20.sol";
 import "./VotingLib.sol";
 import "./VotingShares.sol";
 import "./Moloch.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
-import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
 
 library TownHallLib {
     using VotingLib for VotingLib.Ballot;
@@ -40,7 +40,7 @@ library TownHallLib {
     uint constant LOSING_PROPOSAL_INDEX = 0;
     uint constant WINNING_PROPOSAL_INDEX = 1;
 
-    struct Members { 
+    struct Members {
         mapping (address => bool) approved;
         mapping (address => address[]) tokenTributeAddresses;
         mapping (address => uint256[]) tokenTributeAmounts;
@@ -61,11 +61,11 @@ library TownHallLib {
         Done,
         Proposed,
         Voting,
-        GracePeriod        
+        GracePeriod
     }
 
     struct ProspectiveMember {
-        address prospectiveMemberAddress; 
+        address prospectiveMemberAddress;
         uint256 ethTributeAmount; // eth tribute
         address[] tokenTributeAddresses; // array of token tributes
         uint256[] tokenTributeAmounts; // array of token tributes
@@ -127,7 +127,7 @@ library TownHallLib {
         ProposalQueue storage proposalQueue,
         address _propospectiveMemberAddress,
         uint256 _ethTributeAmount,
-        address[] _tokenTributeAddresses, 
+        address[] _tokenTributeAddresses,
         uint256[] _tokenTributeAmounts,
         uint256 _votingSharesRequested,
         GuildBank _guildBank
@@ -220,8 +220,8 @@ library TownHallLib {
         ProposalQueue storage proposalQueue,
         VotingShares votingShares,
         uint PROPOSAL_VOTE_TIME_SECONDS
-    ) 
-        public 
+    )
+        public
     {
         require(
             proposalQueue.phase == ProposalPhase.Proposed,
@@ -236,7 +236,7 @@ library TownHallLib {
 
         // change phase
         proposalQueue.phase = ProposalPhase.Voting;
-        
+
         emit ProposalVotingStarted(proposalQueue.currentProposalIndex);
     }
 
@@ -244,8 +244,8 @@ library TownHallLib {
     function voteOnCurrentProposal(
         ProposalQueue storage proposalQueue,
         uint8 _toBallotItem
-    ) 
-        public 
+    )
+        public
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
         require(
@@ -263,7 +263,7 @@ library TownHallLib {
     function transitionProposalToGracePeriod(
         ProposalQueue storage proposalQueue
     )
-        public 
+        public
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
         require(
@@ -283,8 +283,8 @@ library TownHallLib {
 
     function isVotingWinner(
         ProposalQueue storage proposalQueue
-    ) 
-        public returns (bool) 
+    )
+        public returns (bool)
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
         if(
@@ -306,8 +306,8 @@ library TownHallLib {
         VotingShares votingShares,
         LootToken lootToken,
         uint GRACE_PERIOD_SECONDS
-    ) 
-        public 
+    )
+        public
     {
         Proposal storage currentProposal = proposalQueue.proposals[proposalQueue.currentProposalIndex];
 
@@ -338,7 +338,7 @@ library TownHallLib {
                 address(0).transfer(currentProposal.prospectiveProject.deposit);
             }
             else if (currentProposal.proposalType == ProposalTypes.Membership) {
-                
+
             }
         }
 
@@ -357,16 +357,16 @@ library TownHallLib {
     function getProposalCommonDetails(
         ProposalQueue storage proposalQueue,
         uint index
-    ) 
-        public 
-        view 
+    )
+        public
+        view
         returns (
             address,
             ProposalTypes,
             uint256,
             ProposalPhase,
             uint
-        ) 
+        )
     {
         Proposal memory proposal = proposalQueue.proposals[index];
         return(
@@ -386,10 +386,10 @@ library TownHallLib {
     function getProposalProjectDetails(
         ProposalQueue storage proposalQueue,
         uint index
-    ) 
+    )
         public
-        view 
-        returns (bytes32, uint256) 
+        view
+        returns (bytes32, uint256)
     {
         Proposal memory proposal = proposalQueue.proposals[index];
         return(proposal.prospectiveProject.ipfsHash, proposal.prospectiveProject.deposit);
@@ -399,15 +399,15 @@ library TownHallLib {
     function getProposalMemberDetails(
         ProposalQueue storage proposalQueue,
         uint index
-    ) 
-        public 
-        view 
+    )
+        public
+        view
         returns (
-            address, 
-            uint256, 
-            address[], 
+            address,
+            uint256,
+            address[],
             uint256[]
-        ) 
+        )
     {
         Proposal memory proposal = proposalQueue.proposals[index];
         return(
@@ -422,13 +422,13 @@ library TownHallLib {
         ProposalQueue storage proposalQueue,
         uint index
     )
-        public 
-        view 
+        public
+        view
         returns (
             uint,
             uint,
             uint
-        ) 
+        )
     {
         Proposal storage proposal = proposalQueue.proposals[index];
         return (
@@ -452,7 +452,7 @@ library TownHallLib {
         uint256 _ethTributeAmount,
         address[] _tokenTributeAddresses,
         uint256[] _tokenTributeAmounts
-    ) 
+    )
         internal
     {
         // collect eth tribute
@@ -473,15 +473,15 @@ library TownHallLib {
         LootToken lootToken,
         address _to,
         uint256 _numVotingShares
-    ) 
-        internal 
+    )
+        internal
     {
-        // dilute and grant 
+        // dilute and grant
         votingShares.mint(_to, _numVotingShares);
 
         // mint loot tokens 1:1 and keep them in moloch contract for exit
         lootToken.mint(address(this), _numVotingShares);
-    } 
+    }
 
     // ACCEPT MEMBER
     function _acceptMemberProposal(
@@ -489,8 +489,8 @@ library TownHallLib {
         VotingShares votingShares,
         LootToken lootToken,
         Proposal memberProposal
-    ) 
-        internal 
+    )
+        internal
     {
         // add to moloch members
         address newMemberAddress = memberProposal.prospectiveMember.prospectiveMemberAddress;
@@ -510,8 +510,8 @@ library TownHallLib {
         VotingShares votingShares,
         LootToken lootToken,
         Proposal projectProposal
-    ) 
-        internal 
+    )
+        internal
     {
         // grant shares to proposer
         _grantVotingShares(

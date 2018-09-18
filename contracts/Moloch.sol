@@ -1,8 +1,8 @@
-pragma solidity 0.4.23;
+pragma solidity 0.4.24;
 
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
-import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
+import "./oz/Ownable.sol";
+import "./oz/SafeMath.sol";
+import "./oz/ERC20.sol";
 import "./VotingShares.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
@@ -27,6 +27,26 @@ contract Moloch is Ownable {
         address indexed memberAddress
     );
 
+    event ProposalCreated(
+        address indexed proposer,
+        uint256 votingSharesRequested,
+        ProposalTypes proposalType,
+        uint indexInProposalQueue
+    );
+
+    event ProposalVotingStarted(
+        uint indexed indexInProposalQueue
+    );
+
+    event ProposalGracePeriodStarted(
+        uint indexed indexInProposalQueue
+    );
+
+    event ProposalCompleted(
+        uint indexed indexInProposalQueue,
+        uint winningBallotItem
+    );
+
     /******************
     CONTRACT REFERENCES
     ******************/
@@ -38,7 +58,7 @@ contract Moloch is Ownable {
     MEMBERSHIP TRACKING
     ******************/
     TownHallLib.Members members;
-    TownHallLib.ProposalQueue proposalQueue;
+    // TownHallLib.ProposalQueue proposalQueue; (get rid of libraries)
 
     struct Member {
         bool approved;
@@ -60,11 +80,11 @@ contract Moloch is Ownable {
         Done,
         Proposed,
         Voting,
-        GracePeriod        
+        GracePeriod
     }
 
     struct ProspectiveMember {
-        address prospectiveMemberAddress; 
+        address prospectiveMemberAddress;
         uint256 ethTributeAmount; // eth tribute
         address[] tokenTributeAddresses; // array of token tributes
         uint256[] tokenTributeAmounts; // array of token tributes
@@ -80,11 +100,11 @@ contract Moloch is Ownable {
         address proposer; // who proposed this
         ProposalTypes proposalType; // type
         uint256 votingSharesRequested; // num voting shares requested
-        
+
         // VOTING
         uint votingEndTimeSeconds;
         uint minVotesRequired;
-        mapping (address => Voter) voters;
+        mapping (address => Member) voters;
         uint[2] lineItemVotes; // array that holds num votes (i.e. voting shares) for each line item option (0 - no, 1 - yes)
 
         // PROJECT SPECIFIC ATTRIBUTES
@@ -98,6 +118,7 @@ contract Moloch is Ownable {
         VotingLib.Ballot ballot; // proposal voting ballot
         uint gracePeriodStartTime; // when did grace period start
     }
+
     Proposal[] proposalQueue;
     uint256 currentProposalIndex;
 
@@ -131,8 +152,8 @@ contract Moloch is Ownable {
         uint _PROPOSAL_VOTE_TIME_SECONDS,
         uint _GRACE_PERIOD_SECONDS,
         uint _PROPOSAL_CREATION_DEPOSIT_WEI
-    ) 
-        public 
+    )
+        public
     {
         require(
             _PROPOSAL_VOTE_TIME_SECONDS > 0,
@@ -155,11 +176,11 @@ contract Moloch is Ownable {
     function _addFoundingMembers(
         address[] membersArray,
         uint[] sharesArray
-    ) 
+    )
         internal
     {
         require(membersArray.length == sharesArray.length, "Moloch::_addFoundingMembers - Provided arrays should match up.");
-        for (uint i = 0; i < _membersArray.length; i++) {
+        for (uint i = 0; i < membersArray.length; i++) {
 
             address founder = membersArray[i];
             uint founderShares = sharesArray[i];
@@ -177,7 +198,7 @@ contract Moloch is Ownable {
     *****************/
     function createMemberProposal(
         address propospectiveMemberAddress,
-        address[] tokenTributeAddresses, 
+        address[] tokenTributeAddresses,
         uint256[] tokenTributeAmounts,
         uint256 votingSharesRequested
     )
@@ -275,21 +296,21 @@ contract Moloch is Ownable {
         ); // past voting and grace period
 
         // create ballot
-        currentProposal.votingEndTimeSeconds = block.timestamp + votingPeriodLength;
+        currentProposal.votingEndTimeSeconds = block.timestamp + PROPOSAL_VOTE_TIME_SECONDS;
         // lock in voting quorum now, based on total supply of voting shares
         uint256 totalVotingShares = votingShares.totalSupply();
         currentProposal.minVotesRequired = (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR);
 
         // change phase
         proposalQueue.phase = ProposalPhase.Voting;
-        
+
         emit ProposalVotingStarted(currentProposalIndex);
     }
 
     function voteOnCurrentProposal(uint8 lineItem) public {
         Proposal storage currentProposal = proposalQueue[currentProposalIndex];
 
-        require(!voteEnded(proposal), "VotingLib::vote - voting ended");
+        require(!voteEnded(currentProposal), "VotingLib::vote - voting ended");
         require(currentProposal.voters[msg.sender].voted == false, "VotingLib::vote - voter already voted");
         require(lineItem < currentProposal.lineItemVotes.length, "VotingLib::vote - illegal lineItem");
 
@@ -381,9 +402,9 @@ contract Moloch is Ownable {
 
         uint256 numberOfVotingShares = votingShares.balanceOf(msg.sender);
         require(lootToken.transfer(msg.sender, numberOfVotingShares), "Moloch:exitMoloch - failed to transfer lootToken");
-        
+
         votingShares.proxyBurn(msg.sender, numberOfVotingShares);
-        
+
         guildBank.convertLootTokensToLoot(msg.sender, members.tokenTributeAddresses[msg.sender]);
 
         emit MemberExit(msg.sender);
@@ -394,9 +415,9 @@ contract Moloch is Ownable {
         require(members.hasWithdrawn[msg.sender] == false);
         members.hasWithdrawn[msg.sender] = true;
         guildBank.withdraw(
-            msg.sender, 
-            members.tokenTributeAddresses[msg.sender], 
-            members.tokenTributeAmounts[msg.sender], 
+            msg.sender,
+            members.tokenTributeAddresses[msg.sender],
+            members.tokenTributeAmounts[msg.sender],
             members.ethAmount[msg.sender]
         );
     }
@@ -414,7 +435,7 @@ contract Moloch is Ownable {
     }
 
     function getProposalCommonDetails(uint index)
-        public 
+        public
         view
         returns (
             address,
@@ -422,20 +443,20 @@ contract Moloch is Ownable {
             uint256,
             TownHallLib.ProposalPhase,
             uint
-        ) 
+        )
     {
         return proposalQueue.getProposalCommonDetails(index);
     }
 
-    function getProposalMemberDetails(uint index) 
-        public 
-        view 
+    function getProposalMemberDetails(uint index)
+        public
+        view
         returns (
-            address, 
-            uint256, 
-            address[], 
+            address,
+            uint256,
+            address[],
             uint256[]
-        ) 
+        )
     {
         return proposalQueue.getProposalMemberDetails(index);
     }
@@ -457,12 +478,12 @@ contract Moloch is Ownable {
     *****************/
 
     // TRANSFER TRIBUTES TO GUILD BANK
+    /*
     function _collectTributes(
-        GuildBank guildBank,
         uint256 _ethTributeAmount,
         address[] _tokenTributeAddresses,
         uint256[] _tokenTributeAmounts
-    ) 
+    )
         internal
     {
         // collect eth tribute
@@ -476,24 +497,25 @@ contract Moloch is Ownable {
             require(erc20.approve(address(guildBank), _tokenTributeAmounts[i]), "TownHallLib::_collectTributes - could not collect token tribute");
         }
     }
+    */
 
     // DILUTE GUILD AND GRANT VOTING SHARES (MINT LOOT TOKENS)
     function _grantVotingShares(
         address to,
         uint256 numVotingShares
-    ) 
-        internal 
+    )
+        internal
     {
-        // dilute and grant 
+        // dilute and grant
         votingShares.mint(to, numVotingShares);
 
         // mint loot tokens 1:1 and keep them in moloch contract for exit
         lootToken.mint(address(this), numVotingShares);
-    } 
+    }
 
     // ACCEPT MEMBER
-    function _acceptMemberProposal(Proposal memberProposal) 
-        internal 
+    function _acceptMemberProposal(Proposal memberProposal)
+        internal
     {
         // add to moloch members
         address newMemberAddress = memberProposal.prospectiveMember.prospectiveMemberAddress;
@@ -511,8 +533,8 @@ contract Moloch is Ownable {
     // ACCEPT PROJECT
     function _acceptProjectProposal(
         Proposal projectProposal
-    ) 
-        internal 
+    )
+        internal
     {
         // grant shares to proposer
         _grantVotingShares(

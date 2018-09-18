@@ -1,7 +1,7 @@
-pragma solidity 0.4.23;
+pragma solidity 0.4.24;
 
-import "openzeppelin-solidity/contracts/token/ERC20/BurnableToken.sol";
-import "openzeppelin-solidity/contracts/token/ERC20/MintableToken.sol";
+import "./oz/BurnableToken.sol";
+import "./oz/MintableToken.sol";
 
 contract LootToken is MintableToken {
     event Burn(address indexed from, uint256 amount);

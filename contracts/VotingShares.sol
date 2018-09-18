@@ -1,7 +1,7 @@
-pragma solidity 0.4.23;
+pragma solidity 0.4.24;
 
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
+import "./oz/SafeMath.sol";
+import "./oz/Ownable.sol";
 
 /**
  * Structured like an ERC20, but can only be burned/minted and not transferred.
@@ -17,7 +17,7 @@ contract VotingShares is Ownable {
     event Mint(address indexed to, uint256 amount);
     event Burn(address indexed from, uint256 amount);
     event Transfer(address indexed from, address indexed to, uint256 value);
-    
+
     event MintFinished();
 
     modifier canMint() {
@@ -38,8 +38,8 @@ contract VotingShares is Ownable {
 
     /**
      * @dev Burns a specific amount of tokens.
-     * @param _burner Who to burn tokens from.
-     * @param _value The amount of token to be burned.
+     * @param burner Who to burn tokens from.
+     * @param value The amount of token to be burned.
      */
     function proxyBurn(address burner, uint256 value) public onlyOwner {
         require(value <= balances[burner], "VotingShares::proxyBurn - value less than balance");
@@ -56,14 +56,14 @@ contract VotingShares is Ownable {
     * @param _owner The address to query the the balance of.
     * @return An uint256 representing the amount owned by the passed address.
     */
-    function balanceOf(address owner) public view returns (uint256 balance) {
-        return balances[owner];
+    function balanceOf(address member) public view returns (uint256 balance) {
+        return balances[member];
     }
 
     /**
      * @dev Function to mint tokens
-     * @param _to The address that will receive the minted tokens.
-     * @param _amount The amount of tokens to mint.
+     * @param to The address that will receive the minted tokens.
+     * @param amount The amount of tokens to mint.
      * @return A boolean that indicates if the operation was successful.
      */
     function mint(address to, uint256 amount) public onlyOwner canMint returns (address) {

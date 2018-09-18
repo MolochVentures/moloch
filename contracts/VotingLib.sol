@@ -1,7 +1,7 @@
-pragma solidity 0.4.23;
+pragma solidity 0.4.24;
 
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./oz/Ownable.sol";
+import "./oz/SafeMath.sol";
 import "./VotingShares.sol";
 
 library VotingLib {
@@ -15,7 +15,7 @@ library VotingLib {
         uint vote;
     }
 
-    struct Ballot { 
+    struct Ballot {
         uint votingEndDate;
         uint minVotesRequired;
         mapping (address => Voter) voter;
@@ -28,7 +28,7 @@ library VotingLib {
         uint8 numProposals,
         uint votingPeriodLength,
         VotingShares votingShares
-    ) 
+    )
         public
     {
         // self.lineItems.length = numProposals; TODO: THIS DOESN'T WORK
