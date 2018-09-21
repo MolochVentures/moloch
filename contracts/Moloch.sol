@@ -106,6 +106,7 @@ contract Moloch {
         for (uint i = 0; i < membersArray.length; i++) {
             address founder = membersArray[i];
             uint256 shares = sharesArray[i]
+            // TODO perhaps check that shares > 0
 
             members[founder] = Member(shares);
             totalVotingShares = totalVotingShares.add(shares);
@@ -138,6 +139,7 @@ contract Moloch {
     {
         updatePeriod();
 
+        // TODO think about members that have fully exited
         require(members[applicant].votingShares == 0, "Moloch::submitProposal - applicant is already a member");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
 
@@ -151,6 +153,7 @@ contract Moloch {
         uint256 startingPeriod = currentPeriod + proposalQueue.length - currentProposal + 1;
 
         Proposal proposal = Proposal(msg.sender, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
+
         proposalQueue.push(proposal);
     }
 
@@ -192,7 +195,7 @@ contract Moloch {
 
             // deposit all tribute tokens to guild bank
             for (uint8 i=0; i < proposal.tributeTokenAddressess.length; i++) {
-                require(depositTributeTokens(this, tributeTokenAddresses[i], tributeTokenAmounts[i]);
+                require(guildBank.depositTributeTokens(this, tributeTokenAddresses[i], tributeTokenAmounts[i]);
             }
         } else {
             // return all tokens
