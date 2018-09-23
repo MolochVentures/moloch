@@ -69,7 +69,7 @@ contract GuildBank is Ownable {
         for (uint256 i = 0; i < safeTokenAddresses.length; i++) {
             if (!safeReedemsById[safeRedeemId][i]) {
                 safeReedemsById[safeRedeemId][i] = true;
-                ERC20 token = ERC20(tokenAddresses[i]);
+                ERC20 token = ERC20(safeTokenAddresses[i]);
                 uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens));
                 require(token.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
             }
