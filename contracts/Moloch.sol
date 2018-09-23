@@ -143,7 +143,7 @@ contract Moloch {
         require(members[applicant].votingShares == 0, "Moloch::submitProposal - applicant is already a member");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
 
-        for (uint8 i=0; i < tributeTokenAddresses.length; i++) {
+        for (uint256 i=0; i < tributeTokenAddresses.length; i++) {
             ERC20 token = ERC20(tributeTokenAddresses[i]);
             uint256 amount = tributeTokenAmounts[i];
             require(amount > 0, "Moloch::submitProposal - token tribute amount is 0");
@@ -194,12 +194,12 @@ contract Moloch {
             lootToken.mint(this, proposal.votingSharesRequested);
 
             // deposit all tribute tokens to guild bank
-            for (uint8 i=0; i < proposal.tributeTokenAddressess.length; i++) {
+            for (uint256 i=0; i < proposal.tributeTokenAddressess.length; i++) {
                 require(guildBank.depositTributeTokens(this, tributeTokenAddresses[i], tributeTokenAmounts[i]);
             }
         } else {
             // return all tokens
-            for (uint8 i=0; i < proposal.tributeTokenAddressess.length; i++) {
+            for (uint256 i=0; i < proposal.tributeTokenAddressess.length; i++) {
                 ERC20 token = ERC20(tributeTokenAddresses[i]);
                 require(token.transfer(proposal.applicant, tributeTokenAmounts[i]));
             }
