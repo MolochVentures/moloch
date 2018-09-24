@@ -41,7 +41,7 @@ contract GuildBank is Ownable {
         require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
 
         // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
-        lootToken.proxyBurn(msg.sender, lootAmount);
+        lootToken.burn(lootAmount);
 
         // transfer proportional share of all tokens held by the guild bank
         for (uint256 i = 0; i < tokenAddresses.length; i++) {
@@ -63,7 +63,7 @@ contract GuildBank is Ownable {
         require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
 
         // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
-        lootToken.proxyBurn(msg.sender, lootAmount);
+        lootToken.burn(lootAmount);
 
         // transfer proportional share of all tokens held by the guild bank
         for (uint256 i = 0; i < safeTokenAddresses.length; i++) {
