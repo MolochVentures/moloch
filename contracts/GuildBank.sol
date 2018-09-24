@@ -13,9 +13,9 @@ contract GuildBank is Ownable {
     address[] public tokenAddresses;
 
     mapping (uint256 => mapping (address => bool)) safeRedeemsById;
-    uint256 safeReedemId = 0;
+    uint256 safeRedeemId = 0;
 
-    constructor(address lootokenAddress) public {
+    constructor(address lootTokenAddress) public {
         lootToken = LootToken(lootTokenAddress);
     }
 
@@ -29,7 +29,7 @@ contract GuildBank is Ownable {
             tokenAddresses.push(tokenAddress);
         }
         ERC20 token = ERC20(tokenAddress);
-        return (token.transferFrom(sender, this, amount));
+        return (token.transferFrom(sender, this, tokenAmount));
     }
 
     function redeemLootTokens(
@@ -41,12 +41,12 @@ contract GuildBank is Ownable {
         require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
 
         // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
-        lootToken.burn(msg.sender, lootAmount);
+        lootToken.proxyBurn(msg.sender, lootAmount);
 
         // transfer proportional share of all tokens held by the guild bank
         for (uint256 i = 0; i < tokenAddresses.length; i++) {
             ERC20 token = ERC20(tokenAddresses[i]);
-            uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens));
+            uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens);
             require(token.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
         }
     }
@@ -56,21 +56,21 @@ contract GuildBank is Ownable {
         uint256 lootAmount,
         address[] safeTokenAddresses
     ) public {
-        safeReedemId = safeRedeemId.add(1);
+        safeRedeemId = safeRedeemId.add(1);
 
         uint256 totalLootTokens = lootToken.totalSupply();
 
         require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
 
         // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
-        lootToken.burn(msg.sender, lootAmount);
+        lootToken.proxyBurn(msg.sender, lootAmount);
 
         // transfer proportional share of all tokens held by the guild bank
         for (uint256 i = 0; i < safeTokenAddresses.length; i++) {
-            if (!safeReedemsById[safeRedeemId][i]) {
-                safeReedemsById[safeRedeemId][i] = true;
+            if (!safeRedeemsById[safeRedeemId][safeTokenAddresses[i]]) {
+                safeRedeemsById[safeRedeemId][safeTokenAddresses[i]] = true;
                 ERC20 token = ERC20(safeTokenAddresses[i]);
-                uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens));
+                uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens);
                 require(token.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
             }
         }
