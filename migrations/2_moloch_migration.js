@@ -2,9 +2,6 @@
 const fse = require('fs-extra')
 
 const Moloch = artifacts.require('./Moloch.sol')
-const TownHallLib = artifacts.require('./TownHallLib.sol')
-const VotingLib = artifacts.require('./VotingLib.sol')
-const VotingShares = artifacts.require('./VotingShares.sol')
 const LootToken = artifacts.require('./LootToken.sol')
 const GuildBank = artifacts.require('./GuildBank.sol')
 
@@ -13,16 +10,10 @@ const configJSON = require('./config.json')
 
 module.exports = (deployer, network, accounts) => {
   deployer.then(async () => {
-    await deployer.deploy(VotingLib)
-    deployer.link(VotingLib, TownHallLib)
-    await deployer.deploy(TownHallLib)
-    await deployer.deploy(VotingShares)
     await deployer.deploy(LootToken)
     await deployer.deploy(GuildBank, LootToken.address)
-    deployer.link(TownHallLib, Moloch)
     await deployer.deploy(
       Moloch,
-      VotingShares.address,
       LootToken.address,
       GuildBank.address,
       configJSON.PROPOSAL_VOTE_TIME_SECONDS,
@@ -30,8 +21,6 @@ module.exports = (deployer, network, accounts) => {
       configJSON.MIN_PROPOSAL_CREATION_DEPOSIT_WEI,
       { gas: 4000000 }
     )
-    const votingShares = await VotingShares.at(VotingShares.address)
-    await votingShares.transferOwnership(Moloch.address)
     const lootToken = await LootToken.at(LootToken.address)
     await lootToken.transferOwnership(Moloch.address)
     const guildBank = await GuildBank.at(GuildBank.address)

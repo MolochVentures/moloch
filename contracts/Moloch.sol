@@ -2,7 +2,6 @@ pragma solidity 0.4.24;
 
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
-import "./VotingShares.sol";
 import "./GuildBank.sol";
 import "./LootToken.sol";
 
@@ -105,7 +104,7 @@ contract Moloch {
         require(membersArray.length == sharesArray.length, "Moloch::_addFoundingMembers - Provided arrays should match up.");
         for (uint i = 0; i < membersArray.length; i++) {
             address founder = membersArray[i];
-            uint256 shares = sharesArray[i]
+            uint256 shares = sharesArray[i];
             // TODO perhaps check that shares > 0
 
             members[founder] = Member(shares);
@@ -143,7 +142,7 @@ contract Moloch {
         require(members[applicant].votingShares == 0, "Moloch::submitProposal - applicant is already a member");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
 
-        for (uint256 i=0; i < tributeTokenAddresses.length; i++) {
+        for (uint256 i = 0; i < tributeTokenAddresses.length; i++) {
             ERC20 token = ERC20(tributeTokenAddresses[i]);
             uint256 amount = tributeTokenAmounts[i];
             require(amount > 0, "Moloch::submitProposal - token tribute amount is 0");
@@ -152,22 +151,23 @@ contract Moloch {
 
         uint256 startingPeriod = currentPeriod + proposalQueue.length - currentProposal + 1;
 
-        Proposal proposal = Proposal(msg.sender, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
+        Proposal memory proposal = Proposal(msg.sender, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
 
         proposalQueue.push(proposal);
     }
 
-    function submitVote(uint256 proposalIndex, uint8 vote) public onlyMember {
+    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyMember {
         updatePeriod();
 
-        Proposal proposal = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposalQueue[proposalIndex];
+        Vote vote = Vote(uintVote);
         require(proposal.startingPeriod > 0, "Moloch::submitVote - proposal does not exist");
         require(currentPeriod.sub(proposal.startingPeriod) < votingPeriodLength, "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[msg.sender] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
         proposal.votesByMember[msg.sender] = vote;
 
-        Member member = members[msg.sender];
+        Member storage member = members[msg.sender];
         member.votesByProposal[proposalIndex] = vote;
 
         if (vote == Vote.Yes) {
@@ -180,12 +180,13 @@ contract Moloch {
     function processProposal(uint256 proposalIndex) public {
         updatePeriod();
 
-        Proposal proposal = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposalQueue[proposalIndex];
         require(proposal.startingPeriod > 0, "Moloch::processProposal - proposal does not exist");
-        require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriod.length), "Moloch::processProposal - proposal is not ready to be processed");
+        require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
 
         proposal.processed = true;
+        uint256 i = 0;
 
         if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
             // mint new voting shares
@@ -194,14 +195,14 @@ contract Moloch {
             lootToken.mint(this, proposal.votingSharesRequested);
 
             // deposit all tribute tokens to guild bank
-            for (uint256 i=0; i < proposal.tributeTokenAddressess.length; i++) {
-                require(guildBank.depositTributeTokens(this, tributeTokenAddresses[i], tributeTokenAmounts[i]);
+            for (i; i < proposal.tributeTokenAddresses.length; i++) {
+                require(guildBank.depositTributeTokens(this, proposal.tributeTokenAddresses[i], proposal.tributeTokenAmounts[i]));
             }
         } else {
             // return all tokens
-            for (uint256 i=0; i < proposal.tributeTokenAddressess.length; i++) {
-                ERC20 token = ERC20(tributeTokenAddresses[i]);
-                require(token.transfer(proposal.applicant, tributeTokenAmounts[i]));
+            for (i; i < proposal.tributeTokenAddresses.length; i++) {
+                ERC20 token = ERC20(proposal.tributeTokenAddresses[i]);
+                require(token.transfer(proposal.applicant, proposal.tributeTokenAmounts[i]));
             }
         }
 
@@ -211,7 +212,7 @@ contract Moloch {
     function collectLootTokens(address treasury, uint256 lootAmount) public onlyMember {
         updatePeriod();
 
-        Member member = members[msg.sender];
+        Member storage member = members[msg.sender];
 
         require(member.votingShares >= lootAmount, "Moloch::collectLoot - insufficient voting shares");
 
@@ -221,9 +222,9 @@ contract Moloch {
         require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
         uint256 oldestActiveProposal = (currentProposal.sub(votingPeriodLength)).sub(gracePeriodLength);
-        for (uint256 i=currentProposal; i > oldestActiveProposal; i--) {
+        for (uint256 i = currentProposal; i > oldestActiveProposal; i--) {
             if (isActiveProposal(i)) {
-                Proposal proposal = proposalQueue[i];
+                Proposal storage proposal = proposalQueue[i];
                 Vote vote = member.votesByProposal[i];
                 if (vote == Vote.Null) {
                     // member didn't vote on this proposal, skip to the next one
@@ -247,10 +248,10 @@ contract Moloch {
                 break;
             }
         }
+    }
 
-        // returns true if proposal is either in voting or grace period
-        function isActiveProposal(uint256 proposalIndex) internal returns (bool) {
-            return (currentPeriod.sub(proposalQueue[proposalIndex].startingPeriod) < votingPeriodLength.add(gracePeriodLength));
-        }
+    // returns true if proposal is either in voting or grace period
+    function isActiveProposal(uint256 proposalIndex) internal returns (bool) {
+        return (currentPeriod.sub(proposalQueue[proposalIndex].startingPeriod) < votingPeriodLength.add(gracePeriodLength));
     }
 }

@@ -3,7 +3,7 @@ pragma solidity 0.4.24;
 import "./oz/BurnableToken.sol";
 import "./oz/MintableToken.sol";
 
-contract LootToken is MintableToken {
+contract LootToken is MintableToken, BurnableToken {
     event Burn(address indexed from, uint256 amount);
 
     string public constant name = "LootToken"; // solium-disable-line uppercase
