@@ -43,7 +43,7 @@ contract Moloch {
     }
 
     mapping (address => Member) public members;
-    mapping(uint256 => Period) public periods;
+    mapping (uint256 => Period) public periods;
     Proposal[] public proposalQueue;
 
     uint256 public currentPeriod = 0;
@@ -250,11 +250,7 @@ contract Moloch {
     }
 
     // returns true if proposal is either in voting or grace period
-    function isActiveProposal(uint256 proposalIndex) internal returns (bool) {
+    function isActiveProposal(uint256 proposalIndex) internal view returns (bool) {
         return (currentPeriod.sub(proposalQueue[proposalIndex].startingPeriod) < votingPeriodLength.add(gracePeriodLength));
-    }
-
-    function getLootTokenAddress() public view returns (address) {
-        return address(lootToken);
     }
 }
