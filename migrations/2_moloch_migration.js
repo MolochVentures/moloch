@@ -22,7 +22,7 @@ module.exports = (deployer, network, accounts) => {
       configJSON.MIN_PROPOSAL_DEPOSIT_IN_WEI,
       { gas: 6000000 }
     )
-    lootTokenAddress = await moloch.getLootTokenAddress()
+    lootTokenAddress = await moloch.lootToken()
     await guildBank.setLootTokenAddress(lootTokenAddress)
   })
 }
