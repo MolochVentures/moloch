@@ -92,7 +92,7 @@ contract Moloch {
         periods[currentPeriod].startTime = startTime;
         periods[currentPeriod].endTime = startTime.add(periodDuration);
 
-        _addFoundingMembers(foundersAddresses, foundersVotingShares);
+        //_addFoundingMembers(foundersAddresses, foundersVotingShares);
     }
 
     function _addFoundingMembers(
@@ -101,7 +101,7 @@ contract Moloch {
     )
         internal
     {
-        require(membersArray.length == sharesArray.length, "Moloch::_addFoundingMembers - Provided arrays should match up.");
+        //require(membersArray.length == sharesArray.length, "Moloch::_addFoundingMembers - Provided arrays should match up.");
         for (uint i = 0; i < membersArray.length; i++) {
             address founder = membersArray[i];
             uint256 shares = sharesArray[i];
