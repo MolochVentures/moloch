@@ -33,6 +33,30 @@ function getEventParams(tx, event) {
   return false
 }
 
+async function snapshot() {
+  return new Promise((accept, reject) => {
+    ethRPC.sendAsync({method: `evm_snapshot`}, (err, result)=> {
+      if (err) {
+        reject(err)
+      } else {
+        accept(result)
+      }
+    })
+  })
+}
+
+async function restore(snapshotId) {
+  return new Promise((accept, reject) => {
+    ethRPC.sendAsync({method: `evm_revert`, params: [snapshotId]}, (err, result) => {
+      if (err) {
+        reject(err)
+      } else {
+        accept(result)
+      }
+    })
+  })
+}
+
 contract('Moloch', accounts => {
   before('deploy contracts', async () => {
     moloch = await Moloch.deployed()
@@ -44,17 +68,27 @@ contract('Moloch', accounts => {
   it('verify deployment parameters', async () => {
     const now = await blockTime()
 
-    const LOOT_reference = await moloch.lootToken()
-    assert.equal(LOOT_reference, lootToken.address)
+    const molochLootTokenAddress = await moloch.lootToken()
+    assert.equal(molochLootTokenAddress, lootToken.address)
 
-    const totalVotingShares = foundersJSON.votingShares.reduce((total, shares) => {
+    const guildBankLootTokenAddress = await guildBank.lootToken()
+    assert.equal(guildBankLootTokenAddress, lootToken.address)
+
+    const foundersVotingShares = foundersJSON.votingShares.reduce((total, shares) => {
       return total + shares
     })
-    totalSupply = await lootToken.totalSupply()
-    assert.equal(+totalSupply, totalVotingShares)
 
-    const GUILD_reference = await moloch.guildBank()
-    assert.equal(GUILD_reference, guildBank.address)
+    totalLootTokens = await lootToken.totalSupply()
+    assert.equal(+totalLootTokens, foundersVotingShares)
+
+    totalVotingShares = await moloch.totalVotingShares()
+    assert.equal(+totalVotingShares, foundersVotingShares)
+
+    const molochGuildBankAddress = await moloch.guildBank()
+    assert.equal(molochGuildBankAddress, guildBank.address)
+
+    const guildBankOwner = await guildBank.owner()
+    assert.equal(guildBankOwner, moloch.address)
 
     const periodDuration = await moloch.periodDuration()
     assert.equal(+periodDuration, configJSON.PERIOD_DURATION_IN_SECONDS)
@@ -72,7 +106,7 @@ contract('Moloch', accounts => {
     assert.equal(+currentPeriod, 0)
 
     const periodData = await moloch.periods(+currentPeriod)
-    assert.equal(+periodData[0], now)
+    // assert.equal(+periodData[0], now)
 
     const startTime = +periodData[0]
     const endTime = +periodData[1]
@@ -82,8 +116,33 @@ contract('Moloch', accounts => {
       let founderAddress = foundersJSON.addresses[i]
       let founderVotingShares = foundersJSON.votingShares[i]
       memberData = await moloch.members(founderAddress)
-      assert.equal(+memberData, founderVotingShares)
+      assert.equal(+memberData[0], founderVotingShares)
+      assert.equal(memberData[1], true)
     }
+  })
+
+  describe('submitProposal', () => {
+
+  })
+
+  describe('submitVote', () => {
+
+  })
+
+  describe('processProposal', () => {
+
+  })
+
+  describe('collectLootTokens', () => {
+
+  })
+
+  describe('GuildBank::redeemLootTokens', () => {
+
+  })
+
+  describe('GuildBank::safeRedeemLootTokens', () => {
+
   })
 
   // verify founding members

@@ -24,5 +24,6 @@ module.exports = (deployer, network, accounts) => {
     )
     lootTokenAddress = await moloch.lootToken()
     await guildBank.setLootTokenAddress(lootTokenAddress)
+    await guildBank.transferOwnership(moloch.address)
   })
 }

@@ -15,10 +15,6 @@ contract GuildBank is Ownable {
     mapping (uint256 => mapping (address => bool)) safeRedeemsById;
     uint256 safeRedeemId = 0;
 
-    // constructor(address lootTokenAddress) public {
-    //     lootToken = LootToken(lootTokenAddress);
-    // }
-
     function setLootTokenAddress(address lootTokenAddress) public onlyOwner returns (address) {
         require (address(lootTokenAddress) != address(0), "GuildBank::setLootTokenAddress address must not be zero");
         require (address(lootToken) == address(0),"GuildBank::setLootTokenAddress Loot Token address already set");

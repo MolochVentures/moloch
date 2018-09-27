@@ -21,6 +21,7 @@ contract Moloch {
 
     struct Member {
         uint256 votingShares;
+        bool isActive;
         mapping (uint256 => Vote) votesByProposal;
     }
 
@@ -60,7 +61,7 @@ contract Moloch {
     MODIFIERS
     ********/
     modifier onlyMember {
-        require(members[msg.sender].votingShares > 0, "Moloch::onlyMember - not a member");
+        require(members[msg.sender].isActive, "Moloch::onlyMember - not a member");
         _;
     }
 
@@ -106,7 +107,7 @@ contract Moloch {
             uint256 shares = sharesArray[i];
             // TODO perhaps check that shares > 0
 
-            members[founder] = Member(shares);
+            members[founder] = Member(shares, true);
             totalVotingShares = totalVotingShares.add(shares);
             lootToken.mint(this, shares);
         }
@@ -137,8 +138,7 @@ contract Moloch {
     {
         updatePeriod();
 
-        // TODO think about members that have fully exited
-        require(members[applicant].votingShares == 0, "Moloch::submitProposal - applicant is already a member");
+        require(!members[applicant].isActive, "Moloch::submitProposal - applicant is already a member");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
 
         for (uint256 i = 0; i < tributeTokenAddresses.length; i++) {
@@ -189,7 +189,7 @@ contract Moloch {
 
         if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
             // mint new voting shares
-            members[proposal.applicant] = Member(proposal.votingSharesRequested);
+            members[proposal.applicant] = Member(proposal.votingSharesRequested, true);
             totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
             lootToken.mint(this, proposal.votingSharesRequested);
 
@@ -218,6 +218,12 @@ contract Moloch {
         member.votingShares = member.votingShares.sub(lootAmount);
         totalVotingShares = totalVotingShares.sub(lootAmount);
 
+        bool deactivateMember = lootAmount == member.votingShares;
+
+        if (deactivateMember) {
+            member.isActive = false;
+        }
+
         require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
         uint256 oldestActiveProposal = (currentProposal.sub(votingPeriodLength)).sub(gracePeriodLength);
@@ -238,7 +244,7 @@ contract Moloch {
                 }
 
                 // if the member is collecting 100% of their loot, erase these vote completely
-                if (lootAmount == member.votingShares) {
+                if (deactivateMember) {
                     proposal.votesByMember[msg.sender] = Vote.Null;
                     member.votesByProposal[i] = Vote.Null;
                 }
