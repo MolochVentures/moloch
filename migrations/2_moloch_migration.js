@@ -10,27 +10,19 @@ const configJSON = require('./config.json')
 
 module.exports = (deployer, network, accounts) => {
   deployer.then(async () => {
-    await deployer.deploy(LootToken)
-    await deployer.deploy(GuildBank, LootToken.address)
-    await deployer.deploy(
+    guildBank = await deployer.deploy(GuildBank)
+    moloch = await deployer.deploy(
       Moloch,
-      LootToken.address,
       GuildBank.address,
-      configJSON.PROPOSAL_VOTE_TIME_SECONDS,
-      configJSON.GRACE_PERIOD_SECONDS,
-      configJSON.MIN_PROPOSAL_CREATION_DEPOSIT_WEI,
-      { gas: 4000000 }
+      foundersJSON.addresses,
+      foundersJSON.votingShares,
+      configJSON.PERIOD_DURATION_IN_SECONDS,
+      configJSON.VOTING_DURATON_IN_PERIODS,
+      configJSON.GRACE_DURATON_IN_PERIODS,
+      configJSON.MIN_PROPOSAL_DEPOSIT_IN_WEI,
+      { gas: 6000000 }
     )
-    const lootToken = await LootToken.at(LootToken.address)
-    await lootToken.transferOwnership(Moloch.address)
-    const guildBank = await GuildBank.at(GuildBank.address)
-    await guildBank.transferOwnership(Moloch.address)
-    const moloch = await Moloch.at(Moloch.address)
-    await moloch.addFoundingMembers(
-      [accounts[0], accounts[1]],
-      foundersJSON.shares
-    )
-    foundersJSON.addresses = [accounts[0], accounts[1]]
-    await fse.writeJson('./founders.json', foundersJSON)
+    lootTokenAddress = await moloch.getLootTokenAddress()
+    await guildBank.setLootTokenAddress(lootTokenAddress)
   })
 }

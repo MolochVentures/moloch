@@ -3,7 +3,7 @@ pragma solidity 0.4.24;
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
 import "./GuildBank.sol";
-import "./LootToken.sol";
+import {LootToken} from "./LootToken.sol";
 
 contract Moloch {
     using SafeMath for uint256;
@@ -69,7 +69,6 @@ contract Moloch {
     ***************/
 
     constructor(
-        address lootTokenAddress,
         address guildBankAddress,
         address[] foundersAddresses,
         uint256[] foundersVotingShares,
@@ -80,7 +79,7 @@ contract Moloch {
     )
         public
     {
-        lootToken = LootToken(lootTokenAddress);
+        lootToken = new LootToken();
         guildBank = GuildBank(guildBankAddress);
 
         periodDuration = _periodDuration;
@@ -253,5 +252,9 @@ contract Moloch {
     // returns true if proposal is either in voting or grace period
     function isActiveProposal(uint256 proposalIndex) internal returns (bool) {
         return (currentPeriod.sub(proposalQueue[proposalIndex].startingPeriod) < votingPeriodLength.add(gracePeriodLength));
+    }
+
+    function getLootTokenAddress() public view returns (address) {
+        return address(lootToken);
     }
 }
