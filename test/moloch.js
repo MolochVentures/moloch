@@ -58,11 +58,28 @@ async function restore(snapshotId) {
 }
 
 contract('Moloch', accounts => {
+  let snapshotId
+
   before('deploy contracts', async () => {
     moloch = await Moloch.deployed()
     guildBank = await GuildBank.deployed()
     lootAddress = await moloch.lootToken()
     lootToken = await LootToken.at(lootAddress)
+  })
+
+  beforeEach(async () => {
+    snapshotId = await snapshot()
+
+    founder1 = {
+      address: accounts[0],
+      tributeTokenAddresses: []
+    }
+
+    applicant = accounts[2]
+  })
+
+  afterEach(async () => {
+    await restore(snapshotId)
   })
 
   it('verify deployment parameters', async () => {
@@ -122,7 +139,16 @@ contract('Moloch', accounts => {
   })
 
   describe('submitProposal', () => {
+    it('happy case', async () => {
+      await moloch.submitProposal()
 
+      // set the applicant profile
+      // the founders have to be the addresses - they are
+      // need to switch it up for voting
+      // one of the founders needs to submit the tx
+      // need to have at least 2 test tokens deployed
+      // approve token transfers in advance
+    })
   })
 
   describe('submitVote', () => {

@@ -4,6 +4,8 @@ const fse = require('fs-extra')
 const Moloch = artifacts.require('./Moloch.sol')
 const LootToken = artifacts.require('./LootToken.sol')
 const GuildBank = artifacts.require('./GuildBank.sol')
+const FooToken = artifacts.require('./oz/StandardToken.sol')
+const BarToken = artifacts.require('./oz/StandardToken.sol')
 
 const foundersJSON = require('./founders.json')
 const configJSON = require('./config.json')

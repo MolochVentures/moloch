@@ -8,34 +8,50 @@ import {LootToken} from "./LootToken.sol";
 contract Moloch {
     using SafeMath for uint256;
 
+    /***************
+    GLOBAL CONSTANTS
+    ***************/
     uint256 public periodDuration; // default = 86400 = 1 day in seconds
     uint256 public votingPeriodLength; // default = 7 periods
     uint256 public gracePeriodLength; // default = 7 periods
-    uint256 public proposalDeposit; // default = $5,000 worth of ETH (units in Wei)
+    uint256 public proposalDeposit; // default = $5,000 worth of ETH at contract deployment (units in Wei)
+
+    GuildBank public guildBank; // guild bank contract reference
+    LootToken public lootToken; // loot token contract reference
+
+    uint8 constant QUORUM_NUMERATOR = 1;
+    uint8 constant QUORUM_DENOMINATOR = 2;
+
+    /******************
+    INTERNAL ACCOUNTING
+    ******************/
+    uint256 public currentPeriod = 0; // the current period number
+    uint256 public currentProposal = 0; // index of the latest proposal to start its voting period
+    uint256 public totalVotingShares = 0; // total voting shares across all members
 
     enum Vote {
-        Null,
+        Null, // default value, counted as abstention
         Yes,
         No
     }
 
     struct Member {
-        uint256 votingShares;
-        bool isActive;
-        mapping (uint256 => Vote) votesByProposal;
+        uint256 votingShares; // the # of voting shares assigned to this member
+        bool isActive; // always true once a member has been created
+        mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
     }
 
     struct Proposal {
-        address proposer;
-        address applicant;
-        uint256 votingSharesRequested;
-        uint256 startingPeriod;
-        uint256 yesVotes;
-        uint256 noVotes;
-        address[] tributeTokenAddresses;
-        uint256[] tributeTokenAmounts;
-        bool processed;
-        mapping (address => Vote) votesByMember;
+        address proposer; // the member who submitted the proposal
+        address applicant; // the applicant who wishes to become a member
+        uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
+        uint256 startingPeriod; // the period in which voting can start for this proposal
+        uint256 yesVotes; // the total number of YES votes for this proposal
+        uint256 noVotes; // the total number of NO votes for this proposal
+        bool processed; // true only if the proposal has been processed
+        address[] tributeTokenAddresses; // the addresses of the tokens the applicant has offered as tribute
+        uint256[] tributeTokenAmounts; // the amounts of the tokens the applicant has offered as tribute
+        mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
     struct Period {
@@ -46,16 +62,6 @@ contract Moloch {
     mapping (address => Member) public members;
     mapping (uint256 => Period) public periods;
     Proposal[] public proposalQueue;
-
-    uint256 public currentPeriod = 0;
-    uint256 public currentProposal = 0;
-    uint256 public totalVotingShares = 0;
-
-    GuildBank public guildBank; // guild bank contract reference
-    LootToken public lootToken; // loot token contract reference
-
-    uint8 constant QUORUM_NUMERATOR = 1;
-    uint8 constant QUORUM_DENOMINATOR = 2;
 
     /********
     MODIFIERS
@@ -105,7 +111,8 @@ contract Moloch {
         for (uint i = 0; i < membersArray.length; i++) {
             address founder = membersArray[i];
             uint256 shares = sharesArray[i];
-            // TODO perhaps check that shares > 0
+
+            require(shares > 0, "Moloch::_addFoundingMembers - founding member has 0 shares");
 
             members[founder] = Member(shares, true);
             totalVotingShares = totalVotingShares.add(shares);
@@ -119,6 +126,11 @@ contract Moloch {
             currentPeriod += 1;
             periods[currentPeriod].startTime = prevPeriod.endTime;
             periods[currentPeriod].endTime = prevPeriod.endTime.add(periodDuration);
+
+            // increment currentProposal if there are more in the queue
+            if (currentProposal < (proposalQueue.length - 1)) {
+                currentProposal = currentProposal.add(1);
+            }
         }
     }
 
@@ -218,12 +230,6 @@ contract Moloch {
         member.votingShares = member.votingShares.sub(lootAmount);
         totalVotingShares = totalVotingShares.sub(lootAmount);
 
-        bool deactivateMember = lootAmount == member.votingShares;
-
-        if (deactivateMember) {
-            member.isActive = false;
-        }
-
         require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
         uint256 oldestActiveProposal = (currentProposal.sub(votingPeriodLength)).sub(gracePeriodLength);
@@ -244,7 +250,7 @@ contract Moloch {
                 }
 
                 // if the member is collecting 100% of their loot, erase these vote completely
-                if (deactivateMember) {
+                if (lootAmount == member.votingShares) {
                     proposal.votesByMember[msg.sender] = Vote.Null;
                     member.votesByProposal[i] = Vote.Null;
                 }
