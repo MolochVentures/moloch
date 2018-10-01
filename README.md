@@ -102,7 +102,7 @@ The `Member` struct stores all relevant data for each member, and is saved in th
 	mapping (address => Member) public members;
 	mapping (address => address) public memberAddressByDelegateKey;
 ```
-The `isActive` field is set to `true` when a member is accepted and remains `true` even if a member redeems 100% of their Voting Shares. It is used to prevent overwriting existing members with new membership proposals. This also means that
+The `isActive` field is set to `true` when a member is accepted and remains `true` even if a member redeems 100% of their Voting Shares. It is used to prevent overwriting existing members with new membership proposals.
 
 For additional security, members can optionally change their `delegateKey` (used for submitting and voting on proposals) to a different address by calling `updateDelegateKey`. The `memberAddressByDelegateKey` stores the member's address by the `delegateKey` address.
 
@@ -129,21 +129,24 @@ The `Period` struct stores the start and end time for each period, and is saved 
 ## Modifiers
 
 #### onlyMember
-Checks that the `msg.sender` is the address of an active member.
+Checks that the `msg.sender` is the address of a member with at least 1 voting share.
 ```
     modifier onlyMember {
-        require(members[msg.sender].isActive, "Moloch::onlyMember - not a member");
+        require(members[msg.sender].votingShares > 0, "Moloch::onlyMember - not a member");
         _;
     }
 ```
+Applied only to `collectLootTokens` and `updateDelegateKey`.
 
 #### onlyMemberDelegate
-
+Checks that the `msg.sender` is the `delegateKey` of a member with at least 1 voting share.
+```
     modifier onlyMemberDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].isActive, "Moloch::onlyMemberDelegate - not a member");
+        require(members[memberAddressByDelegateKey[msg.sender]].votingShares > 0, "Moloch::onlyMemberDelegate - not a member");
         _;
     }
-
+```
+Applied only to `submitProposal` and `submitVote`.
 
 ## Functions
 
@@ -153,7 +156,7 @@ Checks that the `msg.sender` is the address of an active member.
 3. Saves passed in values for global constants `periodDuration`, `votingPeriodLength`, `gracePeriodLength`, and `proposalDeposit`.
 4. Immediately starts the first period (period 0) at `startTime = now`.
 5. Sets the `endTime` of the first period to 1 day from `now`.
-6. Initializes the voting shares for the founding members.
+6. Initializes the voting shares of the founding members.
 ```
     constructor(
         address guildBankAddress,
@@ -184,12 +187,11 @@ Checks that the `msg.sender` is the address of an active member.
 
 
 ### _addFoundingMembers
-For each founding member:
+Only ever called once, from the constructor. For each founding member:
 1. Saves the founder's voting shares.
-2. Updates the `totalVotingShares`.
-3. Mints `lootTokens` equal the the voting shares.
-4. Keeps the `lootTokens` in the `Moloch.sol` contract.
-
+2. Saves the founder's `delegateKey` as their founder address by default.
+3. Updates the `totalVotingShares`.
+4. Mints `lootTokens` equal the the voting shares (keeps them in the `Moloch.sol` contract).
 
 ```
     function _addFoundingMembers(
@@ -204,8 +206,11 @@ For each founding member:
             uint256 shares = sharesArray[i];
 
             require(shares > 0, "Moloch::_addFoundingMembers - founding member has 0 shares");
+            require(!members[founder].isActive, "Moloch::_addFoundingMembers - duplicate founder");
 
-            members[founder] = Member(shares, true);
+            // use the founder address as the delegateKey by default
+            members[founder] = Member(founder, shares, true);
+            memberAddressByDelegateKey[founder] = founder;
             totalVotingShares = totalVotingShares.add(shares);
             lootToken.mint(this, shares);
         }
@@ -217,7 +222,7 @@ In order to make sure all interactions with Moloch take place during the correct
 
 So long as the current time (`now`) is greater than the `endTime` of the current period (meaning the period is over), the `currentPeriod` is incremented by one and then the `startTime` and the `endTime` for the next `Period` are set as well.
 
-When the `currentPeriod` is incremented, the `currentProposal` is also incremented if there are pending proposals still in the queue.
+When the `currentPeriod` is incremented, if there are still pending proposals in the queue then `pendingProposals` is decremented.
 ```
     function updatePeriod() public {
         while (now >= periods[currentPeriod].endTime) {
@@ -226,9 +231,8 @@ When the `currentPeriod` is incremented, the `currentProposal` is also increment
             periods[currentPeriod].startTime = prevPeriod.endTime;
             periods[currentPeriod].endTime = prevPeriod.endTime.add(periodDuration);
 
-            // increment currentProposal if there are more in the queue
-            if (currentProposal < (proposalQueue.length - 1)) {
-                currentProposal = currentProposal.add(1);
+            if (pendingProposals > 0) {
+                pendingProposals = pendingProposals.sub(1);
             }
         }
     }
@@ -240,7 +244,7 @@ The reason this is done using a `while` loop is just in case an entire period pa
 1. Updates the period.
 2. Transfers all tribute tokens to the `Moloch.sol` contract to be held in escrow until the proposal vote is completed and processed.
 3. Sets the `startingPeriod` of the proposal.
-4. Pushes the proposal data to the end of the `proposalQueue`.
+4. Pushes the proposal to the end of the `proposalQueue`.
 
 ```
     function submitProposal(
@@ -251,12 +255,15 @@ The reason this is done using a `while` loop is just in case an entire period pa
     )
         public
         payable
-        onlyMember
+        onlyMemberDelegate
     {
         updatePeriod();
 
-        require(!members[applicant].isActive, "Moloch::submitProposal - applicant is already a member");
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+
+        require(memberAddress == applicant || !members[applicant].isActive, "Moloch::submitProposal - applicant is an active member besides the proposer");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
+        require(votingSharesRequested > 0, "Moloch::submitProposal - votingSharesRequested is zero");
 
         for (uint256 i = 0; i < tributeTokenAddresses.length; i++) {
             ERC20 token = ERC20(tributeTokenAddresses[i]);
@@ -265,17 +272,123 @@ The reason this is done using a `while` loop is just in case an entire period pa
             require(token.transferFrom(applicant, this, amount), "Moloch::submitProposal - tribute token transfer failed");
         }
 
-        uint256 startingPeriod = currentPeriod + proposalQueue.length - currentProposal + 1;
+        pendingProposals = pendingProposals.add(1);
+        uint256 startingPeriod = currentPeriod + pendingProposals;
 
-        Proposal memory proposal = Proposal(msg.sender, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
+        Proposal memory proposal = Proposal(memberAddress, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
 
         proposalQueue.push(proposal);
     }
 ```
-The `startingPeriod` is set based on the `currentPeriod`, and the number of pending proposals in queue before this one. The number of pending proposals is the `proposalQueue.length - currentProposal + 1`.
+The `startingPeriod` is set based on the `currentPeriod`, and the number of `pendingProposals` in queue before this one. If there are no pending proposals, then the starting period will be set to the next period. If there are pending proposals, the starting period is delayed by the number of pending proposals.
 
-If the first proposal is during period 0, then it's starting period will be 0 + 0 - 0 + 1 = 1.
+### submitVote
 
-When `updatePeriod` is triggered next,
+1. Updates the period.
+2. Saves the vote on the proposal struct by the member address.
+3. Saves the vote on the member struct by the proposal index.
+4. Based on their vote, adds the member's voting shares to the proposal `yesVotes` or `noVotes` tallies.
 
-If the second proposal is also during period 0, then it's starting period will be 0 + 1 - 0 + 1 = 2.
+```
+    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyMemberDelegate {
+        updatePeriod();
+
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+
+        Proposal storage proposal = proposalQueue[proposalIndex];
+        Vote vote = Vote(uintVote);
+        require(proposal.startingPeriod > 0, "Moloch::submitVote - proposal does not exist");
+        require(currentPeriod >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
+        require(currentPeriod.sub(proposal.startingPeriod) < votingPeriodLength, "Moloch::submitVote - proposal voting period has expired");
+        require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
+        require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
+        proposal.votesByMember[memberAddress] = vote;
+
+        Member storage member = members[memberAddress];
+        member.votesByProposal[proposalIndex] = vote;
+
+        if (vote == Vote.Yes) {
+            proposal.yesVotes.add(member.votingShares);
+        } else if (vote == Vote.No) {
+            proposal.noVotes.add(member.votingShares);
+        }
+    }
+```
+
+### processProposal
+
+1. Updates the period.
+2.
+
+```
+    function processProposal(uint256 proposalIndex) public {
+        updatePeriod();
+
+        Proposal storage proposal = proposalQueue[proposalIndex];
+        require(proposal.startingPeriod > 0, "Moloch::processProposal - proposal does not exist");
+        require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
+        require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
+
+        proposal.processed = true;
+        uint256 i = 0;
+
+        if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
+
+            // if the proposer is the applicant, add to their existing voting shares
+            if (proposal.proposer == proposal.applicant) {
+
+                members[proposal.applicant].votingShares = members[proposal.applicant].votingShares.add(proposal.votingSharesRequested);
+
+                // loop over their active proposal votes and add the new voting shares to any YES or NO votes
+                uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
+                uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
+                for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
+                    if (isActiveProposal(i)) {
+                        Proposal storage proposal = proposalQueue[i];
+                        Vote vote = member.votesByProposal[i];
+
+                        if (vote == Vote.Null) {
+                            // member didn't vote on this proposal, skip to the next one
+                            continue;
+                        } else if (vote == Vote.Yes) {
+                            proposal.yesVotes = proposal.yesVotes.add(proposal.votingSharesRequested);
+                        } else {
+                            proposal.noVotes = proposal.noVotes.add(proposal.votingSharesRequested);
+                        }
+                    } else {
+                        // reached inactive proposal, exit the loop
+                        break;
+                    }
+                }
+            // the applicant is a new member, create a new record for them
+            } else {
+                // use applicant address as delegateKey by default
+                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true);
+                memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
+            }
+
+            // mint new voting shares and loot tokens
+            totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
+            lootToken.mint(this, proposal.votingSharesRequested);
+
+            // deposit all tribute tokens to guild bank
+            for (i; i < proposal.tributeTokenAddresses.length; i++) {
+                require(guildBank.depositTributeTokens(this, proposal.tributeTokenAddresses[i], proposal.tributeTokenAmounts[i]));
+            }
+        } else {
+            // return all tokens
+            for (i; i < proposal.tributeTokenAddresses.length; i++) {
+                ERC20 token = ERC20(proposal.tributeTokenAddresses[i]);
+                require(token.transfer(proposal.applicant, proposal.tributeTokenAmounts[i]));
+            }
+        }
+
+        proposal.proposer.transfer(proposalDeposit);
+    }
+```
+
+
+
+
+
+

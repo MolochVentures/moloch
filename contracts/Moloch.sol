@@ -34,7 +34,7 @@ contract Moloch {
         Yes,
         No
     }
-applicant is an active member besides the proposer
+
     struct Member {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 votingShares; // the # of voting shares assigned to this member
