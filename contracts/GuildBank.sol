@@ -54,6 +54,14 @@ contract GuildBank is Ownable {
         }
     }
 
+
+    // TODO
+    // - explain the safeRedeemsById stuff in the docs
+    // - does this allow us to withdraw tokens that have been airdropped?
+    // - I believe so, but only in proportion to the lootTokens
+    // - if there is an airdrop on to this contract, members can start to include those token addresses when they withdraw
+    // - if people withdraw without specifying the airdropped tokens, then some will stay on this contract
+    // - the last person to have voting shares can inflate their own share of the loot tokens and then exit and take it all
     function safeRedeemLootTokens(
         address receiver,
         uint256 lootAmount,
