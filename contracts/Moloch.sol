@@ -34,7 +34,7 @@ contract Moloch {
         Yes,
         No
     }
-
+applicant is an active member besides the proposer
     struct Member {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 votingShares; // the # of voting shares assigned to this member
@@ -69,18 +69,18 @@ contract Moloch {
     MODIFIERS
     ********/
     modifier onlyMember {
-        require(members[msg.sender].isActive, "Moloch::onlyMember - not a member");
+        require(members[msg.sender].votingShares > 0, "Moloch::onlyMember - not a member");
         _;
     }
 
     modifier onlyMemberDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].isActive, "Moloch::onlyMemberDelegate - not a member");
+        require(members[memberAddressByDelegateKey[msg.sender]].votingShares > 0, "Moloch::onlyMemberDelegate - not a member");
         _;
     }
 
-    /***************
-    PUBLIC FUNCTIONS
-    ***************/
+    /********
+    FUNCTIONS
+    ********/
 
     constructor(
         address guildBankAddress,
@@ -161,7 +161,7 @@ contract Moloch {
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
-        require(!members[applicant].isActive, "Moloch::submitProposal - applicant is already a member");
+        require(memberAddress == applicant || !members[applicant].isActive, "Moloch::submitProposal - applicant is an active member besides the proposer");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
         require(votingSharesRequested > 0, "Moloch::submitProposal - votingSharesRequested is zero");
 
@@ -188,6 +188,7 @@ contract Moloch {
         Proposal storage proposal = proposalQueue[proposalIndex];
         Vote vote = Vote(uintVote);
         require(proposal.startingPeriod > 0, "Moloch::submitVote - proposal does not exist");
+        require(currentPeriod >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
         require(currentPeriod.sub(proposal.startingPeriod) < votingPeriodLength, "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
@@ -215,9 +216,40 @@ contract Moloch {
         uint256 i = 0;
 
         if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
-            // use applicant address as delegateKey by default
-            members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true);
-            memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
+
+            // if the proposer is the applicant, add to their existing voting shares
+            if (proposal.proposer == proposal.applicant) {
+
+                members[proposal.applicant].votingShares = members[proposal.applicant].votingShares.add(proposal.votingSharesRequested);
+
+                // loop over their active proposal votes and add the new voting shares to any YES or NO votes
+                uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
+                uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
+                for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
+                    if (isActiveProposal(i)) {
+                        Proposal storage proposal = proposalQueue[i];
+                        Vote vote = member.votesByProposal[i];
+
+                        if (vote == Vote.Null) {
+                            // member didn't vote on this proposal, skip to the next one
+                            continue;
+                        } else if (vote == Vote.Yes) {
+                            proposal.yesVotes = proposal.yesVotes.add(proposal.votingSharesRequested);
+                        } else {
+                            proposal.noVotes = proposal.noVotes.add(proposal.votingSharesRequested);
+                        }
+                    } else {
+                        // reached inactive proposal, exit the loop
+                        break;
+                    }
+                }
+            // the applicant is a new member, create a new record for them
+            } else {
+                // use applicant address as delegateKey by default
+                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true);
+                memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
+            }
+
             // mint new voting shares and loot tokens
             totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
             lootToken.mint(this, proposal.votingSharesRequested);
@@ -281,7 +313,7 @@ contract Moloch {
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
         // newDelegateKey must be either the member's address or one not in use by any other members
-        require(newDelegateKey == msg.sender || !members[memberAddressByDelegateKey[msg.sender]].isActive)
+        require(newDelegateKey == msg.sender || !members[memberAddressByDelegateKey[msg.sender]].isActive);
         Member storage member = members[msg.sender];
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
