@@ -1,7 +1,6 @@
 # Moloch
 
 > Moloch the incomprehensible prison! Moloch the crossbone soulless jailhouse and Congress of sorrows! Moloch whose buildings are judgment! Moloch the vast stone of war! Moloch the stunned governments!
-
 > Moloch whose mind is pure machinery! Moloch whose blood is running money! Moloch whose fingers are ten armies! Moloch whose breast is a cannibal dynamo! Moloch whose ear is a smoking tomb!
 
 ~ Allen Ginsberg, Howl
@@ -27,11 +26,11 @@ Moloch has two classes of native assets:
 1. **Voting Shares** are minted and assigned when a new member is accepted into the Guild and provide voting rights on new membership proposals. They are non-transferrable, but can be *irreversibly* redeemed on a 1-1 basis for Loot Tokens.
 2. **Loot Tokens** are also minted on a 1-1 basis with Voting Shares when a new member is accepted, but are only disbursed when a member redeems their Voting Shares. Loot Tokens are freely transferrable and can at any time be consumed to collect a proportional share of all tokens held by the Guild in the Guild Bank.
 
-Moloch operates through the submission, voting on, and processing of a series of membership proposals. To combat spam, new membership proposals can only be submitted by existing members on behalf of applicants by calling `submitProposal` and require a ~$5,000 ETH deposit. An applicant to the Guild requests a certain number of Voting Shares, and in exchange offers either tokens as tribute or pledges to complete some work that benefits the Guild.
+Moloch operates through the submission, voting on, and processing of a series of membership proposals. To combat spam, new membership proposals can only be submitted by existing members and require a ~$5,000 ETH deposit. Applicants who wish to join must find a Guild member to champion their proposal and have that member call `submitProposal` on their behalf. The membership proposal includes the number of Voting Shares the applicant is requesting, and either the set of tokens the applicant is offering as tribute or a pledge that the applicant will complete some work that benefits the Guild.
 
 All tokens offered as tribute are held in escrow by the `Moloch.sol` contract until the proposal vote is completed and processed. If a proposal vote passes, the applicant becomes a member, the Voting Shares requested are minted and assigned to them, and their tribute tokens are deposited into the `GuildBank.sol` contract. If a proposal vote is rejected, all tribute tokens are returned to the applicant. In either case, the $5,000 ETH deposit is returned to the member who submitted the proposal.
 
-Proposals are voted on in the order they are received. The *voting period* for each proposal is 7 days. During the voting period, members can vote (only once, no redos) on a proposal by calling `submitVote`. A new proposal vote starts every day, so there can be a maximum of 7 proposals being voted on at any time (staggered by 1 day). Proposal votes are determined by simple majority, with a 50% quorum requirement.
+Proposals are voted on in the order they are submitted. The *voting period* for each proposal is 7 days. During the voting period, members can vote (only once, no redos) on a proposal by calling `submitVote`. A new proposal vote starts every day, so there can be a maximum of 7 proposals being voted on at any time (staggered by 1 day). Proposal votes are determined by simple majority, with a 50% quorum requirement.
 
 At the end of the voting period, proposals enter into a 7 day *grace period* before the proposal is processed. During the grace period, all Guild members who voted **No** or didn't vote have the opportunity to *ragequit*, turning in their Voting Shares for Loot Tokens by calling `collectLootTokens` and withdrawing their proportional share of tokens from the Guild Bank by calling `redeemLootTokens`. Members who voted **Yes** must remain.
 

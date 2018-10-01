@@ -1,3 +1,8 @@
+// TODO
+// - prevent members from leaving if they voted Yes on any proposals in the voting or grace period
+// - add support for delegate key voting / submission + master key to withdraw
+// - [maybe] add support for withdrawing airdropped tokens
+
 pragma solidity 0.4.24;
 
 import "./oz/SafeMath.sol";
@@ -26,7 +31,7 @@ contract Moloch {
     INTERNAL ACCOUNTING
     ******************/
     uint256 public currentPeriod = 0; // the current period number
-    uint256 public currentProposal = 0; // index of the latest proposal to start its voting period
+    uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
     uint256 public totalVotingShares = 0; // total voting shares across all members
 
     enum Vote {
@@ -127,9 +132,8 @@ contract Moloch {
             periods[currentPeriod].startTime = prevPeriod.endTime;
             periods[currentPeriod].endTime = prevPeriod.endTime.add(periodDuration);
 
-            // increment currentProposal if there are more in the queue
-            if (currentProposal < (proposalQueue.length - 1)) {
-                currentProposal = currentProposal.add(1);
+            if (pendingProposals > 0) {
+                pendingProposals = pendingProposals.sub(1);
             }
         }
     }
@@ -152,6 +156,7 @@ contract Moloch {
 
         require(!members[applicant].isActive, "Moloch::submitProposal - applicant is already a member");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
+        require(votingSharesRequested > 0, "Moloch::submitProposal - votingSharesRequested is zero");
 
         for (uint256 i = 0; i < tributeTokenAddresses.length; i++) {
             ERC20 token = ERC20(tributeTokenAddresses[i]);
@@ -160,7 +165,8 @@ contract Moloch {
             require(token.transferFrom(applicant, this, amount), "Moloch::submitProposal - tribute token transfer failed");
         }
 
-        uint256 startingPeriod = currentPeriod + proposalQueue.length - currentProposal + 1;
+        pendingProposals = pendingProposals.add(1);
+        uint256 startingPeriod = currentPeriod + pendingProposals;
 
         Proposal memory proposal = Proposal(msg.sender, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
 
@@ -232,22 +238,23 @@ contract Moloch {
 
         require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
-        uint256 oldestActiveProposal = (currentProposal.sub(votingPeriodLength)).sub(gracePeriodLength);
-        for (uint256 i = currentProposal; i > oldestActiveProposal; i--) {
+        uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
+
+        uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
+        for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
             if (isActiveProposal(i)) {
                 Proposal storage proposal = proposalQueue[i];
                 Vote vote = member.votesByProposal[i];
+
+                require(vote != Vote.Yes, "Moloch::collectLoot - member voted YES on active proposal");
+
                 if (vote == Vote.Null) {
                     // member didn't vote on this proposal, skip to the next one
                     continue;
                 }
 
-                // member did vote, revert their votes
-                if (vote == Vote.Yes) {
-                    proposal.yesVotes = proposal.yesVotes.sub(lootAmount);
-                } else if (vote == Vote.No) {
-                    proposal.noVotes = proposal.noVotes.sub(lootAmount);
-                }
+                // member voted No, revert the vote.
+                proposal.noVotes = proposal.noVotes.sub(lootAmount);
 
                 // if the member is collecting 100% of their loot, erase these vote completely
                 if (lootAmount == member.votingShares) {
@@ -263,6 +270,7 @@ contract Moloch {
 
     // returns true if proposal is either in voting or grace period
     function isActiveProposal(uint256 proposalIndex) internal view returns (bool) {
-        return (currentPeriod.sub(proposalQueue[proposalIndex].startingPeriod) < votingPeriodLength.add(gracePeriodLength));
+        uint256 startingPeriod = proposalQueue[proposalIndex].startingPeriod;
+        return (currentPeriod >= startingPeriod && currentPeriod.sub(startingPeriod) < votingPeriodLength.add(gracePeriodLength));
     }
 }
