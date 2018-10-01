@@ -61,13 +61,13 @@ The maximum additional dilution would be 4x, in the case of a proposal vote with
     GuildBank public guildBank; // guild bank contract reference
     LootToken public lootToken; // loot token contract reference
 
-	uint8 constant QUORUM_NUMERATOR = 1;
+    uint8 constant QUORUM_NUMERATOR = 1;
     uint8 constant QUORUM_DENOMINATOR = 2;
 ```
 #### Internal Accounting
 ```
     uint256 public currentPeriod = 0; // the current period number
-    uint256 public currentProposal = 0; // index of the latest proposal to start its voting period
+    uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
     uint256 public totalVotingShares = 0; // total voting shares across all members
 ```
 ##### Proposals
@@ -80,7 +80,7 @@ The `Proposal` struct stores all relevant data for each proposal, and is saved i
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
-		bool processed; // true only if the proposal has been processed
+        bool processed; // true only if the proposal has been processed
         address[] tributeTokenAddresses; // the addresses of the tokens the applicant has offered as tribute
         uint256[] tributeTokenAmounts; // the amounts of the tokens the applicant has offered as tribute
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
@@ -93,14 +93,19 @@ The `Proposal` struct stores all relevant data for each proposal, and is saved i
 The `Member` struct stores all relevant data for each member, and is saved in the `members` mapping by the member's address.
 ```
     struct Member {
+        address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 votingShares; // the # of voting shares assigned to this member
-        bool isActive; // always true once a member has been accepted
-        mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal in the proposalQueue
-
+        bool isActive; // always true once a member has been created
+        mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
     }
 
 	mapping (address => Member) public members;
+	mapping (address => address) public memberAddressByDelegateKey;
 ```
+The `isActive` field is set to `true` when a member is accepted and remains `true` even if a member redeems 100% of their Voting Shares. It is used to prevent overwriting existing members with new membership proposals. This also means that
+
+For additional security, members can optionally change their `delegateKey` (used for submitting and voting on proposals) to a different address by calling `updateDelegateKey`. The `memberAddressByDelegateKey` stores the member's address by the `delegateKey` address.
+
 ##### Votes
 The Vote enum reflects the possible values of a proposal vote by a member.
 ```
@@ -120,6 +125,25 @@ The `Period` struct stores the start and end time for each period, and is saved 
 
 	mapping (uint256 => Period) public periods;
 ```
+
+## Modifiers
+
+#### onlyMember
+Checks that the `msg.sender` is the address of an active member.
+```
+    modifier onlyMember {
+        require(members[msg.sender].isActive, "Moloch::onlyMember - not a member");
+        _;
+    }
+```
+
+#### onlyMemberDelegate
+
+    modifier onlyMemberDelegate {
+        require(members[memberAddressByDelegateKey[msg.sender]].isActive, "Moloch::onlyMemberDelegate - not a member");
+        _;
+    }
+
 
 ## Functions
 
