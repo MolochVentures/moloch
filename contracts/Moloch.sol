@@ -281,8 +281,10 @@ contract Moloch {
 
         require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
+        // loop over their active proposal votes:
+        // - make sure they haven't voted YES on any active proposals
+        // - update any active NO votes to reflect their new voting power.
         uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
-
         uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
         for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
             if (isActiveProposal(i)) {

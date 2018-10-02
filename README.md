@@ -49,7 +49,9 @@ In this fashion, the ragequit mechanism also provides an interesting incentive i
 
 The maximum additional dilution would be 4x, in the case of a proposal vote with 50% voter turnout (the quorum minimum) and just over 25% voting **Yes** and just under 25% voting **No**, where the 25% who voted **No** and the 50% who didn't vote all ragequit.
 
-## Data Structures
+## Moloch.sol
+
+### Data Structures
 
 #### Global Constants
 ```
@@ -86,7 +88,7 @@ The `Proposal` struct stores all relevant data for each proposal, and is saved i
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-	Proposal[] public proposalQueue;
+    Proposal[] public proposalQueue;
 ```
 
 ##### Members
@@ -99,8 +101,8 @@ The `Member` struct stores all relevant data for each member, and is saved in th
         mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
     }
 
-	mapping (address => Member) public members;
-	mapping (address => address) public memberAddressByDelegateKey;
+    mapping (address => Member) public members;
+    mapping (address => address) public memberAddressByDelegateKey;
 ```
 The `isActive` field is set to `true` when a member is accepted and remains `true` even if a member redeems 100% of their Voting Shares. It is used to prevent overwriting existing members with new membership proposals.
 
@@ -123,7 +125,7 @@ The `Period` struct stores the start and end time for each period, and is saved 
         uint256 endTime; // the ending unix timestamp in seconds
     }
 
-	mapping (uint256 => Period) public periods;
+    mapping (uint256 => Period) public periods;
 ```
 
 ## Modifiers
@@ -240,7 +242,7 @@ When the `currentPeriod` is incremented, if there are still pending proposals in
 The reason this is done using a `while` loop is just in case an entire period passes without any Moloch interactions taking place.
 
 ### submitProposal
-
+At any time, members can submit new proposals using their `delegateKey`.
 1. Updates the period.
 2. Transfers all tribute tokens to the `Moloch.sol` contract to be held in escrow until the proposal vote is completed and processed.
 3. Sets the `startingPeriod` of the proposal.
@@ -282,8 +284,11 @@ The reason this is done using a `while` loop is just in case an entire period pa
 ```
 The `startingPeriod` is set based on the `currentPeriod`, and the number of `pendingProposals` in queue before this one. If there are no pending proposals, then the starting period will be set to the next period. If there are pending proposals, the starting period is delayed by the number of pending proposals.
 
-### submitVote
+Existing members can earn additional voting shares through new proposals by
+listing themselves as the `applicant`, but must call `submitProposal` themselves to do so.
 
+### submitVote
+While a proposal is in its voting period, members can submit their vote using their `delegateKey`.
 1. Updates the period.
 2. Saves the vote on the proposal struct by the member address.
 3. Saves the vote on the member struct by the proposal index.
@@ -316,10 +321,18 @@ The `startingPeriod` is set based on the `currentPeriod`, and the number of `pen
 ```
 
 ### processProposal
-
+After a proposal has completed its grace period, anyone can call `processProposal` to tally the votes and either accept or reject it.
 1. Updates the period.
-2.
-
+2. Sets `proposal.processed = true` to prevent duplicate processing.
+3. If quorum was reached and the vote passed:
+   3.1. If the member was applying on their own behalf, add the requested voting shares to their existing voting shares, and update any votes on active proposals in the voting or grace periods to reflect their new voting power.
+   3.2. If the applicant is a new member, save their data and set their default `delegateKey` to be the same as their member address.
+   3.3. Update the `totalVotingShares`.
+   3.4. Mints `lootTokens` equal the the voting shares (keeps them in the `Moloch.sol` contract).
+   3.5. Transfer the tribute tokens being held in escrow to the `GuildBank.sol` contract.
+4. Otherwise:
+   4.1. Return all the tribute tokens being held in escrow to the applicant.
+5. Finally, return the $5,000 ether `proposalDeposit`.
 ```
     function processProposal(uint256 proposalIndex) public {
         updatePeriod();
@@ -386,6 +399,102 @@ The `startingPeriod` is set based on the `currentPeriod`, and the number of `pen
         proposal.proposer.transfer(proposalDeposit);
     }
 ```
+
+### collectLootTokens
+
+At any time, so long as a member has not voted YES on any active proposals in the voting or grace periods, they can *irreversibly* redeem their voting shares for loot tokens.
+
+1. Update the period.
+2. Reduce the member's voting shares by the `lootAmount` being collected.
+3. Reduce the total voting shares by the `lootAmount`.
+4. Transfer `lootAmount` of loot tokens to the provided `treasury` address.
+5. Update any active NO votes to reflect the member's new voting power.
+
+```
+    function collectLootTokens(address treasury, uint256 lootAmount) public onlyMember {
+        updatePeriod();
+
+        Member storage member = members[msg.sender];
+
+        require(member.votingShares >= lootAmount, "Moloch::collectLoot - insufficient voting shares");
+
+        member.votingShares = member.votingShares.sub(lootAmount);
+        totalVotingShares = totalVotingShares.sub(lootAmount);
+
+        require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
+
+        // loop over their active proposal votes:
+        // - make sure they haven't voted YES on any active proposals
+        // - update any active NO votes to reflect their new voting power.
+        uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
+        uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
+        for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
+            if (isActiveProposal(i)) {
+                Proposal storage proposal = proposalQueue[i];
+                Vote vote = member.votesByProposal[i];
+
+                require(vote != Vote.Yes, "Moloch::collectLoot - member voted YES on active proposal");
+
+                if (vote == Vote.Null) {
+                    // member didn't vote on this proposal, skip to the next one
+                    continue;
+                }
+
+                // member voted No, revert the vote.
+                proposal.noVotes = proposal.noVotes.sub(lootAmount);
+
+                // if the member is collecting 100% of their loot, erase these vote completely
+                if (lootAmount == member.votingShares) {
+                    proposal.votesByMember[msg.sender] = Vote.Null;
+                    member.votesByProposal[i] = Vote.Null;
+                }
+            } else {
+                // reached inactive proposal, exit the loop
+                break;
+            }
+        }
+    }
+```
+
+### updateDelegateKey
+
+By default, when a member is accepted their `delegateKey` is set to their member
+address. At any time, they can change it to be any address that isn't already in
+use, or back to their member address.
+
+1. Resets the old `delegateKey` reference in the `memberAddressByDelegateKey`
+   mapping.
+2. Sets the reference for the new `delegateKey` to the member in the
+   `memberAddressByDelegateKey` mapping.
+3. Updates the `member.delegateKey`.
+```
+
+    function updateDelegateKey(address newDelegateKey) public onlyMember {
+        // newDelegateKey must be either the member's address or one not in use by any other members
+        require(newDelegateKey == msg.sender || !members[memberAddressByDelegateKey[msg.sender]].isActive);
+        Member storage member = members[msg.sender];
+        memberAddressByDelegateKey[member.delegateKey] = address(0);
+        memberAddressByDelegateKey[newDelegateKey] = msg.sender;
+        member.delegateKey = newDelegateKey;
+    }
+```
+
+### isActiveProposal
+
+A proposal is considered active if it is either in the voting or grace period.
+
+```
+    // returns true if proposal is either in voting or grace period
+    function isActiveProposal(uint256 proposalIndex) internal view returns (bool) {
+        uint256 startingPeriod = proposalQueue[proposalIndex].startingPeriod;
+        return (currentPeriod >= startingPeriod && currentPeriod.sub(startingPeriod) < votingPeriodLength.add(gracePeriodLength));
+    }
+```
+
+## GuildBank.sol
+
+##
+
 
 
 
