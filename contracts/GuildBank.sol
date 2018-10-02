@@ -8,12 +8,12 @@ import "./LootToken.sol";
 contract GuildBank is Ownable {
     using SafeMath for uint256;
 
-    LootToken public lootToken;
-    mapping (address => bool) knownTokens;
-    address[] public tokenAddresses;
+    LootToken public lootToken; // loot token contract reference
+    mapping (address => bool) knownTokens; // true for tokens that have ever been deposited into the guild back
+    address[] public tokenAddresses; // the complete set of unique token addresses held by guild bank
 
-    mapping (uint256 => mapping (address => bool)) safeRedeemsById;
-    uint256 safeRedeemId = 0;
+    mapping (uint256 => mapping (address => bool)) safeRedeemsById; // tracks token addresses already withdrawn for each unique safeRedeem attempt to prevent double-withdrawals
+    uint256 safeRedeemId = 0; // incremented on every safeRedeem attempt
 
     function setLootTokenAddress(address lootTokenAddress) public onlyOwner returns (address) {
         require (address(lootTokenAddress) != address(0), "GuildBank::setLootTokenAddress address must not be zero");
@@ -55,13 +55,6 @@ contract GuildBank is Ownable {
     }
 
 
-    // TODO
-    // - explain the safeRedeemsById stuff in the docs
-    // - does this allow us to withdraw tokens that have been airdropped?
-    // - I believe so, but only in proportion to the lootTokens
-    // - if there is an airdrop on to this contract, members can start to include those token addresses when they withdraw
-    // - if people withdraw without specifying the airdropped tokens, then some will stay on this contract
-    // - the last person to have voting shares can inflate their own share of the loot tokens and then exit and take it all
     function safeRedeemLootTokens(
         address receiver,
         uint256 lootAmount,

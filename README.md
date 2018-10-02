@@ -491,13 +491,142 @@ A proposal is considered active if it is either in the voting or grace period.
     }
 ```
 
-## GuildBank.sol
+# GuildBank.sol
 
-##
+## Data Structures
 
+```
+    LootToken public lootToken; // loot token contract reference
+    mapping (address => bool) knownTokens; // true for tokens that have ever
+    been deposited into the guild back
+    address[] public tokenAddresses; // the complete set of unique token
+    addresses held by guild bank
 
+    mapping (uint256 => mapping (address => bool)) safeRedeemsById; // tracks
+    token addresses already withdrawn for each unique safeRedeem attempt to
+    prevent double-withdrawals
+    uint256 safeRedeemId = 0; // incremented on every safeRedeem attempt
+```
 
+## Functions
 
+### setLootTokenAddress
 
+Called only once immediately after contract deployment by the owner. Updates the
+`lootToken` address to point to the deployed `LootToken.sol` contract.
 
+Immediately after calling this function, as part of the migration script, the
+owner will call `transferOwnership` and make the `Moloch.sol` contract the
+permanent owner.
+
+```
+    function setLootTokenAddress(address lootTokenAddress) public onlyOwner returns (address) {
+        require (address(lootTokenAddress) != address(0), "GuildBank::setLootTokenAddress address must not be zero");
+        require (address(lootToken) == address(0),"GuildBank::setLootTokenAddress Loot Token address already set");
+        lootToken = LootToken(lootTokenAddress);
+        return lootTokenAddress;
+    }
+```
+
+### depositTributeTokens
+
+Is called by the owner - the `Moloch.sol` contract - in the `processProposal`
+function.
+
+1. If this is the first token of it's kind being deposited, save its address in the
+   `knownTokens` mapping and push its address to the `tokenAddresses` array.
+2. Transfers the admitted member's escrowed tribute tokens from Moloch to the
+   Guild Bank.
+
+```
+    function depositTributeTokens(
+        address sender,
+        address tokenAddress,
+        uint256 tokenAmount
+    ) public onlyOwner returns (bool) {
+        if ((knownTokens[tokenAddress] == false) && (tokenAddress != address(lootToken))) {
+            knownTokens[tokenAddress] = true;
+            tokenAddresses.push(tokenAddress);
+        }
+        ERC20 token = ERC20(tokenAddress);
+        return (token.transferFrom(sender, this, tokenAmount));
+    }
+```
+
+### redeemLootTokens
+
+Can be used by anyone to consume their loot tokens and withdraw a proportional share of
+all tokens held by the guild bank.
+
+1. Transfer `lootAmount` of loot tokens from the `msg.sender` to the guild bank.
+2. Burn those loot tokens.
+3. Transfer a proportional share of all tokens held by the guild bank to the
+   provided `receiver` address.
+
+```
+    function redeemLootTokens(
+        address receiver,
+        uint256 lootAmount
+    ) public {
+        uint256 totalLootTokens = lootToken.totalSupply();
+
+        require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
+
+        // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
+        lootToken.burn(lootAmount);
+
+        // transfer proportional share of all tokens held by the guild bank
+        for (uint256 i = 0; i < tokenAddresses.length; i++) {
+            ERC20 token = ERC20(tokenAddresses[i]);
+            uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens);
+            require(token.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
+        }
+    }
+```
+
+### safeRedeemLootTokens
+
+If any of the tribute tokens held by the guild bank have transfer restrictions
+that take effect, the `redeemLootTokens` function above would fail. To
+circumvent this, loot token holders can provide the set of token addresses they want to withdraw themselves, and skip any that would fail.
+
+This function exists to be a safegaurd, not to give members a free pass. Guild
+members should all still be diligent to avoid accepting as tribute tokens that may
+introduce transfer restrictions.
+
+1. Increment the `safeRedeemId` - the unique id of each `safeRedeemLootTokens`
+   function call.
+2. Transfer `lootAmount` of loot tokens from the `msg.sender` to the guild bank.
+3. Burn those loot tokens.
+4. For all unique tokens addresses in the provided `safeTokenAddresses` array, transfer a proportional share of the guild bank holdings to the
+   provided `receiver` address.
+
+```
+    function safeRedeemLootTokens(
+        address receiver,
+        uint256 lootAmount,
+        address[] safeTokenAddresses
+    ) public {
+        safeRedeemId = safeRedeemId.add(1);
+
+        uint256 totalLootTokens = lootToken.totalSupply();
+
+        require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
+
+        // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
+        lootToken.burn(lootAmount);
+
+        // transfer proportional share of all tokens held by the guild bank
+        for (uint256 i = 0; i < safeTokenAddresses.length; i++) {
+            if (!safeRedeemsById[safeRedeemId][safeTokenAddresses[i]]) {
+                safeRedeemsById[safeRedeemId][safeTokenAddresses[i]] = true;
+                ERC20 token = ERC20(safeTokenAddresses[i]);
+                uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens);
+                require(token.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
+            }
+        }
+    }
+```
+
+The `safeRedeemsById` tracks token addresses already withdrawn for each unique `safeRedeemLootTokens` call to prevent double-withdrawals of the same token.
 
