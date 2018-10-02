@@ -8,7 +8,7 @@
 
 Moloch is a grant-making DAO / Guild and a radical experiment in voluntary incentive alignment to overcome the "tragedy of the commons". Our objective is to accelerate the development of public Ethereum infrastructure that many teams need but don't want to pay for on their own. By pooling our ETH and ERC20 tokens, teams building on Ethereum can collectively fund open-source work we decide is in our common interest.
 
-This documentation will focus on the Moloch DAO system design and smart contracts. For a deeper explanation of the philosophy and purpose of this system, please read our whitepaper and the Slate Star Codex post, Meditations on Moloch, which served as inspiration.
+This documentation will focus on the Moloch DAO system design and smart contracts. For a deeper explanation of the philosophy behind Moloch, please read the Slate Star Codex post, [Meditations on Moloch](http://slatestarcodex.com/2014/07/30/meditations-on-moloch/), which served as inspiration.
 
 ## Design Principles
 
