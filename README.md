@@ -49,9 +49,9 @@ In this fashion, the ragequit mechanism also provides an interesting incentive i
 
 The maximum additional dilution would be 4x, in the case of a proposal vote with 50% voter turnout (the quorum minimum) and just over 25% voting **Yes** and just under 25% voting **No**, where the 25% who voted **No** and the 50% who didn't vote all ragequit.
 
-## Moloch.sol
+# Moloch.sol
 
-### Data Structures
+## Data Structures
 
 #### Global Constants
 ```
