@@ -9,7 +9,7 @@ contract GuildBank is Ownable {
     using SafeMath for uint256;
 
     LootToken public lootToken; // loot token contract reference
-    mapping (address => bool) knownTokens; // true for tokens that have ever been deposited into the guild back
+    mapping (address => bool) public knownTokens; // true for tokens that have ever been deposited into the guild back
     address[] public tokenAddresses; // the complete set of unique token addresses held by guild bank
 
     mapping (uint256 => mapping (address => bool)) safeRedeemsById; // tracks token addresses already withdrawn for each unique safeRedeem attempt to prevent double-withdrawals
