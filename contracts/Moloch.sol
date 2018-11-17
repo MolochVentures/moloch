@@ -175,7 +175,7 @@ contract Moloch {
         pendingProposals = pendingProposals.add(1);
         uint256 startingPeriod = currentPeriod + pendingProposals;
 
-        Proposal memory proposal = Proposal(memberAddress, applicant, votingSharesRequested, startingPeriod, 0, 0, tributeTokenAddresses, tributeTokenAmounts, false);
+        Proposal memory proposal = Proposal(memberAddress, applicant, votingSharesRequested, startingPeriod, 0, 0, false, tributeTokenAddresses, tributeTokenAmounts);
 
         proposalQueue.push(proposal);
     }
@@ -213,7 +213,6 @@ contract Moloch {
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
 
         proposal.processed = true;
-        uint256 i = 0;
 
         if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
 
@@ -222,21 +221,26 @@ contract Moloch {
 
                 members[proposal.applicant].votingShares = members[proposal.applicant].votingShares.add(proposal.votingSharesRequested);
 
-                // loop over their active proposal votes and add the new voting shares to any YES or NO votes
                 uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
-                uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
+
+                uint oldestActiveProposal = 0;
+                if (currentProposalIndex > votingPeriodLength.add(gracePeriodLength)) {
+                    oldestActiveProposal = currentProposalIndex.sub(votingPeriodLength).sub(gracePeriodLength);
+                }
+
+                // loop over their active proposal votes and add the new voting shares to any YES or NO votes
                 for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
                     if (isActiveProposal(i)) {
-                        Proposal storage proposal = proposalQueue[i];
-                        Vote vote = member.votesByProposal[i];
+                        Proposal storage activeProposal = proposalQueue[i];
+                        Vote vote = activeProposal.votesByMember[proposal.applicant];
 
                         if (vote == Vote.Null) {
                             // member didn't vote on this proposal, skip to the next one
                             continue;
                         } else if (vote == Vote.Yes) {
-                            proposal.yesVotes = proposal.yesVotes.add(proposal.votingSharesRequested);
+                            activeProposal.yesVotes = activeProposal.yesVotes.add(proposal.votingSharesRequested);
                         } else {
-                            proposal.noVotes = proposal.noVotes.add(proposal.votingSharesRequested);
+                            activeProposal.noVotes = activeProposal.noVotes.add(proposal.votingSharesRequested);
                         }
                     } else {
                         // reached inactive proposal, exit the loop
@@ -255,14 +259,14 @@ contract Moloch {
             lootToken.mint(this, proposal.votingSharesRequested);
 
             // deposit all tribute tokens to guild bank
-            for (i; i < proposal.tributeTokenAddresses.length; i++) {
-                require(guildBank.depositTributeTokens(this, proposal.tributeTokenAddresses[i], proposal.tributeTokenAmounts[i]));
+            for (uint256 j; j < proposal.tributeTokenAddresses.length; j++) {
+                require(guildBank.depositTributeTokens(this, proposal.tributeTokenAddresses[j], proposal.tributeTokenAmounts[j]));
             }
         } else {
             // return all tokens
-            for (i; i < proposal.tributeTokenAddresses.length; i++) {
-                ERC20 token = ERC20(proposal.tributeTokenAddresses[i]);
-                require(token.transfer(proposal.applicant, proposal.tributeTokenAmounts[i]));
+            for (uint256 k; k < proposal.tributeTokenAddresses.length; k++) {
+                ERC20 token = ERC20(proposal.tributeTokenAddresses[k]);
+                require(token.transfer(proposal.applicant, proposal.tributeTokenAmounts[k]));
             }
         }
 
