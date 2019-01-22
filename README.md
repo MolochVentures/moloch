@@ -12,7 +12,7 @@ This documentation will focus on the Moloch DAO system design and smart contract
 
 ## Design Principles
 
-In developing the Moloch DAO, we realized that the more Solidity we wrote, the greater the likelihood that we would lose everyone's money. In order to prioritize security, we took simplicity and elegance as our primary design principles. We consiously skipped many features, and the result is what we believe to be a Minimally Viable DAO.
+In developing the Moloch DAO, we realized that the more Solidity we wrote, the greater the likelihood that we would lose everyone's money. In order to prioritize security, we took simplicity and elegance as our primary design principles. We consciously skipped many features, and the result is what we believe to be a Minimally Viable DAO.
 
 ## Overview
 
