@@ -6,7 +6,12 @@ module.exports = {
       gas: 4700000,
       network_id: '*' // Match any network id
     }
-  }
+  },
+  compilers: {
+    solc: {
+      version: "0.4.24",
+    },
+  },
 }
 
 /*
