@@ -1,4 +1,4 @@
-pragma solidity 0.4.24;
+pragma solidity 0.5.3;
 
 import "./oz/Ownable.sol";
 import "./oz/ERC20.sol";
@@ -14,7 +14,7 @@ contract GuildBank is Ownable {
     event DepositTributeTokens(address indexed sender, uint256 tokenAmount);
     event RedeemLootTokens(address indexed receiver, uint256 lootAmount, uint256 ethShare, uint256 tokenShare);
 
-    constructor(address lootTokenAddress, address approvedTokenAddress) {
+    constructor(address lootTokenAddress, address approvedTokenAddress) public {
         lootToken = LootToken(lootTokenAddress);
         approvedToken = ERC20(approvedTokenAddress);
     }
@@ -24,27 +24,29 @@ contract GuildBank is Ownable {
         uint256 tokenAmount
     ) public onlyOwner returns (bool) {
         emit DepositTributeTokens(sender, tokenAmount);
-        return (approvedToken.transferFrom(sender, this, tokenAmount));
+        return (approvedToken.transferFrom(sender, address(this), tokenAmount));
     }
 
     function redeemLootTokens(
-        address receiver,
+        address payable receiver,
         uint256 lootAmount
     ) public {
         // read the total supply into memory first so the math will work even if we burn first
         uint256 totalLootTokens = lootToken.totalSupply();
 
-        require(lootToken.transferFrom(msg.sender, this, lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
+        require(lootToken.transferFrom(msg.sender, address(this), lootAmount), "GuildBank::redeemLootTokens - lootToken transfer failed");
 
         // burn lootTokens - will fail if approved lootToken balance is lower than lootAmount
         lootToken.burn(lootAmount);
 
-        uint256 ethShare = this.balance.mul(lootAmount).div(totalLootTokens);
+        uint256 ethShare = address(this).balance.mul(lootAmount).div(totalLootTokens);
         receiver.transfer(ethShare);
 
-        uint256 tokenShare = token.balanceOf(this).mul(lootAmount).div(totalLootTokens);
+        uint256 tokenShare = approvedToken.balanceOf(address(this)).mul(lootAmount).div(totalLootTokens);
         require(approvedToken.transfer(receiver, tokenShare), "GuildBank::redeemLootTokens - token transfer failed");
 
         emit RedeemLootTokens(receiver, lootAmount, ethShare, tokenShare);
     }
+
+    function () external payable {}
 }

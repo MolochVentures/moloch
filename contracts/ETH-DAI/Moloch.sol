@@ -5,7 +5,7 @@
  *  - support only ETH + approvedToken (i.e. DAI)
  */
 
-pragma solidity 0.4.24;
+pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
@@ -56,8 +56,8 @@ contract Moloch {
     }
 
     struct Proposal {
-        address proposer; // the member who submitted the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        address payable proposer; // the member who submitted the proposal
+        address payable applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
@@ -74,7 +74,7 @@ contract Moloch {
     }
 
     mapping (address => Member) public members;
-    mapping (address => address) public memberAddressByDelegateKey;
+    mapping (address => address payable) public memberAddressByDelegateKey;
     mapping (uint256 => Period) public periods;
     Proposal[] public proposalQueue;
 
@@ -98,7 +98,7 @@ contract Moloch {
         approvedToken = ERC20(_approvedToken);
 
         lootToken = new LootToken();
-        guildBank = new GuildBank(lootToken, approvedToken);
+        guildBank = new GuildBank(address(lootToken), address(approvedToken));
 
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
@@ -109,9 +109,9 @@ contract Moloch {
         periods[currentPeriod].startTime = startTime;
         periods[currentPeriod].endTime = startTime.add(periodDuration);
 
-        members[summoner] = Member(summoner, 1, true);
+        members[summoner] = Member(summoner, 1, true, 0);
         totalVotingShares = totalVotingShares.add(1);
-        lootToken.mint(this, 1);
+        lootToken.mint(address(this), 1);
     }
 
     function updatePeriod() public {
@@ -131,14 +131,23 @@ contract Moloch {
     PROPOSAL FUNCTIONS
     *****************/
 
-    function submitProposal(address applicant, uint256 ethTribute, uint256 tokenTribute, uint256 votingSharesRequested) public payable onlyMemberDelegate {
+    function submitProposal(
+        address payable applicant, 
+        uint256 ethTribute, 
+        uint256 tokenTribute, 
+        uint256 votingSharesRequested
+    ) 
+        public 
+        payable 
+        onlyMemberDelegate 
+    {
         updatePeriod();
 
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        address payable memberAddress = memberAddressByDelegateKey[msg.sender];
 
         require(msg.value == proposalDeposit.add(ethTribute), "Moloch::submitProposal - insufficient value");
 
-        require(approvedToken.transferFrom(applicant, this, tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
+        require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
         pendingProposals = pendingProposals.add(1);
         uint256 startingPeriod = currentPeriod + pendingProposals;
@@ -151,8 +160,8 @@ contract Moloch {
             yesVotes: 0,
             noVotes: 0,
             processed: false,
-            tributeTokenAddresses: tributeTokenAddresses,
-            tributeTokenAmounts: tributeTokenAmounts
+            ethTribute: ethTribute,
+            tokenTribute: tokenTribute
         });
 
         emit SubmitProposal(proposalQueue.push(proposal)-1, applicant,memberAddress);
@@ -218,29 +227,41 @@ contract Moloch {
             // the applicant is a new member, create a new record for them
             } else {
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
             // mint new voting shares and loot tokens
             totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
-            lootToken.mint(this, proposal.votingSharesRequested);
+            lootToken.mint(address(this), proposal.votingSharesRequested);
 
             // transfer ETH and tokens to guild bank
-            guildBank.transfer(ethTribute);
-            tributeToken.approve(address(guildBank),proposal.tokenTribute);
-            require(guildBank.depositTributeTokens(this, approvedToken, proposal.tokenTribute));
+            address(guildBank).transfer(proposal.ethTribute);
+            approvedToken.approve(address(guildBank), proposal.tokenTribute);
+            require(
+                guildBank.depositTributeTokens(address(this), proposal.tokenTribute),
+                "Moloch::processProposal - passing vote token transfer failed"
+            );
 
         // PROPOSAL FAILED
         } else {
             // return all eth + tokens to the applicant
             // NOTE - ETH will go directly to the applicant even though it came from the proposer
-            applicant.transfer(ethTribute);
-            require(token.transfer(proposal.applicant, proposal.tokenTribute);
+            proposal.applicant.transfer(proposal.ethTribute);
+            require(
+                approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
+                "Moloch::processProposal - failing vote token transfer failed"
+            );
         }
 
-        proposal.proposer.transfer(proposalDeposit.add(ethTribute));
-        emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, didPass, proposal.votingSharesRequested);
+        proposal.proposer.transfer(proposalDeposit.add(proposal.ethTribute));
+        emit ProcessProposal(
+            proposalIndex, 
+            proposal.applicant, 
+            proposal.proposer, 
+            didPass, 
+            proposal.votingSharesRequested
+        );
     }
 
 
@@ -280,17 +301,5 @@ contract Moloch {
         } else {
             return false;
         }
-    }
-
-    function getProposalTokenAddress(uint256 proposalIndex, uint256 tokenIndex) external view returns (address) {
-        return proposalQueue[proposalIndex].tributeTokenAddresses[tokenIndex];
-    }
-
-    function getProposalTokenAmount(uint256 proposalIndex, uint256 tokenIndex) external view returns (uint256) {
-        return proposalQueue[proposalIndex].tributeTokenAmounts[tokenIndex];
-    }
-
-    function getProposalTokenLength(uint256 proposalIndex) external view returns (uint256) {
-        return proposalQueue[proposalIndex].tributeTokenAddresses.length;
     }
 }
