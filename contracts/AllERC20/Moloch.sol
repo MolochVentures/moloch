@@ -1,3 +1,11 @@
+/* TODO
+ * Test edge cases around increasing/decreasing voting shares of existing members wrt to proposal queue length
+ *
+ * New:
+ *  - single summoner
+ * - add rageQuitAfterBlock parameter
+ */
+
 pragma solidity 0.4.24;
 
 import "./oz/SafeMath.sol";
@@ -14,13 +22,17 @@ contract Moloch {
     uint256 public periodDuration; // default = 86400 = 1 day in seconds
     uint256 public votingPeriodLength; // default = 7 periods
     uint256 public gracePeriodLength; // default = 7 periods
-    uint256 public proposalDeposit; // default = $5,000 worth of ETH at contract deployment (units in Wei)
+    uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
 
     GuildBank public guildBank; // guild bank contract reference
     LootToken public lootToken; // loot token contract reference
 
-    uint8 constant QUORUM_NUMERATOR = 1;
-    uint8 constant QUORUM_DENOMINATOR = 2;
+    /***************
+    EVENTS
+    ***************/
+    event SubmitProposal(uint256 indexed index, address indexed applicant, address indexed memberAddress);
+    event ProcessProposal(uint256 indexed index, address indexed applicant, address indexed proposer, bool didPass, uint256 shares);
+    event SubmitVote(address indexed sender, address indexed memberAddress, uint256 indexed proposalIndex, uint8 uintVote);
 
     /******************
     INTERNAL ACCOUNTING
@@ -40,6 +52,7 @@ contract Moloch {
         uint256 votingShares; // the # of voting shares assigned to this member
         bool isActive; // always true once a member has been created
         mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
+        uint256 canRagequitAfterBlock; // block # after which member can ragequit - set on vote
     }
 
     struct Proposal {
@@ -81,21 +94,19 @@ contract Moloch {
     /********
     FUNCTIONS
     ********/
-
     constructor(
+        address lootTokenAddress,
         address guildBankAddress,
-        address[] foundersAddresses,
-        uint256[] foundersVotingShares,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
-        uint _proposalDeposit
+        uint _proposalDeposit,
+        address summoner
     )
         public
     {
-        lootToken = new LootToken();
+        lootToken = LootToken(lootTokenAddress);
         guildBank = GuildBank(guildBankAddress);
-
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
@@ -105,29 +116,9 @@ contract Moloch {
         periods[currentPeriod].startTime = startTime;
         periods[currentPeriod].endTime = startTime.add(periodDuration);
 
-        _addFoundingMembers(foundersAddresses, foundersVotingShares);
-    }
-
-    function _addFoundingMembers(
-        address[] membersArray,
-        uint256[] sharesArray
-    )
-        internal
-    {
-        require(membersArray.length == sharesArray.length, "Moloch::_addFoundingMembers - Provided arrays should match up.");
-        for (uint i = 0; i < membersArray.length; i++) {
-            address founder = membersArray[i];
-            uint256 shares = sharesArray[i];
-
-            require(shares > 0, "Moloch::_addFoundingMembers - founding member has 0 shares");
-            require(!members[founder].isActive, "Moloch::_addFoundingMembers - duplicate founder");
-
-            // use the founder address as the delegateKey by default
-            members[founder] = Member(founder, shares, true);
-            memberAddressByDelegateKey[founder] = founder;
-            totalVotingShares = totalVotingShares.add(shares);
-            lootToken.mint(this, shares);
-        }
+        members[summoner] = Member(summoner, 1, true);
+        totalVotingShares = totalVotingShares.add(1);
+        lootToken.mint(this, 1);
     }
 
     function updatePeriod() public {
@@ -161,9 +152,7 @@ contract Moloch {
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
-        require(memberAddress == applicant || !members[applicant].isActive, "Moloch::submitProposal - applicant is an active member besides the proposer");
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
-        require(votingSharesRequested > 0, "Moloch::submitProposal - votingSharesRequested is zero");
 
         for (uint256 i = 0; i < tributeTokenAddresses.length; i++) {
             ERC20 token = ERC20(tributeTokenAddresses[i]);
@@ -175,12 +164,28 @@ contract Moloch {
         pendingProposals = pendingProposals.add(1);
         uint256 startingPeriod = currentPeriod + pendingProposals;
 
-        Proposal memory proposal = Proposal(memberAddress, applicant, votingSharesRequested, startingPeriod, 0, 0, false, tributeTokenAddresses, tributeTokenAmounts);
+        Proposal memory proposal = Proposal({
+            proposer: memberAddress,
+            applicant: applicant,
+            votingSharesRequested: votingSharesRequested,
+            startingPeriod: startingPeriod,
+            yesVotes: 0,
+            noVotes: 0,
+            processed: false,
+            tributeTokenAddresses: tributeTokenAddresses,
+            tributeTokenAmounts: tributeTokenAmounts
+        });
 
-        proposalQueue.push(proposal);
+        emit SubmitProposal(proposalQueue.push(proposal)-1, applicant,memberAddress);
     }
 
-    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyMemberDelegate {
+    function submitVote(
+        uint256 proposalIndex,
+        uint8 uintVote
+    )
+        public
+        onlyMemberDelegate
+    {
         updatePeriod();
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
@@ -198,10 +203,18 @@ contract Moloch {
         member.votesByProposal[proposalIndex] = vote;
 
         if (vote == Vote.Yes) {
-            proposal.yesVotes.add(member.votingShares);
+            proposal.yesVotes = proposal.yesVotes.add(member.votingShares);
         } else if (vote == Vote.No) {
-            proposal.noVotes.add(member.votingShares);
+            proposal.noVotes = proposal.noVotes.add(member.votingShares);
         }
+
+        uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
+
+        if (endingPeriod > member.canRagequitAfterBlock) {
+            member.canRagequitAfterBlock = endingPeriod;
+        }
+
+        emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
     }
 
     function processProposal(uint256 proposalIndex) public {
@@ -214,39 +227,15 @@ contract Moloch {
 
         proposal.processed = true;
 
-        if (proposal.yesVotes.add(proposal.noVotes) >= (totalVotingShares.mul(QUORUM_NUMERATOR)).div(QUORUM_DENOMINATOR) && proposal.yesVotes > proposal.noVotes) {
+        bool didPass = proposal.yesVotes > proposal.noVotes;
 
-            // if the proposer is the applicant, add to their existing voting shares
-            if (proposal.proposer == proposal.applicant) {
+        // PROPOSAL PASSED
+        if (didPass) {
+
+            // if the proposer is already a member, add to their existing voting shares
+            if (members[proposal.applicant].votingShares > 0) {
 
                 members[proposal.applicant].votingShares = members[proposal.applicant].votingShares.add(proposal.votingSharesRequested);
-
-                uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
-
-                uint oldestActiveProposal = 0;
-                if (currentProposalIndex > votingPeriodLength.add(gracePeriodLength)) {
-                    oldestActiveProposal = currentProposalIndex.sub(votingPeriodLength).sub(gracePeriodLength);
-                }
-
-                // loop over their active proposal votes and add the new voting shares to any YES or NO votes
-                for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
-                    if (isActiveProposal(i)) {
-                        Proposal storage activeProposal = proposalQueue[i];
-                        Vote vote = activeProposal.votesByMember[proposal.applicant];
-
-                        if (vote == Vote.Null) {
-                            // member didn't vote on this proposal, skip to the next one
-                            continue;
-                        } else if (vote == Vote.Yes) {
-                            activeProposal.yesVotes = activeProposal.yesVotes.add(proposal.votingSharesRequested);
-                        } else {
-                            activeProposal.noVotes = activeProposal.noVotes.add(proposal.votingSharesRequested);
-                        }
-                    } else {
-                        // reached inactive proposal, exit the loop
-                        break;
-                    }
-                }
             // the applicant is a new member, create a new record for them
             } else {
                 // use applicant address as delegateKey by default
@@ -260,8 +249,12 @@ contract Moloch {
 
             // deposit all tribute tokens to guild bank
             for (uint256 j; j < proposal.tributeTokenAddresses.length; j++) {
+                ERC20 tributeToken = ERC20(proposal.tributeTokenAddresses[j]);
+                tributeToken.approve(address(guildBank),proposal.tributeTokenAmounts[j]);
                 require(guildBank.depositTributeTokens(this, proposal.tributeTokenAddresses[j], proposal.tributeTokenAmounts[j]));
             }
+
+        // PROPOSAL FAILED
         } else {
             // return all tokens
             for (uint256 k; k < proposal.tributeTokenAddresses.length; k++) {
@@ -271,9 +264,17 @@ contract Moloch {
         }
 
         proposal.proposer.transfer(proposalDeposit);
+        emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, didPass, proposal.votingSharesRequested);
     }
 
-    function collectLootTokens(address treasury, uint256 lootAmount) public onlyMember {
+
+    function collectLootTokens(
+        address treasury,
+        uint256 lootAmount
+    )
+        public
+        onlyMember
+    {
         updatePeriod();
 
         Member storage member = members[msg.sender];
@@ -285,50 +286,41 @@ contract Moloch {
 
         require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
 
-        // loop over their active proposal votes:
-        // - make sure they haven't voted YES on any active proposals
-        // - update any active NO votes to reflect their new voting power.
-        uint256 currentProposalIndex = proposalQueue.length.sub(pendingProposals.add(1));
-        uint256 oldestActiveProposal = (currentProposalIndex.sub(votingPeriodLength)).sub(gracePeriodLength);
-        for (uint256 i = currentProposalIndex; i > oldestActiveProposal; i--) {
-            if (isActiveProposal(i)) {
-                Proposal storage proposal = proposalQueue[i];
-                Vote vote = member.votesByProposal[i];
-
-                require(vote != Vote.Yes, "Moloch::collectLoot - member voted YES on active proposal");
-
-                if (vote == Vote.Null) {
-                    // member didn't vote on this proposal, skip to the next one
-                    continue;
-                }
-
-                // member voted No, revert the vote.
-                proposal.noVotes = proposal.noVotes.sub(lootAmount);
-
-                // if the member is collecting 100% of their loot, erase these vote completely
-                if (lootAmount == member.votingShares) {
-                    proposal.votesByMember[msg.sender] = Vote.Null;
-                    member.votesByProposal[i] = Vote.Null;
-                }
-            } else {
-                // reached inactive proposal, exit the loop
-                break;
-            }
-        }
+        require(currentPeriod > member.canRagequitAfterBlock, "Moloch::collectLoot - can't ragequit yet");
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
         // newDelegateKey must be either the member's address or one not in use by any other members
-        require(newDelegateKey == msg.sender || !members[memberAddressByDelegateKey[msg.sender]].isActive);
+        require(newDelegateKey == msg.sender || !members[memberAddressByDelegateKey[newDelegateKey]].isActive);
         Member storage member = members[msg.sender];
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
         member.delegateKey = newDelegateKey;
     }
 
+    /***************
+    GETTERS
+    ***************/
+
     // returns true if proposal is either in voting or grace period
     function isActiveProposal(uint256 proposalIndex) internal view returns (bool) {
-        uint256 startingPeriod = proposalQueue[proposalIndex].startingPeriod;
-        return (currentPeriod >= startingPeriod && currentPeriod.sub(startingPeriod) < votingPeriodLength.add(gracePeriodLength));
+        if (proposalQueue.length>proposalIndex) {
+            uint256 startingPeriod = proposalQueue[proposalIndex].startingPeriod;
+            return (currentPeriod >= startingPeriod && currentPeriod.sub(startingPeriod) < votingPeriodLength.add(gracePeriodLength));
+        } else {
+            return false;
+        }
+    }
+
+    function getProposalTokenAddress(uint256 proposalIndex, uint256 tokenIndex) external view returns (address) {
+        return proposalQueue[proposalIndex].tributeTokenAddresses[tokenIndex];
+    }
+
+    function getProposalTokenAmount(uint256 proposalIndex, uint256 tokenIndex) external view returns (uint256) {
+        return proposalQueue[proposalIndex].tributeTokenAmounts[tokenIndex];
+    }
+
+    function getProposalTokenLength(uint256 proposalIndex) external view returns (uint256) {
+        return proposalQueue[proposalIndex].tributeTokenAddresses.length;
     }
 }
