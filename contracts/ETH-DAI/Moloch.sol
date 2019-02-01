@@ -2,7 +2,7 @@
  * Test edge cases around increasing/decreasing voting shares of existing members wrt to proposal queue length
  *
  * New:
- *  - remove DAI support -> ETH maximalist only
+ *  - support only ETH + approvedToken (i.e. DAI)
  */
 
 pragma solidity 0.4.24;
