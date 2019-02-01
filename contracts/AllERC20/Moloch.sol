@@ -6,7 +6,7 @@
  * - add rageQuitAfterBlock parameter
  */
 
-pragma solidity 0.4.24;
+pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
@@ -56,8 +56,8 @@ contract Moloch {
     }
 
     struct Proposal {
-        address proposer; // the member who submitted the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        address payable proposer; // the member who submitted the proposal
+        address payable applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
@@ -74,7 +74,7 @@ contract Moloch {
     }
 
     mapping (address => Member) public members;
-    mapping (address => address) public memberAddressByDelegateKey;
+    mapping (address => address payable) public memberAddressByDelegateKey;
     mapping (uint256 => Period) public periods;
     Proposal[] public proposalQueue;
 
@@ -116,9 +116,9 @@ contract Moloch {
         periods[currentPeriod].startTime = startTime;
         periods[currentPeriod].endTime = startTime.add(periodDuration);
 
-        members[summoner] = Member(summoner, 1, true);
+        members[summoner] = Member(summoner, 1, true, 0);
         totalVotingShares = totalVotingShares.add(1);
-        lootToken.mint(this, 1);
+        lootToken.mint(address(this), 1);
     }
 
     function updatePeriod() public {
@@ -139,9 +139,9 @@ contract Moloch {
     *****************/
 
     function submitProposal(
-        address applicant,
-        address[] tributeTokenAddresses,
-        uint256[] tributeTokenAmounts,
+        address payable applicant,
+        address[] memory tributeTokenAddresses,
+        uint256[] memory tributeTokenAmounts,
         uint256 votingSharesRequested
     )
         public
@@ -150,7 +150,7 @@ contract Moloch {
     {
         updatePeriod();
 
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        address payable memberAddress = memberAddressByDelegateKey[msg.sender];
 
         require(msg.value == proposalDeposit, "Moloch::submitProposal - insufficient proposalDeposit");
 
@@ -158,7 +158,7 @@ contract Moloch {
             ERC20 token = ERC20(tributeTokenAddresses[i]);
             uint256 amount = tributeTokenAmounts[i];
             require(amount > 0, "Moloch::submitProposal - token tribute amount is 0");
-            require(token.transferFrom(applicant, this, amount), "Moloch::submitProposal - tribute token transfer failed");
+            require(token.transferFrom(applicant, address(this), amount), "Moloch::submitProposal - tribute token transfer failed");
         }
 
         pendingProposals = pendingProposals.add(1);
@@ -239,19 +239,19 @@ contract Moloch {
             // the applicant is a new member, create a new record for them
             } else {
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
             // mint new voting shares and loot tokens
             totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
-            lootToken.mint(this, proposal.votingSharesRequested);
+            lootToken.mint(address(this), proposal.votingSharesRequested);
 
             // deposit all tribute tokens to guild bank
             for (uint256 j; j < proposal.tributeTokenAddresses.length; j++) {
                 ERC20 tributeToken = ERC20(proposal.tributeTokenAddresses[j]);
                 tributeToken.approve(address(guildBank),proposal.tributeTokenAmounts[j]);
-                require(guildBank.depositTributeTokens(this, proposal.tributeTokenAddresses[j], proposal.tributeTokenAmounts[j]));
+                require(guildBank.depositTributeTokens(address(this), proposal.tributeTokenAddresses[j], proposal.tributeTokenAmounts[j]));
             }
 
         // PROPOSAL FAILED
