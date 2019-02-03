@@ -1,6 +1,5 @@
 // TODO
-// - add text to proposal
-// - should deposit be in ETH or wETH?
+// - make proposal deposits wETH
 // - add canRagequit that prevents ragequit until latest proposal member voted YES on is processed
 
 pragma solidity 0.5.3;
@@ -62,6 +61,7 @@ contract Moloch {
         uint256 noVotes; // the total number of NO votes for this proposal
         bool processed; // true only if the proposal has been processed
         uint256 tokenTribute; // amount of tokens offered as tribute
+        string details; // proposal details - could be IPFS hash, plaintext, or JSON
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
@@ -123,7 +123,8 @@ contract Moloch {
     function submitProposal(
         address payable applicant,
         uint256 tokenTribute,
-        uint256 votingSharesRequested
+        uint256 votingSharesRequested,
+        string details
     )
         public
         payable
@@ -150,7 +151,8 @@ contract Moloch {
             yesVotes: 0,
             noVotes: 0,
             processed: false,
-            tokenTribute: tokenTribute
+            tokenTribute: tokenTribute,
+            details: details
         });
 
         // ... and append it to the queue
