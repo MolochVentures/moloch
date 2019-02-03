@@ -1,8 +1,5 @@
 /* TODO
  * Test edge cases around increasing/decreasing voting shares of existing members wrt to proposal queue length
- *
- * New:
- *  - support only ETH + approvedToken (i.e. DAI)
  */
 
 pragma solidity 0.5.3;
@@ -10,7 +7,6 @@ pragma solidity 0.5.3;
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
 import "./GuildBank.sol";
-import {LootToken} from "./LootToken.sol";
 
 contract Moloch {
     using SafeMath for uint256;
@@ -23,9 +19,8 @@ contract Moloch {
     uint256 public gracePeriodLength; // default = 7 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
 
-    ERC20 public approvedToken; // approved token contract reference
+    ERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
-    LootToken public lootToken; // loot token contract reference
 
     /***************
     EVENTS
@@ -63,7 +58,6 @@ contract Moloch {
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
         bool processed; // true only if the proposal has been processed
-        uint256 ethTribute; // amount of ETH offered as tribute
         uint256 tokenTribute; // amount of tokens offered as tribute
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
@@ -97,8 +91,7 @@ contract Moloch {
     constructor(address summoner, address _approvedToken, uint256 _periodDuration, uint256 _votingPeriodLength, uint256 _gracePeriodLength, uint _proposalDeposit) public {
         approvedToken = ERC20(_approvedToken);
 
-        lootToken = new LootToken();
-        guildBank = new GuildBank(address(lootToken), address(approvedToken));
+        guildBank = new GuildBank(_approvedToken);
 
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
@@ -111,7 +104,6 @@ contract Moloch {
 
         members[summoner] = Member(summoner, 1, true, 0);
         totalVotingShares = totalVotingShares.add(1);
-        lootToken.mint(address(this), 1);
     }
 
     function updatePeriod() public {
@@ -132,20 +124,19 @@ contract Moloch {
     *****************/
 
     function submitProposal(
-        address payable applicant, 
-        uint256 ethTribute, 
-        uint256 tokenTribute, 
+        address payable applicant,
+        uint256 tokenTribute,
         uint256 votingSharesRequested
-    ) 
-        public 
-        payable 
-        onlyMemberDelegate 
+    )
+        public
+        payable
+        onlyMemberDelegate
     {
         updatePeriod();
 
         address payable memberAddress = memberAddressByDelegateKey[msg.sender];
 
-        require(msg.value == proposalDeposit.add(ethTribute), "Moloch::submitProposal - insufficient value");
+        require(msg.value == proposalDeposit, "Moloch::submitProposal - sent ETH doesn't match proposalDeposit");
 
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
@@ -160,7 +151,6 @@ contract Moloch {
             yesVotes: 0,
             noVotes: 0,
             processed: false,
-            ethTribute: ethTribute,
             tokenTribute: tokenTribute
         });
 
@@ -231,53 +221,54 @@ contract Moloch {
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
-            // mint new voting shares and loot tokens
+            // mint new voting shares
             totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
-            lootToken.mint(address(this), proposal.votingSharesRequested);
 
-            // transfer ETH and tokens to guild bank
-            address(guildBank).transfer(proposal.ethTribute);
+            // transfer tokens to guild bank
             approvedToken.approve(address(guildBank), proposal.tokenTribute);
             require(
-                guildBank.depositTributeTokens(address(this), proposal.tokenTribute),
+                guildBank.deposit(proposal.tokenTribute),
                 "Moloch::processProposal - passing vote token transfer failed"
             );
 
         // PROPOSAL FAILED
         } else {
-            // return all eth + tokens to the applicant
-            // NOTE - ETH will go directly to the applicant even though it came from the proposer
-            proposal.applicant.transfer(proposal.ethTribute);
+            // return all tokens to the applicant
             require(
                 approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
                 "Moloch::processProposal - failing vote token transfer failed"
             );
         }
 
-        proposal.proposer.transfer(proposalDeposit.add(proposal.ethTribute));
+        proposal.proposer.transfer(proposalDeposit);
+
         emit ProcessProposal(
-            proposalIndex, 
-            proposal.applicant, 
-            proposal.proposer, 
-            didPass, 
+            proposalIndex,
+            proposal.applicant,
+            proposal.proposer,
+            didPass,
             proposal.votingSharesRequested
         );
     }
 
-
-    function collectLootTokens(address treasury, uint256 lootAmount) public onlyMember {
+    function ragequit(address receiver, uint256 sharesToBurn) public onlyMember {
         updatePeriod();
+
+        uint256 initialTotalVotingShares = totalVotingShares;
 
         Member storage member = members[msg.sender];
 
-        require(member.votingShares >= lootAmount, "Moloch::collectLoot - insufficient voting shares");
+        require(member.votingShares >= sharesToBurn, "Moloch::ragequit - insufficient voting shares");
 
-        member.votingShares = member.votingShares.sub(lootAmount);
-        totalVotingShares = totalVotingShares.sub(lootAmount);
+        require(currentPeriod > member.canRagequitAfterBlock, "Moloch::ragequit - can't ragequit yet");
 
-        require(lootToken.transfer(treasury, lootAmount), "Moloch::collectLoot - loot token transfer failure");
+        member.votingShares = member.votingShares.sub(sharesToBurn);
+        totalVotingShares = totalVotingShares.sub(sharesToBurn);
 
-        require(currentPeriod > member.canRagequitAfterBlock, "Moloch::collectLoot - can't ragequit yet");
+        require(
+            guildBank.withdraw(receiver, sharesToBurn, initialTotalVotingShares),
+            "Moloch::ragequit - withdrawal of tokens from guildBank failed"
+        );
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
@@ -287,19 +278,5 @@ contract Moloch {
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
         member.delegateKey = newDelegateKey;
-    }
-
-    /***************
-    GETTERS
-    ***************/
-
-    // returns true if proposal is either in voting or grace period
-    function isActiveProposal(uint256 proposalIndex) internal view returns (bool) {
-        if (proposalQueue.length>proposalIndex) {
-            uint256 startingPeriod = proposalQueue[proposalIndex].startingPeriod;
-            return (currentPeriod >= startingPeriod && currentPeriod.sub(startingPeriod) < votingPeriodLength.add(gracePeriodLength));
-        } else {
-            return false;
-        }
     }
 }
