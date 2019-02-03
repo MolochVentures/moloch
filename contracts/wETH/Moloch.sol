@@ -1,6 +1,8 @@
 // TODO
 // - make proposal deposits wETH
+// - votesByProposal is a getter view
 // - add canRagequit that prevents ragequit until latest proposal member voted YES on is processed
+// - think about the dilution bound
 
 pragma solidity 0.5.3;
 
@@ -48,13 +50,12 @@ contract Moloch {
         uint256 votingShares; // the # of voting shares assigned to this member
         bool isActive; // always true once a member has been created
         mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
-        // uint256 canRagequitAfterBlock; // block # after which member can ragequit - set on vote
-        uint256 latestYes
+        uint256 canRagequitAfterProposal; // proposal index # after which member can ragequit - set on vote
     }
 
     struct Proposal {
-        address proposer; // the member who submitted the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        address payable proposer; // the member who submitted the proposal
+        address payable applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
@@ -192,8 +193,8 @@ contract Moloch {
 
             // update when the member can ragequit
             uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
-            if (endingPeriod > member.canRagequitAfterBlock) {
-                member.canRagequitAfterBlock = endingPeriod;
+            if (proposalIndex > member.canRagequitAfterProposal) {
+                member.canRagequitAfterProposal = proposalIndex;
             }
 
         } else if (vote == Vote.No) {
@@ -273,7 +274,7 @@ contract Moloch {
 
         require(member.votingShares >= sharesToBurn, "Moloch::ragequit - insufficient voting shares");
 
-        require(currentPeriod > member.canRagequitAfterBlock, "Moloch::ragequit - can't ragequit yet");
+        require(proposalQueue[member.canRagequitAfterProposal].processed, "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed");
 
         // burn voting shares
         member.votingShares = member.votingShares.sub(sharesToBurn);
