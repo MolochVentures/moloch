@@ -154,7 +154,10 @@ contract Moloch {
             tokenTribute: tokenTribute
         });
 
-        emit SubmitProposal(proposalQueue.push(proposal)-1, applicant,memberAddress);
+        proposalQueue.push(proposal);
+
+        uint256 proposalIndex = proposalQueue.length.sub(1);
+        emit SubmitProposal(proposalIndex, applicant, memberAddress);
     }
 
     function submitVote(
