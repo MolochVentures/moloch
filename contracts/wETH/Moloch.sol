@@ -96,6 +96,7 @@ contract Moloch {
         deployTime = now;
 
         members[summoner] = Member(summoner, 1, true, 0);
+        memberAddressByDelegateKey[summoner] = summoner;
         totalVotingShares = totalVotingShares.add(1);
     }
 
