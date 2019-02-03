@@ -233,7 +233,10 @@ contract Moloch {
             totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
 
             // transfer tokens to guild bank
-            approvedToken.approve(address(guildBank), proposal.tokenTribute);
+            require(
+                approvedToken.approve(address(guildBank), proposal.tokenTribute),
+                "Moloch::processProposal - approval of token transfer to guild bank failed"
+            );
             require(
                 guildBank.deposit(proposal.tokenTribute),
                 "Moloch::processProposal - passing vote token transfer failed"
