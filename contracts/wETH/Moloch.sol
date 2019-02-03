@@ -1,6 +1,7 @@
-/* TODO
- * Test edge cases around increasing/decreasing voting shares of existing members wrt to proposal queue length
- */
+// TODO
+// - add text to proposal
+// - should deposit be in ETH or wETH?
+// - add canRagequit that prevents ragequit until latest proposal member voted YES on is processed
 
 pragma solidity 0.5.3;
 
@@ -48,7 +49,8 @@ contract Moloch {
         uint256 votingShares; // the # of voting shares assigned to this member
         bool isActive; // always true once a member has been created
         mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
-        uint256 canRagequitAfterBlock; // block # after which member can ragequit - set on vote
+        // uint256 canRagequitAfterBlock; // block # after which member can ragequit - set on vote
+        uint256 latestYes
     }
 
     struct Proposal {
@@ -196,7 +198,6 @@ contract Moloch {
             proposal.noVotes = proposal.noVotes.add(member.votingShares);
         }
 
-
         emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
     }
 
@@ -207,6 +208,7 @@ contract Moloch {
         require(proposal.startingPeriod > 0, "Moloch::processProposal - proposal does not exist");
         require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
+        require(proposalIndex == 0 || proposalQueue[proposalIndex - 1].processed, "Moloch::processProposal - previous proposal must be processed");
 
         proposal.processed = true;
 
