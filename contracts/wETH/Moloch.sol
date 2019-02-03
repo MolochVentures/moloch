@@ -138,11 +138,13 @@ contract Moloch {
 
         require(msg.value == proposalDeposit, "Moloch::submitProposal - sent ETH doesn't match proposalDeposit");
 
+        // collect tribute from applicant and store it in the Moloch until the proposal is being processed
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
         pendingProposals = pendingProposals.add(1);
         uint256 startingPeriod = currentPeriod + pendingProposals;
 
+        // create proposal ...
         Proposal memory proposal = Proposal({
             proposer: memberAddress,
             applicant: applicant,
@@ -154,6 +156,7 @@ contract Moloch {
             tokenTribute: tokenTribute
         });
 
+        // ... and append it to the queue
         proposalQueue.push(proposal);
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
@@ -170,27 +173,29 @@ contract Moloch {
         updatePeriod();
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
-
+        Member storage member = members[memberAddress];
         Proposal storage proposal = proposalQueue[proposalIndex];
         Vote vote = Vote(uintVote);
+
         require(proposal.startingPeriod > 0, "Moloch::submitVote - proposal does not exist");
         require(currentPeriod >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
         require(currentPeriod.sub(proposal.startingPeriod) < votingPeriodLength, "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
-        proposal.votesByMember[memberAddress] = vote;
 
-        Member storage member = members[memberAddress];
+        // store vote
+        proposal.votesByMember[memberAddress] = vote;
         member.votesByProposal[proposalIndex] = vote;
 
+        // count vote
         if (vote == Vote.Yes) {
             proposal.yesVotes = proposal.yesVotes.add(member.votingShares);
         } else if (vote == Vote.No) {
             proposal.noVotes = proposal.noVotes.add(member.votingShares);
         }
 
+        // update when the member can ragequit
         uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
-
         if (endingPeriod > member.canRagequitAfterBlock) {
             member.canRagequitAfterBlock = endingPeriod;
         }
@@ -243,6 +248,7 @@ contract Moloch {
             );
         }
 
+        // return deposit to proposer
         proposal.proposer.transfer(proposalDeposit);
 
         emit ProcessProposal(
@@ -265,9 +271,11 @@ contract Moloch {
 
         require(currentPeriod > member.canRagequitAfterBlock, "Moloch::ragequit - can't ragequit yet");
 
+        // burn voting shares
         member.votingShares = member.votingShares.sub(sharesToBurn);
         totalVotingShares = totalVotingShares.sub(sharesToBurn);
 
+        // instruct guildBank to transfer fair share of tokens to the receiver
         require(
             guildBank.withdraw(receiver, sharesToBurn, initialTotalVotingShares),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
