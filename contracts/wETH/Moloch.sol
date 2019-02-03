@@ -1,7 +1,5 @@
 // TODO
 // - make proposal deposits wETH
-// - votesByProposal is a getter view
-// - add canRagequit that prevents ragequit until latest proposal member voted YES on is processed
 // - think about the dilution bound
 
 pragma solidity 0.5.3;
@@ -49,7 +47,6 @@ contract Moloch {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 votingShares; // the # of voting shares assigned to this member
         bool isActive; // always true once a member has been created
-        mapping (uint256 => Vote) votesByProposal; // records a member's votes by the index of the proposal
         uint256 canRagequitAfterProposal; // proposal index # after which member can ragequit - set on vote
     }
 
@@ -185,7 +182,6 @@ contract Moloch {
 
         // store vote
         proposal.votesByMember[memberAddress] = vote;
-        member.votesByProposal[proposalIndex] = vote;
 
         // count vote
         if (vote == Vote.Yes) {
@@ -294,5 +290,13 @@ contract Moloch {
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
         member.delegateKey = newDelegateKey;
+    }
+
+    /***************
+    GETTER FUNCTIONS
+    ***************/
+
+    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view {
+        return proposalQueue[proposalIndex].votesByMember(memberAddress);
     }
 }
