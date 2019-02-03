@@ -1,6 +1,7 @@
 // TODO
-// - make proposal deposits wETH
 // - think about the dilution bound
+// - read DAO game theory report
+// - think about call stack attack
 
 pragma solidity 0.5.3;
 
@@ -35,7 +36,7 @@ contract Moloch {
     uint256 public currentPeriod = 0; // the current period number
     uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
     uint256 public totalVotingShares = 0; // total voting shares across all members
-    uint256 public deployTime; // needed to determine the current period
+    uint256 public summoningTime; // needed to determine the current period
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -51,8 +52,8 @@ contract Moloch {
     }
 
     struct Proposal {
-        address payable proposer; // the member who submitted the proposal
-        address payable applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        address proposer; // the member who submitted the proposal
+        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
@@ -64,7 +65,7 @@ contract Moloch {
     }
 
     mapping (address => Member) public members;
-    mapping (address => address payable) public memberAddressByDelegateKey;
+    mapping (address => address) public memberAddressByDelegateKey;
     Proposal[] public proposalQueue;
 
     /********
@@ -98,7 +99,7 @@ contract Moloch {
         gracePeriodLength = _gracePeriodLength;
         proposalDeposit = _proposalDeposit;
 
-        deployTime = now;
+        summoningTime = now;
 
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
@@ -106,7 +107,7 @@ contract Moloch {
     }
 
     function updatePeriod() public {
-        uint256 newCurrentPeriod = (now - deployTime) / periodDuration;
+        uint256 newCurrentPeriod = (now - summoningTime) / periodDuration;
         if (newCurrentPeriod > currentPeriod) {
             uint256 periodsElapsed = newCurrentPeriod - currentPeriod;
             currentPeriod = newCurrentPeriod;
@@ -119,22 +120,22 @@ contract Moloch {
     *****************/
 
     function submitProposal(
-        address payable applicant,
+        address applicant,
         uint256 tokenTribute,
         uint256 votingSharesRequested,
         string details
     )
         public
-        payable
         onlyMemberDelegate
     {
         updatePeriod();
 
-        address payable memberAddress = memberAddressByDelegateKey[msg.sender];
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
 
-        require(msg.value == proposalDeposit, "Moloch::submitProposal - sent ETH doesn't match proposalDeposit");
+        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
+        require(approvedToken.transferFrom(proposer, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
 
-        // collect tribute from applicant and store it in the Moloch until the proposal is being processed
+        // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
         pendingProposals = pendingProposals.add(1);
@@ -160,13 +161,7 @@ contract Moloch {
         emit SubmitProposal(proposalIndex, applicant, memberAddress);
     }
 
-    function submitVote(
-        uint256 proposalIndex,
-        uint8 uintVote
-    )
-        public
-        onlyMemberDelegate
-    {
+    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyMemberDelegate {
         updatePeriod();
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
@@ -250,7 +245,10 @@ contract Moloch {
         }
 
         // return deposit to proposer
-        proposal.proposer.transfer(proposalDeposit);
+        require(
+            approvedToken.transfer(proposal.proposer, proposalDeposit),
+            "Moloch::processProposal - failed to return proposal deposit to proposer"
+        );
 
         emit ProcessProposal(
             proposalIndex,
