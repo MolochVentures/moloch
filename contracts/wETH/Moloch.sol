@@ -35,6 +35,7 @@ contract Moloch {
     uint256 public currentPeriod = 0; // the current period number
     uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
     uint256 public totalVotingShares = 0; // total voting shares across all members
+    uint256 public deployTime; // needed to determine the current period
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -62,14 +63,8 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-    struct Period {
-        uint256 startTime; // the starting unix timestamp in seconds
-        uint256 endTime; // the ending unix timestamp in seconds
-    }
-
     mapping (address => Member) public members;
     mapping (address => address payable) public memberAddressByDelegateKey;
-    mapping (uint256 => Period) public periods;
     Proposal[] public proposalQueue;
 
     /********
@@ -98,24 +93,18 @@ contract Moloch {
         gracePeriodLength = _gracePeriodLength;
         proposalDeposit = _proposalDeposit;
 
-        uint256 startTime = now;
-        periods[currentPeriod].startTime = startTime;
-        periods[currentPeriod].endTime = startTime.add(periodDuration);
+        deployTime = now;
 
         members[summoner] = Member(summoner, 1, true, 0);
         totalVotingShares = totalVotingShares.add(1);
     }
 
     function updatePeriod() public {
-        while (now >= periods[currentPeriod].endTime) {
-            Period memory prevPeriod = periods[currentPeriod];
-            currentPeriod += 1;
-            periods[currentPeriod].startTime = prevPeriod.endTime;
-            periods[currentPeriod].endTime = prevPeriod.endTime.add(periodDuration);
-
-            if (pendingProposals > 0) {
-                pendingProposals = pendingProposals.sub(1);
-            }
+        uint256 newCurrentPeriod = (now - deployTime) / periodDuration;
+        if (newCurrentPeriod > currentPeriod) {
+            uint256 periodsElapsed = newCurrentPeriod - currentPeriod;
+            currentPeriod = newCurrentPeriod;
+            pendingProposals = pendingProposals > periodsElapsed ? pendingProposals - periodsElapsed : 0;
         }
     }
 
