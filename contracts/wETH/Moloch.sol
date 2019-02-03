@@ -52,8 +52,8 @@ contract Moloch {
     }
 
     struct Proposal {
-        address payable proposer; // the member who submitted the proposal
-        address payable applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        address proposer; // the member who submitted the proposal
+        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
@@ -185,15 +185,17 @@ contract Moloch {
         // count vote
         if (vote == Vote.Yes) {
             proposal.yesVotes = proposal.yesVotes.add(member.votingShares);
+
+            // update when the member can ragequit
+            uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
+            if (endingPeriod > member.canRagequitAfterBlock) {
+                member.canRagequitAfterBlock = endingPeriod;
+            }
+
         } else if (vote == Vote.No) {
             proposal.noVotes = proposal.noVotes.add(member.votingShares);
         }
 
-        // update when the member can ragequit
-        uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
-        if (endingPeriod > member.canRagequitAfterBlock) {
-            member.canRagequitAfterBlock = endingPeriod;
-        }
 
         emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
     }
