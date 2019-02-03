@@ -14,7 +14,7 @@ contract Moloch {
     /***************
     GLOBAL CONSTANTS
     ***************/
-    uint256 public periodDuration; // default = 86400 = 1 day in seconds
+    uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 7 periods
     uint256 public gracePeriodLength; // default = 7 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
@@ -253,7 +253,7 @@ contract Moloch {
         );
     }
 
-    function ragequit(address receiver, uint256 sharesToBurn) public onlyMember {
+    function ragequit(uint256 sharesToBurn) public onlyMember {
         updatePeriod();
 
         uint256 initialTotalVotingShares = totalVotingShares;
@@ -270,7 +270,7 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the receiver
         require(
-            guildBank.withdraw(receiver, sharesToBurn, initialTotalVotingShares),
+            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalVotingShares),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
     }
