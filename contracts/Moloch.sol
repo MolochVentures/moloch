@@ -34,7 +34,7 @@ contract Moloch {
     ******************/
     uint256 public currentPeriod = 0; // the current period number
     uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
-    uint256 public totalShares = 0; // total voting shares across all members
+    uint256 public totalShares = 0; // total shares across all members
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -44,7 +44,7 @@ contract Moloch {
 
     struct Member {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
-        uint256 shares; // the # of voting shares assigned to this member
+        uint256 shares; // the # of shares assigned to this member
         bool isActive; // always true once a member has been created
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
@@ -52,7 +52,7 @@ contract Moloch {
     struct Proposal {
         address proposer; // the member who submitted the proposal
         address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
-        uint256 sharesRequested; // the # of voting shares the applicant is requesting
+        uint256 sharesRequested; // the # of shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
@@ -232,7 +232,7 @@ contract Moloch {
         // PROPOSAL PASSED
         if (didPass) {
 
-            // if the proposer is already a member, add to their existing voting shares
+            // if the proposer is already a member, add to their existing shares
             if (members[proposal.applicant].isActive) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
@@ -243,7 +243,7 @@ contract Moloch {
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
-            // mint new voting shares
+            // mint new shares
             totalShares = totalShares.add(proposal.sharesRequested);
 
             // transfer tokens to guild bank
@@ -296,15 +296,15 @@ contract Moloch {
 
         Member storage member = members[msg.sender];
 
-        require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient voting shares");
+        require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
 
         require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed or the vote fails");
 
-        // burn voting shares
+        // burn shares
         member.shares = member.shares.sub(sharesToBurn);
         totalShares = totalShares.sub(sharesToBurn);
 
-        // instruct guildBank to transfer fair share of tokens to the receiver
+        // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
             guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
