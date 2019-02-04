@@ -338,6 +338,7 @@ contract Moloch {
 
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
+        require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
         Proposal memory proposal = proposalQueue[highestIndexYesVote];
 
         return proposal.processed || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
@@ -348,6 +349,7 @@ contract Moloch {
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
+        require(proposalIndex < proposalQueue.length, "Moloch::getMemberProposalVote - proposal does not exist");
         return proposalQueue[proposalIndex].votesByMember[memberAddress];
     }
 }
