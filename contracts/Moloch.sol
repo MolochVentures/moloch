@@ -366,7 +366,8 @@ contract Moloch {
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
-        require(proposalIndex < proposalQueue.length, "Moloch::getMemberProposalVote - proposal does not exist");
+        require(members[memberAddress].isActive, "Moloch::getMemberProposalVote - member doesn't exist");
+        require(proposalIndex < proposalQueue.length, "Moloch::getMemberProposalVote - proposal doesn't exist");
         return proposalQueue[proposalIndex].votesByMember[memberAddress];
     }
 }
