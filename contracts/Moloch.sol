@@ -143,6 +143,8 @@ contract Moloch {
     {
         updatePeriod();
 
+        require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
+
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
@@ -319,6 +321,8 @@ contract Moloch {
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
+        require(newDelegateKey != address(0), "Moloch::updateDelegateKey - newDelegateKey cannot be 0");
+
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
             require(!members[newDelegateKey].isActive, "Moloch::updateDelegateKey - can't overwrite existing members");
