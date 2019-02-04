@@ -1,6 +1,4 @@
 // TODO
-// - bound dilution
-// - rename voting shares to shares
 // - only disallow ragequits if vote passes
 // - double check updatePeriod
 
@@ -43,7 +41,7 @@ contract Moloch {
     ******************/
     uint256 public currentPeriod = 0; // the current period number
     uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
-    uint256 public totalVotingShares = 0; // total voting shares across all members
+    uint256 public totalShares = 0; // total voting shares across all members
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -53,7 +51,7 @@ contract Moloch {
 
     struct Member {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
-        uint256 votingShares; // the # of voting shares assigned to this member
+        uint256 shares; // the # of voting shares assigned to this member
         bool isActive; // always true once a member has been created
         uint256 canRagequitAfterProposal; // proposal index # after which member can ragequit - set on vote
     }
@@ -61,7 +59,7 @@ contract Moloch {
     struct Proposal {
         address proposer; // the member who submitted the proposal
         address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
-        uint256 votingSharesRequested; // the # of voting shares the applicant is requesting
+        uint256 sharesRequested; // the # of voting shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
@@ -80,12 +78,12 @@ contract Moloch {
     MODIFIERS
     ********/
     modifier onlyMember {
-        require(members[msg.sender].votingShares > 0, "Moloch::onlyMember - not a member");
+        require(members[msg.sender].shares > 0, "Moloch::onlyMember - not a member");
         _;
     }
 
     modifier onlyMemberDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].votingShares > 0, "Moloch::onlyMemberDelegate - not a member");
+        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyMemberDelegate - not a member");
         _;
     }
 
@@ -120,8 +118,8 @@ contract Moloch {
 
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
-        totalVotingShares = totalVotingShares.add(1);
-        totalSharesByPeriod[currentPeriod] = totalVotingShares;
+        totalShares = totalShares.add(1);
+        totalSharesByPeriod[currentPeriod] = totalShares;
     }
 
     function updatePeriod() public {
@@ -140,7 +138,7 @@ contract Moloch {
     function submitProposal(
         address applicant,
         uint256 tokenTribute,
-        uint256 votingSharesRequested,
+        uint256 sharesRequested,
         string details
     )
         public
@@ -163,7 +161,7 @@ contract Moloch {
         Proposal memory proposal = Proposal({
             proposer: memberAddress,
             applicant: applicant,
-            votingSharesRequested: votingSharesRequested,
+            sharesRequested: sharesRequested,
             startingPeriod: startingPeriod,
             yesVotes: 0,
             noVotes: 0,
@@ -198,7 +196,7 @@ contract Moloch {
 
         // count vote
         if (vote == Vote.Yes) {
-            proposal.yesVotes = proposal.yesVotes.add(member.votingShares);
+            proposal.yesVotes = proposal.yesVotes.add(member.shares);
 
             // update when the member can ragequit
             uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
@@ -207,11 +205,11 @@ contract Moloch {
             }
 
         } else if (vote == Vote.No) {
-            proposal.noVotes = proposal.noVotes.add(member.votingShares);
+            proposal.noVotes = proposal.noVotes.add(member.shares);
         }
 
         // set total shares on proposal - used to bound dilution for yes voters
-        proposal.totalSharesAtLastVote = totalVotingShares;
+        proposal.totalSharesAtLastVote = totalShares;
 
         emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
     }
@@ -230,7 +228,7 @@ contract Moloch {
         bool didPass = proposal.yesVotes > proposal.noVotes;
 
         // Make the proposal fail if the dilutionBound is exceeded
-        if (totalVotingShares * dilutionBound < proposal.totalSharesAtLastVote) {
+        if (totalShares * dilutionBound < proposal.totalSharesAtLastVote) {
             didPass = false;
         }
 
@@ -238,18 +236,18 @@ contract Moloch {
         if (didPass) {
 
             // if the proposer is already a member, add to their existing voting shares
-            if (members[proposal.applicant].votingShares > 0) {
-                members[proposal.applicant].votingShares = members[proposal.applicant].votingShares.add(proposal.votingSharesRequested);
+            if (members[proposal.applicant].shares > 0) {
+                members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
             // the applicant is a new member, create a new record for them
             } else {
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.votingSharesRequested, true, 0);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
             // mint new voting shares
-            totalVotingShares = totalVotingShares.add(proposal.votingSharesRequested);
+            totalShares = totalShares.add(proposal.sharesRequested);
 
             // transfer tokens to guild bank
             require(
@@ -281,28 +279,28 @@ contract Moloch {
             proposal.applicant,
             proposal.proposer,
             didPass,
-            proposal.votingSharesRequested
+            proposal.sharesRequested
         );
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
         updatePeriod();
 
-        uint256 initialTotalVotingShares = totalVotingShares;
+        uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
 
-        require(member.votingShares >= sharesToBurn, "Moloch::ragequit - insufficient voting shares");
+        require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient voting shares");
 
         require(proposalQueue[member.canRagequitAfterProposal].processed, "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed");
 
         // burn voting shares
-        member.votingShares = member.votingShares.sub(sharesToBurn);
-        totalVotingShares = totalVotingShares.sub(sharesToBurn);
+        member.shares = member.shares.sub(sharesToBurn);
+        totalShares = totalShares.sub(sharesToBurn);
 
         // instruct guildBank to transfer fair share of tokens to the receiver
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalVotingShares),
+            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
 
