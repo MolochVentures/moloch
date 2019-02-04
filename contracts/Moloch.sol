@@ -98,6 +98,8 @@ contract Moloch {
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
+        require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
+        require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
         approvedToken = ERC20(_approvedToken);
 
