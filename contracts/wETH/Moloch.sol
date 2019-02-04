@@ -1,7 +1,3 @@
-// TODO
-// - read DAO game theory report
-// - think about call stack attack
-
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
@@ -50,7 +46,7 @@ contract Moloch {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 shares; // the # of voting shares assigned to this member
         bool isActive; // always true once a member has been created
-        uint256 canRagequitAfterProposal; // proposal index # after which member can ragequit - set on vote
+        uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
     struct Proposal {
@@ -118,7 +114,6 @@ contract Moloch {
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = totalShares.add(1);
-        totalSharesByPeriod[currentPeriod] = totalShares;
     }
 
     function updatePeriod() public {
@@ -138,7 +133,7 @@ contract Moloch {
         address applicant,
         uint256 tokenTribute,
         uint256 sharesRequested,
-        string details
+        string memory details
     )
         public
         onlyMemberDelegate
@@ -148,7 +143,7 @@ contract Moloch {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(proposer, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+        require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
@@ -166,7 +161,8 @@ contract Moloch {
             noVotes: 0,
             processed: false,
             tokenTribute: tokenTribute,
-            details: details
+            details: details,
+            totalSharesAtLastVote: totalShares
         });
 
         // ... and append it to the queue
@@ -199,8 +195,8 @@ contract Moloch {
 
             // update when the member can ragequit
             uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
-            if (proposalIndex > member.canRagequitAfterProposal) {
-                member.canRagequitAfterProposal = proposalIndex;
+            if (proposalIndex > member.highestIndexYesVote) {
+                member.highestIndexYesVote = proposalIndex;
             }
 
         } else if (vote == Vote.No) {
@@ -297,7 +293,7 @@ contract Moloch {
 
         require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient voting shares");
 
-        require(proposalQueue[member.canRagequitAfterProposal].processed, "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed");
+        require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed or the vote fails");
 
         // burn voting shares
         member.shares = member.shares.sub(sharesToBurn);
@@ -326,17 +322,17 @@ contract Moloch {
     ***************/
 
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
-    function canRagequit(address memberAddress) public view {
-        Proposal memory proposal = proposalQueue[member.canRagequitAfterProposal];
+    function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
+        Proposal memory proposal = proposalQueue[highestIndexYesVote];
 
-        return proposal.processed || (isVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
+        return proposal.processed || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
     }
 
-    function hasVotingPeriodExpired(uint256 startingPeriod) public view {
-        return currentPeriod.sub(proposal.startingPeriod) >= votingPeriodLength;
+    function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
+        return currentPeriod.sub(startingPeriod) >= votingPeriodLength;
     }
 
-    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view {
-        return proposalQueue[proposalIndex].votesByMember(memberAddress);
+    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
+        return proposalQueue[proposalIndex].votesByMember[memberAddress];
     }
 }
