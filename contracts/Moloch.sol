@@ -1,7 +1,3 @@
-// TODO
-// - what happens if I change by delegate key to the applicant address before a proposal is processed?
-// - add member names
-
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
@@ -67,7 +63,7 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-    mapping (address => bool) public isApplicant;
+    mapping (address => bool) public isApplicant; // stores the applicant address while a proposal is active (prevents this address from being overwritten)
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
     Proposal[] public proposalQueue;
@@ -80,8 +76,8 @@ contract Moloch {
         _;
     }
 
-    modifier onlyMemberDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyMemberDelegate - not a member");
+    modifier onlyDelegate {
+        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyDelegate - not a member");
         _;
     }
 
@@ -141,7 +137,7 @@ contract Moloch {
         string memory details
     )
         public
-        onlyMemberDelegate
+        onlyDelegate
     {
         updatePeriod();
 
@@ -180,7 +176,7 @@ contract Moloch {
         emit SubmitProposal(proposalIndex, applicant, memberAddress);
     }
 
-    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyMemberDelegate {
+    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
         updatePeriod();
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
@@ -201,8 +197,6 @@ contract Moloch {
         if (vote == Vote.Yes) {
             proposal.yesVotes = proposal.yesVotes.add(member.shares);
 
-            // update when the member can ragequit
-            uint256 endingPeriod = proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength);
             if (proposalIndex > member.highestIndexYesVote) {
                 member.highestIndexYesVote = proposalIndex;
             }
@@ -239,7 +233,7 @@ contract Moloch {
         if (didPass) {
 
             // if the proposer is already a member, add to their existing voting shares
-            if (members[proposal.applicant].shares > 0) {
+            if (members[proposal.applicant].isActive) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
             // the applicant is a new member, create a new record for them
@@ -320,8 +314,13 @@ contract Moloch {
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
-        // newDelegateKey must be either the member's address or one not in use by any other members or applicants
-        require(newDelegateKey == msg.sender || (!members[memberAddressByDelegateKey[newDelegateKey]].isActive && !isApplicant[newDelegateKey]);
+        // skip checks if member is setting the delegate key to their member address
+        if (newDelegateKey != msg.sender) {
+            require(!members[newDelegateKey].isActive, "Moloch::updateDelegateKey - can't overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].isActive, "Moloch::updateDelegateKey - can't overwrite existing delegate keys");
+            require(!isApplicant[newDelegateKey], "Moloch::updateDelegateKey - can't overwrite existing applicants");
+        }
+
         Member storage member = members[msg.sender];
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
