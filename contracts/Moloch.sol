@@ -59,7 +59,7 @@ contract Moloch {
         bool processed; // true only if the proposal has been processed
         uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
-        uint256 totalSharesAtLastVote; // the total # of shares at the time of the last vote on this proposal
+        uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
@@ -167,7 +167,7 @@ contract Moloch {
             processed: false,
             tokenTribute: tokenTribute,
             details: details,
-            totalSharesAtLastVote: totalShares
+            maxTotalSharesAtYesVote: 0
         });
 
         // ... and append it to the queue
@@ -207,12 +207,14 @@ contract Moloch {
                 member.highestIndexYesVote = proposalIndex;
             }
 
+            // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
+            if (totalShares > proposal.maxTotalSharesAtYesVote) {
+                proposal.maxTotalSharesAtYesVote = totalShares;
+            }
+
         } else if (vote == Vote.No) {
             proposal.noVotes = proposal.noVotes.add(member.shares);
         }
-
-        // set total shares on proposal - used to bound dilution for yes voters
-        proposal.totalSharesAtLastVote = totalShares;
 
         emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
     }
@@ -232,7 +234,7 @@ contract Moloch {
         bool didPass = proposal.yesVotes > proposal.noVotes;
 
         // Make the proposal fail if the dilutionBound is exceeded
-        if (totalShares * dilutionBound < proposal.totalSharesAtLastVote) {
+        if (totalShares * dilutionBound < proposal.maxTotalSharesAtYesVote) {
             didPass = false;
         }
 
