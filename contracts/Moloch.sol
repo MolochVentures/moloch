@@ -1,3 +1,7 @@
+// TODO
+// - what happens if I change by delegate key to the applicant address before a proposal is processed?
+// - add member names
+
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
@@ -63,6 +67,7 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
+    mapping (address => bool) public isApplicant;
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
     Proposal[] public proposalQueue;
@@ -167,6 +172,9 @@ contract Moloch {
 
         // ... and append it to the queue
         proposalQueue.push(proposal);
+
+        // save the applicant address (to prevent delegate keys from overwriting it)
+        isApplicant[proposal.applicant] = true;
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
         emit SubmitProposal(proposalIndex, applicant, memberAddress);
@@ -275,6 +283,9 @@ contract Moloch {
             "Moloch::processProposal - failed to return proposal deposit to proposer"
         );
 
+        // remove the isApplicant entry for the applicant
+        isApplicant[proposal.applicant] = false;
+
         emit ProcessProposal(
             proposalIndex,
             proposal.applicant,
@@ -309,8 +320,8 @@ contract Moloch {
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
-        // newDelegateKey must be either the member's address or one not in use by any other members
-        require(newDelegateKey == msg.sender || !members[memberAddressByDelegateKey[newDelegateKey]].isActive);
+        // newDelegateKey must be either the member's address or one not in use by any other members or applicants
+        require(newDelegateKey == msg.sender || (!members[memberAddressByDelegateKey[newDelegateKey]].isActive && !isApplicant[newDelegateKey]);
         Member storage member = members[msg.sender];
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;

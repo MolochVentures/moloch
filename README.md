@@ -6,7 +6,7 @@
 
 ~ Allen Ginsberg, Howl
 
-Moloch is a grant-making DAO / Guild and a radical experiment in voluntary incentive alignment to overcome the "tragedy of the commons". Our objective is to accelerate the development of public Ethereum infrastructure that many teams need but don't want to pay for on their own. By pooling our ETH and ERC20 tokens, teams building on Ethereum can collectively fund open-source work we decide is in our common interest.
+Moloch is a grant-making DAO / Guild and a radical experiment in voluntary incentive alignment to overcome the "tragedy of the commons". Our objective is to accelerate the development of public Ethereum infrastructure that many teams need but don't want to pay for on their own. By pooling our ETH, teams building on Ethereum can collectively fund open-source work we decide is in our common interest.
 
 This documentation will focus on the Moloch DAO system design and smart contracts. For a deeper explanation of the philosophy behind Moloch, please read the Slate Star Codex post, [Meditations on Moloch](http://slatestarcodex.com/2014/07/30/meditations-on-moloch/), which served as inspiration.
 
@@ -16,38 +16,32 @@ In developing the Moloch DAO, we realized that the more Solidity we wrote, the g
 
 ## Overview
 
-Moloch is described by three smart contracts:
+Moloch is described by two smart contracts:
 
 1. `Moloch.sol` - Responsible for managing membership & voting rights, proposal submissions, voting, and processing proposals based on the outcomes of the votes.
 2. `GuildBank.sol` - Responsible for managing Guild assets.
-3. `LootToken.sol` - An ERC20 mintable and burnable token with a claim on assets held by the Guild Bank.
 
-Moloch has two classes of native assets:
+Moloch has a native asset called `shares`. Shares are minted and assigned when a new member is accepted into the Guild and provide voting rights on new membership proposals. They are non-transferrable, but can be *irreversibly* redeemed at any time to collect a proportional share of all ETH held by the Guild in the Guild Bank.
 
-1. **Voting Shares** are minted and assigned when a new member is accepted into the Guild and provide voting rights on new membership proposals. They are non-transferrable, but can be *irreversibly* redeemed on a 1-1 basis for Loot Tokens.
-2. **Loot Tokens** are also minted on a 1-1 basis with Voting Shares when a new member is accepted, but are only disbursed when a member redeems their Voting Shares. Loot Tokens are freely transferrable and can at any time be consumed to collect a proportional share of all tokens held by the Guild in the Guild Bank.
+Moloch operates through the submission, voting on, and processing of a series of membership proposals. To combat spam, new membership proposals can only be submitted by existing members and require a 10 ETH deposit. Applicants who wish to join must find a Guild member to champion their proposal and have that member call `submitProposal` on their behalf. The membership proposal includes the number of shares the applicant is requesting, and either the amount of ETH the applicant is offering as tribute or a pledge that the applicant will complete some work that benefits the Guild.
 
-Moloch operates through the submission, voting on, and processing of a series of membership proposals. To combat spam, new membership proposals can only be submitted by existing members and require a ~$5,000 ETH deposit. Applicants who wish to join must find a Guild member to champion their proposal and have that member call `submitProposal` on their behalf. The membership proposal includes the number of Voting Shares the applicant is requesting, and either the set of tokens the applicant is offering as tribute or a pledge that the applicant will complete some work that benefits the Guild.
+All ETH offered as tribute is held in escrow by the `Moloch.sol` contract until the proposal vote is completed and processed. If a proposal vote passes, the applicant becomes a member, the shares requested are minted and assigned to them, and their tribute ETH is deposited into the `GuildBank.sol` contract. If a proposal vote is rejected, all tribute tokens are returned to the applicant. In either case, the 10 ETH deposit is returned to the member who submitted the proposal.
 
-All tokens offered as tribute are held in escrow by the `Moloch.sol` contract until the proposal vote is completed and processed. If a proposal vote passes, the applicant becomes a member, the Voting Shares requested are minted and assigned to them, and their tribute tokens are deposited into the `GuildBank.sol` contract. If a proposal vote is rejected, all tribute tokens are returned to the applicant. In either case, the $5,000 ETH deposit is returned to the member who submitted the proposal.
+Proposals are voted on in the order they are submitted. The *voting period* for each proposal is 7 days. During the voting period, members can vote (only once, no redos) on a proposal by calling `submitVote`. There can be 5 proposals per day, so there can be a maximum of 35 proposals being voted on at any time (staggered by 4.8 hours). Proposal votes are determined by simple majority, with no quorum requirement.
 
-Proposals are voted on in the order they are submitted. The *voting period* for each proposal is 7 days. During the voting period, members can vote (only once, no redos) on a proposal by calling `submitVote`. A new proposal vote starts every day, so there can be a maximum of 7 proposals being voted on at any time (staggered by 1 day). Proposal votes are determined by simple majority, with a 50% quorum requirement.
+At the end of the voting period, proposals enter into a 7 day *grace period* before the proposal is processed. The grace period gives members who voted **No** or didn't vote the opportunity to exit by calling the `ragequit` function and witdrawing their proportional share of ETH from the Guild Bank. Members who voted **Yes** must remain until the grace period expires and the proposal is processed, but only if the proposal passed. If the proposal failed, members who voted **Yes** can `ragequit` as well.
 
-At the end of the voting period, proposals enter into a 7 day *grace period* before the proposal is processed. During the grace period, all Guild members who voted **No** or didn't vote have the opportunity to *ragequit*, turning in their Voting Shares for Loot Tokens by calling `collectLootTokens` and withdrawing their proportional share of tokens from the Guild Bank by calling `redeemLootTokens`. Members who voted **Yes** must remain.
-
-At the end of the grace period, proposals are processed when anyone calls `processProposal` and are either accepted or rejected based on the votes of the remaining Guild members.
+At the end of the grace period, proposals are processed when anyone calls `processProposal`. A 0.1 ETH reward is deducted from the proposal deposit and sent to the account to the address which calls `processProposal`.
 
 #### Game Theory
 
 By allowing Guild members to ragequit and exit at any time, Moloch protects its members from 51% attacks and from supporting proposals they vehemently oppose.
 
-In the worst case, one or more Guild members who control >50% of the Voting Shares could submit a proposal to grant themselves a ridiculous number of new Voting Shares, thereby diluting all other members of their claims to the Guild Bank assets and effectively stealing from them. If this were to happen, everyone else would ragequit during the grace period and take their share of the Guild Bank assets with them, and the proposal would have no impact.
+In the worst case, one or more Guild members who control >50% of the shares could submit a proposal to grant themselves a ridiculous number of new shares, thereby diluting all other members of their claims to the Guild Bank assets and effectively stealing from them. If this were to happen, everyone else would ragequit during the grace period and take their share of the Guild Bank assets with them, and the proposal would have no impact.
 
-In the more likely case of a contentious vote, those who oppose strongly enough can leave and increase the funding burden on those who choose to stay. Let's say the Guild has 100 outstanding Voting Shares and $100M worth of tokens in the Guild Bank. If a project proposal requests 1 newly minted Voting Share (~$1M worth), the vote is split 50/50 with 100% voter turnout, and the 50 who voted **No** all ragequit and take their $50M with them, then the remaining members would be diluting themselves twice as much: 1/51 = ~2% vs. 1/101 = ~1%.
+In the more likely case of a contentious vote, those who oppose strongly enough can leave and increase the funding burden on those who choose to stay. Let's say the Guild has 100 outstanding shares and $100M worth of ETH in the Guild Bank. If a project proposal requests 1 newly minted share (~$1M worth), the vote is split 50/50 with 100% voter turnout, and the 50 who voted **No** all ragequit and take their $50M with them, then the remaining members would be diluting themselves twice as much: 1/51 = ~2% vs. 1/101 = ~1%.
 
 In this fashion, the ragequit mechanism also provides an interesting incentive in favor of Guild cohesion. Guild members are disincentivized from voting **Yes** on proposals that they believe will make other members ragequit. Those who do vote **Yes** on contentious proposals will be forced to additionally dilute themselves proportional to the fraction of Voting Shares that ragequit in response.
-
-The maximum additional dilution would be 4x, in the case of a proposal vote with 50% voter turnout (the quorum minimum) and just over 25% voting **Yes** and just under 25% voting **No**, where the 25% who voted **No** and the 50% who didn't vote all ragequit.
 
 # Moloch.sol
 
@@ -629,4 +623,3 @@ introduce transfer restrictions.
 ```
 
 The `safeRedeemsById` tracks token addresses already withdrawn for each unique `safeRedeemLootTokens` call to prevent double-withdrawals of the same token.
-
