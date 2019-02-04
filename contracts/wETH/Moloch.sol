@@ -1,5 +1,10 @@
 // TODO
-// - think about the dilution bound
+// - bound dilution
+// - rename voting shares to shares
+// - only disallow ragequits if vote passes
+// - double check updatePeriod
+
+// EXTRA
 // - read DAO game theory report
 // - think about call stack attack
 
@@ -19,6 +24,8 @@ contract Moloch {
     uint256 public votingPeriodLength; // default = 7 periods
     uint256 public gracePeriodLength; // default = 7 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
+    uint256 public dilutionBound; // default = 3 (maximum multiplier a YES voter will be obligated to pay in case of mass ragequit)
+    uint256 public summoningTime; // needed to determine the current period
 
     ERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
@@ -29,6 +36,7 @@ contract Moloch {
     event SubmitProposal(uint256 indexed index, address indexed applicant, address indexed memberAddress);
     event ProcessProposal(uint256 indexed index, address indexed applicant, address indexed proposer, bool didPass, uint256 shares);
     event SubmitVote(address indexed sender, address indexed memberAddress, uint256 indexed proposalIndex, uint8 uintVote);
+    event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
 
     /******************
     INTERNAL ACCOUNTING
@@ -36,7 +44,6 @@ contract Moloch {
     uint256 public currentPeriod = 0; // the current period number
     uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
     uint256 public totalVotingShares = 0; // total voting shares across all members
-    uint256 public summoningTime; // needed to determine the current period
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -61,6 +68,7 @@ contract Moloch {
         bool processed; // true only if the proposal has been processed
         uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
+        uint256 totalSharesAtLastVote; // the total # of shares at the time of the last vote on this proposal
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
@@ -84,7 +92,15 @@ contract Moloch {
     /********
     FUNCTIONS
     ********/
-    constructor(address summoner, address _approvedToken, uint256 _periodDuration, uint256 _votingPeriodLength, uint256 _gracePeriodLength, uint256 _proposalDeposit) public {
+    constructor(
+        address summoner,
+        address _approvedToken,
+        uint256 _periodDuration,
+        uint256 _votingPeriodLength,
+        uint256 _gracePeriodLength,
+        uint256 _proposalDeposit,
+        uint256 _dilutionBound
+    ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
@@ -98,12 +114,14 @@ contract Moloch {
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
         proposalDeposit = _proposalDeposit;
+        dilutionBound = _dilutionBound;
 
         summoningTime = now;
 
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalVotingShares = totalVotingShares.add(1);
+        totalSharesByPeriod[currentPeriod] = totalVotingShares;
     }
 
     function updatePeriod() public {
@@ -192,6 +210,9 @@ contract Moloch {
             proposal.noVotes = proposal.noVotes.add(member.votingShares);
         }
 
+        // set total shares on proposal - used to bound dilution for yes voters
+        proposal.totalSharesAtLastVote = totalVotingShares;
+
         emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
     }
 
@@ -207,6 +228,11 @@ contract Moloch {
         proposal.processed = true;
 
         bool didPass = proposal.yesVotes > proposal.noVotes;
+
+        // Make the proposal fail if the dilutionBound is exceeded
+        if (totalVotingShares * dilutionBound < proposal.totalSharesAtLastVote) {
+            didPass = false;
+        }
 
         // PROPOSAL PASSED
         if (didPass) {
@@ -279,6 +305,8 @@ contract Moloch {
             guildBank.withdraw(msg.sender, sharesToBurn, initialTotalVotingShares),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
+
+        emit Ragequit(msg.sender, sharesToBurn);
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
