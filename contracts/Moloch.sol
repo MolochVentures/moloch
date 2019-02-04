@@ -116,7 +116,7 @@ contract Moloch {
 
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
-        totalShares = totalShares.add(1);
+        totalShares = 1;
     }
 
     function updatePeriod() public {
