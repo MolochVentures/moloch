@@ -1,8 +1,4 @@
 // TODO
-// - only disallow ragequits if vote passes
-// - double check updatePeriod
-
-// EXTRA
 // - read DAO game theory report
 // - think about call stack attack
 
@@ -23,6 +19,7 @@ contract Moloch {
     uint256 public gracePeriodLength; // default = 7 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 (maximum multiplier a YES voter will be obligated to pay in case of mass ragequit)
+    uint256 public processingReward; // amount of ETH to give to whoever processes the proposal
     uint256 public summoningTime; // needed to determine the current period
 
     ERC20 public approvedToken; // approved token contract reference; default = wETH
@@ -97,7 +94,8 @@ contract Moloch {
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
         uint256 _proposalDeposit,
-        uint256 _dilutionBound
+        uint256 _dilutionBound,
+        uint256 _processingReward
     ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
@@ -113,6 +111,7 @@ contract Moloch {
         gracePeriodLength = _gracePeriodLength;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
+        processingReward = _processingReward;
 
         summoningTime = now;
 
@@ -123,11 +122,11 @@ contract Moloch {
     }
 
     function updatePeriod() public {
-        uint256 newCurrentPeriod = (now - summoningTime) / periodDuration;
+        uint256 newCurrentPeriod = now.sub(summoningTime).div(periodDuration);
         if (newCurrentPeriod > currentPeriod) {
-            uint256 periodsElapsed = newCurrentPeriod - currentPeriod;
+            uint256 periodsElapsed = newCurrentPeriod.sub(currentPeriod);
             currentPeriod = newCurrentPeriod;
-            pendingProposals = pendingProposals > periodsElapsed ? pendingProposals - periodsElapsed : 0;
+            pendingProposals = pendingProposals > periodsElapsed ? pendingProposals.sub(periodsElapsed) : 0;
         }
     }
 
@@ -155,7 +154,7 @@ contract Moloch {
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
         pendingProposals = pendingProposals.add(1);
-        uint256 startingPeriod = currentPeriod + pendingProposals;
+        uint256 startingPeriod = currentPeriod.add(pendingProposals);
 
         // create proposal ...
         Proposal memory proposal = Proposal({
@@ -221,7 +220,7 @@ contract Moloch {
         require(proposal.startingPeriod > 0, "Moloch::processProposal - proposal does not exist");
         require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
-        require(proposalIndex == 0 || proposalQueue[proposalIndex - 1].processed, "Moloch::processProposal - previous proposal must be processed");
+        require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
 
         proposal.processed = true;
 
@@ -268,9 +267,15 @@ contract Moloch {
             );
         }
 
-        // return deposit to proposer
+        // send msg.sender the processingReward
         require(
-            approvedToken.transfer(proposal.proposer, proposalDeposit),
+            approvedToken.transfer(msg.sender, processingReward),
+            "Moloch::processProposal - failed to send processing reward to msg.sender"
+        );
+
+        // return deposit to proposer (subtract processing reward)
+        require(
+            approvedToken.transfer(proposal.proposer, proposalDeposit.sub(processingReward)),
             "Moloch::processProposal - failed to return proposal deposit to proposer"
         );
 
