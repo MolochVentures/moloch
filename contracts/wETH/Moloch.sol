@@ -18,8 +18,8 @@ contract Moloch {
     uint256 public votingPeriodLength; // default = 7 periods
     uint256 public gracePeriodLength; // default = 7 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
-    uint256 public dilutionBound; // default = 3 (maximum multiplier a YES voter will be obligated to pay in case of mass ragequit)
-    uint256 public processingReward; // amount of ETH to give to whoever processes the proposal
+    uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
+    uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
     ERC20 public approvedToken; // approved token contract reference; default = wETH
