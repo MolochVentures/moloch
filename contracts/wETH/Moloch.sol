@@ -187,7 +187,7 @@ contract Moloch {
 
         require(proposal.startingPeriod > 0, "Moloch::submitVote - proposal does not exist");
         require(currentPeriod >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
-        require(currentPeriod.sub(proposal.startingPeriod) < votingPeriodLength, "Moloch::submitVote - proposal voting period has expired");
+        require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
 
@@ -319,6 +319,17 @@ contract Moloch {
     /***************
     GETTER FUNCTIONS
     ***************/
+
+    // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
+    function canRagequit(address memberAddress) public view {
+        Proposal memory proposal = proposalQueue[member.canRagequitAfterProposal];
+
+        return proposal.processed || (isVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
+    }
+
+    function hasVotingPeriodExpired(uint256 startingPeriod) public view {
+        return currentPeriod.sub(proposal.startingPeriod) >= votingPeriodLength;
+    }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view {
         return proposalQueue[proposalIndex].votesByMember(memberAddress);
