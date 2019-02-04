@@ -337,7 +337,7 @@ contract Moloch {
     ***************/
 
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
-    function canRagequit(address memberAddress) public view returns (bool) {
+    function canRagequit(address memberAddress) public returns (bool) {
         Member storage member = members[memberAddress];
         require(member.isActive, "Moloch:canRagequit - member doesn't exist");
 
@@ -361,7 +361,8 @@ contract Moloch {
         return proposal.processed || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
     }
 
-    function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
+    function hasVotingPeriodExpired(uint256 startingPeriod) public returns (bool) {
+        updatePeriod();
         return currentPeriod.sub(startingPeriod) >= votingPeriodLength;
     }
 
