@@ -59,9 +59,6 @@ In this fashion, the ragequit mechanism also provides an interesting incentive i
 
     ERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
-
-    uint8 constant QUORUM_NUMERATOR = 1;
-    uint8 constant QUORUM_DENOMINATOR = 2;
 ```
 
 All deposits and tributes use the singular `approvedToken` set at contract deployment. In our case this will be wETH, and so we use wETH and ETH interchangably in this documentation.
