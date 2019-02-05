@@ -63,7 +63,6 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-    mapping (address => bool) public isApplicant; // stores the applicant address while a proposal is active (prevents this address from being overwritten)
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
     Proposal[] public proposalQueue;
@@ -172,9 +171,6 @@ contract Moloch {
 
         // ... and append it to the queue
         proposalQueue.push(proposal);
-
-        // save the applicant address (to prevent delegate keys from overwriting it)
-        isApplicant[proposal.applicant] = true;
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
         emit SubmitProposal(proposalIndex, applicant, memberAddress);
@@ -293,9 +289,6 @@ contract Moloch {
             "Moloch::processProposal - failed to return proposal deposit to proposer"
         );
 
-        // remove the isApplicant entry for the applicant
-        isApplicant[proposal.applicant] = false;
-
         emit ProcessProposal(
             proposalIndex,
             proposal.applicant,
@@ -336,7 +329,6 @@ contract Moloch {
         if (newDelegateKey != msg.sender) {
             require(!members[newDelegateKey].isActive, "Moloch::updateDelegateKey - can't overwrite existing members");
             require(!members[memberAddressByDelegateKey[newDelegateKey]].isActive, "Moloch::updateDelegateKey - can't overwrite existing delegate keys");
-            require(!isApplicant[newDelegateKey], "Moloch::updateDelegateKey - can't overwrite existing applicants");
         }
 
         Member storage member = members[msg.sender];
