@@ -350,8 +350,7 @@ contract Moloch {
         return proposal.processed || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
     }
 
-    function hasVotingPeriodExpired(uint256 startingPeriod) public returns (bool) {
-        updatePeriod();
+    function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
         return currentPeriod.sub(startingPeriod) >= votingPeriodLength;
     }
 
