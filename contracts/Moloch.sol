@@ -333,9 +333,7 @@ contract Moloch {
         }
 
         Member storage member = members[msg.sender];
-        if (memberAddressByDelegateKey[member.delegateKey] == msg.sender) {
-          memberAddressByDelegateKey[member.delegateKey] = address(0);
-        }
+        memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
         member.delegateKey = newDelegateKey;
     }
