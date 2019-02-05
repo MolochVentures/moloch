@@ -11,8 +11,8 @@ contract Moloch {
     GLOBAL CONSTANTS
     ***************/
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
-    uint256 public votingPeriodLength; // default = 7 periods
-    uint256 public gracePeriodLength; // default = 7 periods
+    uint256 public votingPeriodLength; // default = 35 periods
+    uint256 public gracePeriodLength; // default = 35 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
@@ -247,6 +247,13 @@ contract Moloch {
 
             // the applicant is a new member, create a new record for them
             } else {
+                // if the applicant address is already taken by a member's delegateKey, reset it to their member address
+                if (members[memberAddressByDelegateKey[proposal.applicant]].isActive) {
+                    address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
+                    memberAddressByDelegateKey[memberToOverride] = memberToOverride;
+                    members[memberToOverride].delegateKey = memberToOverride;
+                }
+
                 // use applicant address as delegateKey by default
                 members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
