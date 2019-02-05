@@ -307,7 +307,7 @@ contract Moloch {
 
         require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
 
-        require(canRagequit(msg.sender), "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed or the vote fails");
+        require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed or the vote fails");
 
         // burn shares
         member.shares = member.shares.sub(sharesToBurn);
@@ -343,25 +343,8 @@ contract Moloch {
     ***************/
 
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
-    function canRagequit(address memberAddress) public returns (bool) {
-        Member storage member = members[memberAddress];
-        require(member.isActive, "Moloch:canRagequit - member doesn't exist");
-
-        if (member.shares == 0) {
-            return false;
-        }
-
-        if (proposalQueue.length == 0) {
-            return true;
-        }
-
-        uint256 highestIndexYesVote = member.highestIndexYesVote;
-
-        if (highestIndexYesVote == 0 && proposalQueue[0].votesByMember[memberAddress] != Vote.Yes) {
-            // member has never voted yes on any proposal
-            return true;
-        }
-
+    function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
+        require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
         Proposal memory proposal = proposalQueue[highestIndexYesVote];
 
         return proposal.processed || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
