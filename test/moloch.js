@@ -3,10 +3,8 @@
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
-// const TestCoin = artifacts.require('./TestCoin')
-const LootToken = artifacts.require('./LootToken')
-const foundersJSON = require('../migrations/founders.json')
-const configJSON = require('../migrations/config.json')
+const Token = artifacts.require('./oz/ERC20')
+const config = require('../migrations/config.json')
 
 const abi = require('web3-eth-abi')
 
@@ -62,13 +60,15 @@ contract('Moloch', accounts => {
 
   before('deploy contracts', async () => {
     moloch = await Moloch.deployed()
-    guildBank = await GuildBank.deployed()
-    lootAddress = await moloch.lootToken()
-    lootToken = await LootToken.at(lootAddress)
+    const guildBankAddress = await moloch.guildBank()
+    guildBank = await GuildBank.at(guildBankAddress)
+    token = await Token.deployed()
   })
 
   beforeEach(async () => {
     snapshotId = await snapshot()
+
+    summoner = accounts[0]
 
     founder1 = {
       address: accounts[0],
@@ -85,57 +85,49 @@ contract('Moloch', accounts => {
   it('verify deployment parameters', async () => {
     const now = await blockTime()
 
-    const molochLootTokenAddress = await moloch.lootToken()
-    assert.equal(molochLootTokenAddress, lootToken.address)
+    const approvedTokenAddress = await moloch.approvedToken()
+    assert.equal(approvedTokenAddress, token.address)
 
-    const guildBankLootTokenAddress = await guildBank.lootToken()
-    assert.equal(guildBankLootTokenAddress, lootToken.address)
-
-    const foundersVotingShares = foundersJSON.votingShares.reduce((total, shares) => {
-      return total + shares
-    })
-
-    totalLootTokens = await lootToken.totalSupply()
-    assert.equal(+totalLootTokens, foundersVotingShares)
-
-    totalVotingShares = await moloch.totalVotingShares()
-    assert.equal(+totalVotingShares, foundersVotingShares)
-
-    const molochGuildBankAddress = await moloch.guildBank()
-    assert.equal(molochGuildBankAddress, guildBank.address)
+    const guildBankAddress = await moloch.guildBank()
+    assert.equal(guildBankAddress, guildBank.address)
 
     const guildBankOwner = await guildBank.owner()
     assert.equal(guildBankOwner, moloch.address)
 
     const periodDuration = await moloch.periodDuration()
-    assert.equal(+periodDuration, configJSON.PERIOD_DURATION_IN_SECONDS)
+    assert.equal(+periodDuration, config.PERIOD_DURATION_IN_SECONDS)
 
     const votingPeriodLength = await moloch.votingPeriodLength()
-    assert.equal(+votingPeriodLength, configJSON.VOTING_DURATON_IN_PERIODS)
+    assert.equal(+votingPeriodLength, config.VOTING_DURATON_IN_PERIODS)
 
     const gracePeriodLength = await moloch.gracePeriodLength()
-    assert.equal(+gracePeriodLength, configJSON.GRACE_DURATON_IN_PERIODS)
+    assert.equal(+gracePeriodLength, config.GRACE_DURATON_IN_PERIODS)
 
     const proposalDeposit = await moloch.proposalDeposit()
-    assert.equal(+proposalDeposit, configJSON.MIN_PROPOSAL_DEPOSIT_IN_WEI)
+    assert.equal(+proposalDeposit, config.PROPOSAL_DEPOSIT_IN_WEI)
+
+    const dilutionBound = await moloch.dilutionBound()
+    assert.equal(+dilutionBound, config.DILUTION_BOUND)
+
+    const processingReward = await moloch.processingReward()
+    assert.equal(+processingReward, config.PROCESSING_REWARD)
 
     const currentPeriod = await moloch.currentPeriod()
     assert.equal(+currentPeriod, 0)
 
-    const periodData = await moloch.periods(+currentPeriod)
-    // assert.equal(+periodData[0], now)
+    // TODO check the summoning time = last blocktime
 
-    const startTime = +periodData[0]
-    const endTime = +periodData[1]
-    assert.equal(endTime - startTime, configJSON.PERIOD_DURATION_IN_SECONDS)
+    const summonerData = await moloch.members(config.SUMMONER)
+    assert.equal(summonerData[0].toLowerCase(), config.SUMMONER) // delegateKey matches
+    assert.equal(+summonerData[1], 1)
+    assert.equal(summonerData[2], true)
+    assert.equal(+summonerData[3], 0)
 
-    for (let i=0; i < foundersJSON.addresses.length; i++) {
-      let founderAddress = foundersJSON.addresses[i]
-      let founderVotingShares = foundersJSON.votingShares[i]
-      memberData = await moloch.members(founderAddress)
-      assert.equal(+memberData[0], founderVotingShares)
-      assert.equal(memberData[1], true)
-    }
+    const summonerAddressByDelegateKey = await moloch.memberAddressByDelegateKey(config.SUMMONER)
+    assert.equal(summonerAddressByDelegateKey.toLowerCase(), config.SUMMONER)
+
+    const totalShares = await moloch.totalShares()
+    assert.equal(+totalShares, 1)
   })
 
   describe('submitProposal', () => {
