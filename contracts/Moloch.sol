@@ -353,7 +353,7 @@ contract Moloch {
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
-        return getCurrentPeriod().sub(startingPeriod) >= votingPeriodLength;
+        return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
