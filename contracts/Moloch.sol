@@ -33,6 +33,7 @@ contract Moloch {
     INTERNAL ACCOUNTING
     ******************/
     uint256 public totalShares = 0; // total shares across all members
+    uint256 public totalSharesRequested = 0; // total shares that have been requested in unprocessed proposals
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -135,6 +136,15 @@ contract Moloch {
     {
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
+        // Make sure we won't run into overflows when we process this proposal.
+        // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
+        // on the number of shares that can exist during and after the processing of this proposal.
+        // Hence, neither the dilution check nor the addition of the sharesRequested to the existing
+        // shares (in case the proposal is accepted) can overflow.
+        require(totalShares.add(totalSharesRequested).add(sharesRequested).mul(dilutionBound) >= 0); // we only care for the SafeMath operations, not for >= 0
+
+        totalSharesRequested = totalSharesRequested.add(sharesRequested);
+
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
@@ -216,11 +226,12 @@ contract Moloch {
         require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
 
         proposal.processed = true;
+        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
         bool didPass = proposal.yesVotes > proposal.noVotes;
 
         // Make the proposal fail if the dilutionBound is exceeded
-        if (totalShares * dilutionBound < proposal.maxTotalSharesAtYesVote) {
+        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
             didPass = false;
         }
 
