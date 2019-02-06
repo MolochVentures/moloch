@@ -221,7 +221,7 @@ contract Moloch {
         require(proposalIndex < proposalQueue.length, "Moloch::processProposal - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
 
-        require(getCurrentPeriod().sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
+        require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
         require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
 
