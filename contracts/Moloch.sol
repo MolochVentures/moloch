@@ -32,8 +32,6 @@ contract Moloch {
     /******************
     INTERNAL ACCOUNTING
     ******************/
-    uint256 public currentPeriod = 0; // the current period number
-    uint256 public pendingProposals = 0; // the # of proposals waiting to be voted on
     uint256 public totalShares = 0; // total shares across all members
 
     enum Vote {
@@ -118,13 +116,8 @@ contract Moloch {
         totalShares = 1;
     }
 
-    function updatePeriod() public {
-        uint256 newCurrentPeriod = now.sub(summoningTime).div(periodDuration);
-        if (newCurrentPeriod > currentPeriod) {
-            uint256 periodsElapsed = newCurrentPeriod.sub(currentPeriod);
-            currentPeriod = newCurrentPeriod;
-            pendingProposals = pendingProposals > periodsElapsed ? pendingProposals.sub(periodsElapsed) : 0;
-        }
+    function max(uint256 x, uint256 y) internal pure returns (uint256) {
+        return x >= y ? x : y;
     }
 
     /*****************
@@ -140,8 +133,6 @@ contract Moloch {
         public
         onlyDelegate
     {
-        updatePeriod();
-
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
@@ -152,8 +143,11 @@ contract Moloch {
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
-        pendingProposals = pendingProposals.add(1);
-        uint256 startingPeriod = currentPeriod.add(pendingProposals);
+        // compute startingPeriod for proposal
+        uint256 startingPeriod = max(
+            getCurrentPeriod(),
+            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
+        ).add(1);
 
         // create proposal ...
         Proposal memory proposal = Proposal({
@@ -177,8 +171,6 @@ contract Moloch {
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
-        updatePeriod();
-
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         Member storage member = members[memberAddress];
 
@@ -187,7 +179,7 @@ contract Moloch {
 
         Vote vote = Vote(uintVote);
 
-        require(currentPeriod >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
+        require(getCurrentPeriod() >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
@@ -216,12 +208,10 @@ contract Moloch {
     }
 
     function processProposal(uint256 proposalIndex) public {
-        updatePeriod();
-
         require(proposalIndex < proposalQueue.length, "Moloch::processProposal - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
 
-        require(currentPeriod.sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
+        require(getCurrentPeriod().sub(proposal.startingPeriod) > votingPeriodLength.add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
         require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
 
@@ -299,8 +289,6 @@ contract Moloch {
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
-        updatePeriod();
-
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
@@ -341,6 +329,10 @@ contract Moloch {
     GETTER FUNCTIONS
     ***************/
 
+    function getCurrentPeriod() public view returns (uint256) {
+        return now.sub(summoningTime).div(periodDuration);
+    }
+
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
@@ -350,7 +342,7 @@ contract Moloch {
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
-        return currentPeriod.sub(startingPeriod) >= votingPeriodLength;
+        return getCurrentPeriod().sub(startingPeriod) >= votingPeriodLength;
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
