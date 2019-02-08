@@ -20,6 +20,7 @@ const BigNumber = web3.BigNumber
 const should = require('chai').use(require('chai-as-promised')).use(require('chai-bignumber')(BigNumber)).should()
 
 const SolRevert = 'VM Exception while processing transaction: revert'
+const InvalidOpcode = 'VM Exception while processing transaction: invalid opcode'
 
 async function blockTime() {
   return (await web3.eth.getBlock('latest')).timestamp
@@ -230,9 +231,30 @@ contract('Moloch', accounts => {
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details)
     })
 
-    it('happy case', async () => {
+    it('happy case - yes vote', async () => {
       await moveForwardPeriods(1)
       await moloch.submitVote(0, 1, { from: summoner })
+
+      const proposal = await moloch.proposalQueue.call(0)
+      assert.equal(proposal.yesVotes, 1)
+      assert.equal(proposal.noVotes, 0)
+      assert.equal(proposal.maxTotalSharesAtYesVote, 1)
+
+      const memberVote = await moloch.getMemberProposalVote(summoner, 0)
+      assert.equal(memberVote, 1)
+    })
+
+    it('happy case - no vote', async () => {
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 2, { from: summoner })
+
+      const proposal = await moloch.proposalQueue.call(0)
+      assert.equal(proposal.yesVotes, 0)
+      assert.equal(proposal.noVotes, 1)
+      assert.equal(proposal.maxTotalSharesAtYesVote, 0)
+
+      const memberVote = await moloch.getMemberProposalVote(summoner, 0)
+      assert.equal(memberVote, 2)
     })
 
     it('fail - proposal does not exist', async () => {
@@ -258,11 +280,23 @@ contract('Moloch', accounts => {
 
     it('fail - vote must be yes or no', async () => {
       await moveForwardPeriods(1)
+
+      // vote null
       await moloch.submitVote(0, 0, { from: summoner }).should.be.rejectedWith(SolRevert)
+
+      // vote out of bounds
+      await moloch.submitVote(0, 3, { from: summoner }).should.be.rejectedWith(InvalidOpcode)
     })
   })
 
   describe('processProposal', () => {
+    beforeEach(async () => {
+
+    })
+
+    it('happy case', async () => {
+
+    })
 
   })
 
