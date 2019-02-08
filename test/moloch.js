@@ -3,6 +3,7 @@
 
 // TODO
 // - events
+// - accounts[0] -> owner & accounts[1] -> summoner (easy balance checks)
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
@@ -69,12 +70,6 @@ async function blockTime() {
   return await web3.eth.getBlock('latest').timestamp
 }
 
-// Note: this will move forward the timestamp but *not* the currentPeriod
-// any write operation to the contract will implicitely call updatePeriod
-// to get the period after moving forward, we call:
-// await moveForwardPeriods(X)
-// await spankbank.updatePeriod()
-// const currentPeriod = await spankbank.currentPeriod.call()
 async function moveForwardPeriods(periods) {
   const blocktimestamp = await blockTime()
   const goToTime = config.PERIOD_DURATION_IN_SECONDS * periods
@@ -105,6 +100,12 @@ contract('Moloch', accounts => {
 
     summoner = accounts[0]
 
+    proposal1 = {
+      applicant: accounts[1],
+      tokenTribute: 100,
+      sharesRequested: 1,
+      details: ""
+    }
   })
 
   afterEach(async () => {
@@ -166,16 +167,7 @@ contract('Moloch', accounts => {
   })
 
   describe('submitProposal', () => {
-
     beforeEach(async () => {
-
-      proposal1 = {
-        applicant: accounts[1],
-        tokenTribute: 100,
-        sharesRequested: 1,
-        details: ""
-      }
-
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
       await token.approve(moloch.address, 10, { from: summoner })
       await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
@@ -196,8 +188,17 @@ contract('Moloch', accounts => {
       assert.equal(proposal.details, proposal1.details)
       assert.equal(proposal.maxTotalSharesAtYesVote, 0)
 
+      const totalSharesRequested = await moloch.totalSharesRequested()
+      assert.equal(totalSharesRequested, proposal1.sharesRequested)
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, 1)
+
       const proposalQueueLength = await moloch.getProposalQueueLength()
       assert.equal(proposalQueueLength, 1)
+
+      const molochTokenBalance = await token.balanceOf(moloch.address)
+      assert.equal(molochTokenBalance, proposal1.tokenTribute + config.PROPOSAL_DEPOSIT)
     })
 
     // TODO trigger the uint overflow
@@ -215,15 +216,8 @@ contract('Moloch', accounts => {
     })
   })
 
-  describe.only('submitVote', () => {
+  describe('submitVote', () => {
     beforeEach(async () => {
-      proposal1 = {
-        applicant: accounts[1],
-        tokenTribute: 100,
-        sharesRequested: 1,
-        details: ""
-      }
-
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
       await token.approve(moloch.address, 10, { from: summoner })
       await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
@@ -292,15 +286,111 @@ contract('Moloch', accounts => {
   describe('processProposal', () => {
     beforeEach(async () => {
 
+      await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
+      await token.approve(moloch.address, 10, { from: summoner })
+      await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details)
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner })
+
+      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
     })
 
     it('happy case', async () => {
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(0, { from: accounts[2] })
 
+      const proposal = await moloch.proposalQueue.call(0)
+      assert.equal(proposal.yesVotes, 1)
+      assert.equal(proposal.noVotes, 0)
+      assert.equal(proposal.maxTotalSharesAtYesVote, 1)
+      assert.equal(proposal.processed, true)
+
+      const totalSharesRequested = await moloch.totalSharesRequested()
+      assert.equal(totalSharesRequested, 0)
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, proposal1.sharesRequested + 1)
+
+      const processorBalance = await token.balanceOf(accounts[2])
+      assert.equal(processorTokenBalance, config.PROCESSING_REWARD)
+
+      const guildBankBalance = await token.balanceOf(guildBank.address)
+      assert.equal(guildBankBalance, proposal1.tokenTribute)
+
+      const molochBalance = await token.balanceOf(moloch.address)
+      assert.equal(molochBalance, 0)
+
+      const summonerBalance = await token.balanceOf(summoner)
+      assert.equal()
+
+      // TODO
+      // - moloch token balance -> 0
+      // - guildbank token balance -> 100
+      // - reward recipient -> 1
+      // - proposer -> +9
     })
 
+    it('fail - proposal does not exist', async () => {
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(1).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - proposal is not ready to be processed', async () => {
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS - 1)
+      await moloch.processProposal(0).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - proposal has already been processed', async () => {
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(0)
+      await moloch.processProposal(0).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - previous proposal must be processed', async () => {
+      // TODO two proposals back to back
+    })
   })
 
-  describe('collectLootTokens', () => {
+  describe.only('ragequit', () => {
+    beforeEach(async () => {
+      proposal1.sharesRequested = 1 // make it so total shares is 2
+
+      await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
+      await token.approve(moloch.address, 10, { from: summoner })
+      await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details)
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner })
+
+      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(0)
+    })
+
+    it('happy case', async () => {
+      await moloch.ragequit(1, { from: summoner })
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, proposal1.sharesRequested)
+
+      const summonerData = await moloch.members(summoner)
+      assert.equal(+summonerData[1], 0)
+      assert.equal(summonerData[2], true)
+      assert.equal(+summonerData[3], 0)
+
+      const summonerTokenBalance = await token.balanceOf(summoner)
+      assert.equal(+summonerTokenBalance.toString(), config.TOKEN_SUPPLY - (proposal1.tokenTribute / 2))
+
+      /*
+      const molochTokenBalance = await token.balanceOf(moloch.address)
+      assert.equal(molochTokenBalance, proposal1.tokenTribute + config.PROPOSAL_DEPOSIT)
+      */
+    })
 
   })
 
@@ -311,83 +401,4 @@ contract('Moloch', accounts => {
   describe('GuildBank::safeRedeemLootTokens', () => {
 
   })
-
-  // verify founding members
-  // it('should save addresses from deploy', async () => {
-  //   for (let i = 0; i < founders.addresses.length; i++) {
-  //     let memberAddress = founders.addresses[i]
-  //     const member = await moloch.getMember(memberAddress)
-  //     assert.equal(member, true, 'founding member not saved correctly')
-  //   }
-  // })
-  // // verify failure of non-founding members
-  // it('should fail non deployed addresses', async () => {
-  //   for (let i = 2; i < 10; i++) {
-  //     let nonMemberAddress = accounts[i]
-  //     const nonMember = await moloch.getMember(nonMemberAddress)
-  //     assert.notEqual(nonMember, true, 'non-member added incorrectly')
-  //   }
-  // })
-  // // verify founding member shares
-  // it('should save founder shares from deploy', async () => {
-  //   for (let i = 0; i < founders.addresses.length; i++) {
-  //     let memberAddress = founders.addresses[i]
-  //     const memberShares = await moloch.getVotingShares(memberAddress)
-  //     assert.equal(
-  //       founders.shares[i],
-  //       memberShares.toNumber(),
-  //       'founding shares not saved correctly'
-  //     )
-  //   }
-  // })
-  // // verify failure of incorrect shares
-  // it('should fail on incorrect shares', async () => {
-  //   for (let i = 0; i < founders.addresses.length; i++) {
-  //     let memberAddress = founders.addresses[i]
-  //     const memberShares = await moloch.getVotingShares(memberAddress)
-  //     assert.notEqual(
-  //       parseInt(Math.random() * 1000),
-  //       memberShares.toNumber(),
-  //       'incorrect shares saved'
-  //     )
-  //   }
-  // })
 })
-
-// verify failure member proposal
-// verify create/failure project proposal
-// verify failure start proposal vote
-// verify failure vote on current proposal
-// verify failure transition proposal to grace period
-// verify failure finish proposal
-
-// verify shares
-// verify tokens
-
-// verify tokens/ETH on member application rejection
-
-// verify member exit
-// verify member exit burned voting tokens
-// verify member exit loot tokens calculation
-// verify loot tokens decremented correctly on member exit
-// verify exited member no longer has voting ability
-
-/*
-  TEST STATES
-  1. deploy
-  2. donation
-  3. membership proposal (exit at any time)
-  - start voting
-  - voting
-  - grace period
-  - membership success
-  - membership failure
-  - finish
-  4. project proposal (exit at any time)
-  - start voting
-  - voting
-  - grace period
-  - project success
-  - project failure
-  - finish
-  */
