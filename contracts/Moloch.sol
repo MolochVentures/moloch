@@ -56,6 +56,8 @@ contract Moloch {
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
         bool processed; // true only if the proposal has been processed
+        bool didPass; // true only if the proposal passed
+        bool aborted; // true only if applicant calls "abort" fn before end of voting period
         uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
@@ -238,6 +240,8 @@ contract Moloch {
         // PROPOSAL PASSED
         if (didPass) {
 
+            proposal.didPass = true;
+
             // if the proposer is already a member, add to their existing shares
             if (members[proposal.applicant].isActive) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
@@ -260,6 +264,7 @@ contract Moloch {
             totalShares = totalShares.add(proposal.sharesRequested);
 
             // transfer tokens to guild bank
+            // TODO is this necessary
             require(
                 approvedToken.approve(address(guildBank), proposal.tokenTribute),
                 "Moloch::processProposal - approval of token transfer to guild bank failed"
@@ -321,6 +326,25 @@ contract Moloch {
         emit Ragequit(msg.sender, sharesToBurn);
     }
 
+    function abort(uint256 proposalIndex) public {
+        require(proposalIndex < proposalQueue.length, "Moloch::abort - proposal does not exist");
+        Proposal storage proposal = proposalQueue[proposalIndex];
+
+        require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
+        require(getCurrentPeriod() < proposal.startingPeriod.add(votingPeriodLength), "Moloch::abort - proposal must not have entered grace period");
+
+        uint256 tokensToAbort = proposal.tokenTribute;
+        proposal.tokenTribute = 0;
+        proposal.sharesRequested = 0;
+        proposal.aborted = true;
+
+        // return all tokens to the applicant
+        require(
+            approvedToken.transfer(proposal.applicant, tokensToAbort),
+            "Moloch::processProposal - failing vote token transfer failed"
+        );
+    }
+
     function updateDelegateKey(address newDelegateKey) public onlyMember {
         require(newDelegateKey != address(0), "Moloch::updateDelegateKey - newDelegateKey cannot be 0");
 
@@ -349,7 +373,7 @@ contract Moloch {
         require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
         Proposal memory proposal = proposalQueue[highestIndexYesVote];
 
-        return proposal.processed || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
+        return proposal.processed || proposal.aborted || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
