@@ -133,6 +133,9 @@ contract('Moloch', accounts => {
     const gracePeriodLength = await moloch.gracePeriodLength()
     assert.equal(+gracePeriodLength, config.GRACE_DURATON_IN_PERIODS)
 
+    const abortWindow = await moloch.abortWindow()
+    assert.equal(+abortWindow, config.ABORT_WINDOW_IN_PERIODS)
+
     const proposalDeposit = await moloch.proposalDeposit()
     assert.equal(+proposalDeposit, config.PROPOSAL_DEPOSIT)
 
