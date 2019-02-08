@@ -3,7 +3,7 @@
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
-const Token = artifacts.require('./oz/ERC20')
+const Token = artifacts.require('./Token')
 const config = require('../migrations/config.json')
 
 const abi = require('web3-eth-abi')
@@ -55,6 +55,9 @@ async function restore(snapshotId) {
   })
 }
 
+
+let moloch, guildBank, token
+
 contract('Moloch', accounts => {
   let snapshotId
 
@@ -70,12 +73,12 @@ contract('Moloch', accounts => {
 
     summoner = accounts[0]
 
-    founder1 = {
-      address: accounts[0],
-      tributeTokenAddresses: []
+    proposal1 = {
+      applicant: accounts[1],
+      tokenTribute: 1,
+      sharesRequested: 1,
+      details: ""
     }
-
-    applicant = accounts[2]
   })
 
   afterEach(async () => {
@@ -112,7 +115,7 @@ contract('Moloch', accounts => {
     const processingReward = await moloch.processingReward()
     assert.equal(+processingReward, config.PROCESSING_REWARD)
 
-    const currentPeriod = await moloch.currentPeriod()
+    const currentPeriod = await moloch.getCurrentPeriod()
     assert.equal(+currentPeriod, 0)
 
     // TODO check the summoning time = last blocktime
@@ -128,11 +131,17 @@ contract('Moloch', accounts => {
 
     const totalShares = await moloch.totalShares()
     assert.equal(+totalShares, 1)
+
+    // confirm initial token supply and summoner balance
+    const tokenSupply = await token.totalSupply()
+    assert.equal(+tokenSupply.toString(), config.TOKEN_SUPPLY)
+    const summonerTokenBalance = await token.balanceOf(summoner)
+    assert.equal(+summonerTokenBalance.toString(), config.TOKEN_SUPPLY)
   })
 
   describe('submitProposal', () => {
-    it('happy case', async () => {
-      await moloch.submitProposal()
+    it.skip('happy case', async () => {
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details)
 
       // set the applicant profile
       // the founders have to be the addresses - they are

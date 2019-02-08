@@ -6,10 +6,5 @@
   "PROPOSAL_DEPOSIT_IN_WEI" : 10000000000000000000,
   "DILUTION_BOUND": 3,
   "PROCESSING_REWARD": "10000000000000000",
-  "token": {
-      "totalSupply" : "1000000000000000000000000000",
-      "name": "WETH",
-      "decimals": "18",
-      "symbol": "WETH"
-  }
+  "TOKEN_SUPPLY": "10000"
 }

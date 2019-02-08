@@ -1,16 +1,16 @@
 /* global artifacts */
 const fse = require('fs-extra')
 
-const Moloch = artifacts.require('./Moloch.sol')
-const GuildBank = artifacts.require('./GuildBank.sol')
-const Token = artifacts.require('./oz/ERC20.sol')
+const Moloch = artifacts.require('./Moloch')
+const GuildBank = artifacts.require('./GuildBank')
+const Token = artifacts.require('./Token')
 
 const config = require('./config.json')
 
 module.exports = (deployer, network, accounts) => {
   deployer.then(async () => {
 
-    const approvedToken = await deployer.deploy(Token, config.token.totalSupply, config.token.name, config.token.decimals, config.token.symbol)
+    const approvedToken = await deployer.deploy(Token, config.TOKEN_SUPPLY)
 
     await deployer.deploy(
       Moloch,

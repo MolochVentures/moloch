@@ -117,10 +117,6 @@ contract Moloch {
         totalShares = 1;
     }
 
-    function max(uint256 x, uint256 y) internal pure returns (uint256) {
-        return x >= y ? x : y;
-    }
-
     /*****************
     PROPOSAL FUNCTIONS
     *****************/
@@ -339,6 +335,10 @@ contract Moloch {
     /***************
     GETTER FUNCTIONS
     ***************/
+
+    function max(uint256 x, uint256 y) internal pure returns (uint256) {
+        return x >= y ? x : y;
+    }
 
     function getCurrentPeriod() public view returns (uint256) {
         return now.sub(summoningTime).div(periodDuration);
