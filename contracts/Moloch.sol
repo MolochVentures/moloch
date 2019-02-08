@@ -238,7 +238,7 @@ contract Moloch {
         }
 
         // PROPOSAL PASSED
-        if (didPass) {
+        if (didPass && !proposal.aborted) {
 
             proposal.didPass = true;
 
