@@ -170,6 +170,8 @@ contract Moloch {
             yesVotes: 0,
             noVotes: 0,
             processed: false,
+            didPass: false,
+            aborted: false,
             tokenTribute: tokenTribute,
             details: details,
             maxTotalSharesAtYesVote: 0
