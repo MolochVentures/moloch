@@ -335,8 +335,10 @@ contract Moloch {
 
         uint256 tokensToAbort = proposal.tokenTribute;
         proposal.tokenTribute = 0;
-        proposal.sharesRequested = 0;
         proposal.aborted = true;
+
+        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+        proposal.sharesRequested = 0;
 
         // return all tokens to the applicant
         require(
