@@ -1,6 +1,9 @@
 /* global artifacts, contract, assert, web3 */
 /* eslint-env mocha */
 
+// TODO
+// - events
+
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
@@ -57,6 +60,32 @@ async function restore(snapshotId) {
   })
 }
 
+async function forceMine() {
+  return await ethRPC.sendAsync({method: `evm_mine`}, (err)=> {});
+}
+
+async function blockTime() {
+  return await web3.eth.getBlock('latest').timestamp
+}
+
+// Note: this will move forward the timestamp but *not* the currentPeriod
+// any write operation to the contract will implicitely call updatePeriod
+// to get the period after moving forward, we call:
+// await moveForwardPeriods(X)
+// await spankbank.updatePeriod()
+// const currentPeriod = await spankbank.currentPeriod.call()
+async function moveForwardPeriods(periods) {
+  const blocktimestamp = await blockTime()
+  const goToTime = config.PERIOD_DURATION_IN_SECONDS * periods
+  await ethRPC.sendAsync({
+    jsonrpc:'2.0', method: `evm_increaseTime`,
+    params: [goToTime],
+    id: 0
+  }, (err)=> {`error increasing time`});
+  await forceMine()
+  const updatedBlocktimestamp = await blockTime()
+  return true
+}
 
 let moloch, guildBank, token
 
@@ -185,8 +214,52 @@ contract('Moloch', accounts => {
     })
   })
 
-  describe('submitVote', () => {
+  describe.only('submitVote', () => {
+    beforeEach(async () => {
+      proposal1 = {
+        applicant: accounts[1],
+        tokenTribute: 100,
+        sharesRequested: 1,
+        details: ""
+      }
 
+      await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
+      await token.approve(moloch.address, 10, { from: summoner })
+      await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details)
+    })
+
+    it('happy case', async () => {
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner })
+    })
+
+    it('fail - proposal does not exist', async () => {
+      await moveForwardPeriods(1)
+      await moloch.submitVote(1, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - voting period has not started', async () => {
+      // don't move the period forward
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - voting period has expired', async () => {
+      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS + 1)
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - member has already voted', async () => {
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - vote must be yes or no', async () => {
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 0, { from: summoner }).should.be.rejectedWith(SolRevert)
+    })
   })
 
   describe('processProposal', () => {
