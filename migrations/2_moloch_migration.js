@@ -19,7 +19,7 @@ module.exports = (deployer, network, accounts) => {
       config.PERIOD_DURATION_IN_SECONDS,
       config.VOTING_DURATON_IN_PERIODS,
       config.GRACE_DURATON_IN_PERIODS,
-      config.PROPOSAL_DEPOSIT_IN_WEI,
+      config.PROPOSAL_DEPOSIT,
       config.DILUTION_BOUND,
       config.PROCESSING_REWARD,
       { gas: 6000000 }

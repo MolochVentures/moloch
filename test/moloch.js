@@ -16,6 +16,8 @@ const BigNumber = web3.BigNumber
 
 const should = require('chai').use(require('chai-as-promised')).use(require('chai-bignumber')(BigNumber)).should()
 
+const SolRevert = 'VM Exception while processing transaction: revert'
+
 async function blockTime() {
   return (await web3.eth.getBlock('latest')).timestamp
 }
@@ -73,12 +75,6 @@ contract('Moloch', accounts => {
 
     summoner = accounts[0]
 
-    proposal1 = {
-      applicant: accounts[1],
-      tokenTribute: 1,
-      sharesRequested: 1,
-      details: ""
-    }
   })
 
   afterEach(async () => {
@@ -107,7 +103,7 @@ contract('Moloch', accounts => {
     assert.equal(+gracePeriodLength, config.GRACE_DURATON_IN_PERIODS)
 
     const proposalDeposit = await moloch.proposalDeposit()
-    assert.equal(+proposalDeposit, config.PROPOSAL_DEPOSIT_IN_WEI)
+    assert.equal(+proposalDeposit, config.PROPOSAL_DEPOSIT)
 
     const dilutionBound = await moloch.dilutionBound()
     assert.equal(+dilutionBound, config.DILUTION_BOUND)
@@ -140,15 +136,52 @@ contract('Moloch', accounts => {
   })
 
   describe('submitProposal', () => {
-    it.skip('happy case', async () => {
+
+    beforeEach(async () => {
+
+      proposal1 = {
+        applicant: accounts[1],
+        tokenTribute: 100,
+        sharesRequested: 1,
+        details: ""
+      }
+
+      await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
+      await token.approve(moloch.address, 10, { from: summoner })
+      await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
+    })
+
+    it('happy case', async () => {
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details)
 
-      // set the applicant profile
-      // the founders have to be the addresses - they are
-      // need to switch it up for voting
-      // one of the founders needs to submit the tx
-      // need to have at least 2 test tokens deployed
-      // approve token transfers in advance
+      const proposal = await moloch.proposalQueue.call(0)
+      assert.equal(proposal.proposer, summoner)
+      assert.equal(proposal.applicant, proposal1.applicant)
+      assert.equal(proposal.sharesRequested, proposal1.sharesRequested)
+      assert.equal(proposal.startingPeriod, 1)
+      assert.equal(proposal.yesVotes, 0)
+      assert.equal(proposal.noVotes, 0)
+      assert.equal(proposal.processed, false)
+      assert.equal(proposal.tokenTribute, proposal1.tokenTribute)
+      assert.equal(proposal.details, proposal1.details)
+      assert.equal(proposal.maxTotalSharesAtYesVote, 0)
+
+      const proposalQueueLength = await moloch.getProposalQueueLength()
+      assert.equal(proposalQueueLength, 1)
+    })
+
+    // TODO trigger the uint overflow
+
+    it('fail - insufficient proposal deposit', async () => {
+      await token.decreaseAllowance(moloch.address, 1, { from: summoner })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details).should.be.rejectedWith(SolRevert)
+    })
+
+    it('fail - insufficient applicant tokens', async () => {
+      await token.decreaseAllowance(moloch.address, 1, { from: proposal1.applicant })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details).should.be.rejectedWith(SolRevert)
     })
   })
 
