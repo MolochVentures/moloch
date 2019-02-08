@@ -13,6 +13,7 @@ contract Moloch {
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods
     uint256 public gracePeriodLength; // default = 35 periods
+    uint256 public abortWindow; // default = 15 periods
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
@@ -90,6 +91,7 @@ contract Moloch {
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
+        uint256 _abortWindow,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
@@ -98,6 +100,7 @@ contract Moloch {
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
+        require(_abortWindow <= _votingPeriodLength, "Moloch::constructor - _abortWindow must be smaller than _votingPeriodLength");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
@@ -108,6 +111,7 @@ contract Moloch {
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
+        abortWindow = _abortWindow;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
@@ -331,7 +335,7 @@ contract Moloch {
         Proposal storage proposal = proposalQueue[proposalIndex];
 
         require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
-        require(getCurrentPeriod() < proposal.startingPeriod.add(votingPeriodLength), "Moloch::abort - proposal must not have entered grace period");
+        require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - proposal must not have entered grace period");
 
         uint256 tokensToAbort = proposal.tokenTribute;
         proposal.tokenTribute = 0;
@@ -373,9 +377,7 @@ contract Moloch {
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
-        Proposal memory proposal = proposalQueue[highestIndexYesVote];
-
-        return proposal.processed || proposal.aborted || (hasVotingPeriodExpired(proposal.startingPeriod) && proposal.noVotes >= proposal.yesVotes);
+        return proposalQueue[highestIndexYesVote].processed;
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
