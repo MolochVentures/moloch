@@ -2,6 +2,10 @@
 /* eslint-env mocha */
 
 // TODO
+// - check updates are tested in state transitions
+//   - didPass, aborted
+//   - can't vote on aborted
+// - abort fn
 // - events
 // - accounts[0] -> owner & accounts[1] -> summoner (easy balance checks)
 
@@ -124,6 +128,9 @@ contract('Moloch', accounts => {
     const guildBankOwner = await guildBank.owner()
     assert.equal(guildBankOwner, moloch.address)
 
+    const guildBankToken = await guildBank.approvedToken()
+    assert.equal(guildBankToken, token.address)
+
     const periodDuration = await moloch.periodDuration()
     assert.equal(+periodDuration, config.PERIOD_DURATION_IN_SECONDS)
 
@@ -187,6 +194,8 @@ contract('Moloch', accounts => {
       assert.equal(proposal.yesVotes, 0)
       assert.equal(proposal.noVotes, 0)
       assert.equal(proposal.processed, false)
+      assert.equal(proposal.didPass, false)
+      assert.equal(proposal.aborted, false)
       assert.equal(proposal.tokenTribute, proposal1.tokenTribute)
       assert.equal(proposal.details, proposal1.details)
       assert.equal(proposal.maxTotalSharesAtYesVote, 0)
@@ -209,12 +218,14 @@ contract('Moloch', accounts => {
     it('fail - insufficient proposal deposit', async () => {
       await token.decreaseAllowance(moloch.address, 1, { from: summoner })
 
+      // SafeMath reverts in ERC20.transferFrom
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details).should.be.rejectedWith(SolRevert)
     })
 
     it('fail - insufficient applicant tokens', async () => {
       await token.decreaseAllowance(moloch.address, 1, { from: proposal1.applicant })
 
+      // SafeMath reverts in ERC20.transferFrom
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details).should.be.rejectedWith(SolRevert)
     })
   })
@@ -256,39 +267,42 @@ contract('Moloch', accounts => {
 
     it('fail - proposal does not exist', async () => {
       await moveForwardPeriods(1)
-      await moloch.submitVote(1, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+      await moloch.submitVote(1, 1, { from: summoner }).should.be.rejectedWith('proposal does not exist')
     })
 
     it('fail - voting period has not started', async () => {
       // don't move the period forward
-      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith('voting period has not started')
     })
 
     it('fail - voting period has expired', async () => {
       await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS + 1)
-      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith('voting period has expired')
     })
 
     it('fail - member has already voted', async () => {
       await moveForwardPeriods(1)
       await moloch.submitVote(0, 1, { from: summoner })
-      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith(SolRevert)
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith('member has already voted on this proposal')
     })
 
     it('fail - vote must be yes or no', async () => {
       await moveForwardPeriods(1)
-
       // vote null
-      await moloch.submitVote(0, 0, { from: summoner }).should.be.rejectedWith(SolRevert)
-
+      await moloch.submitVote(0, 0, { from: summoner }).should.be.rejectedWith('vote must be either Yes or No')
       // vote out of bounds
       await moloch.submitVote(0, 3, { from: summoner }).should.be.rejectedWith(InvalidOpcode)
+    })
+
+    it('fail - proposal has been aborted', async () => {
+      await moloch.abort(0, { from: proposal1.applicant })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith('proposal has been aborted')
     })
   })
 
   describe('processProposal', () => {
     beforeEach(async () => {
-
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: summoner })
       await token.approve(moloch.address, 10, { from: summoner })
       await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
@@ -318,7 +332,7 @@ contract('Moloch', accounts => {
       assert.equal(totalShares, proposal1.sharesRequested + 1)
 
       const processorBalance = await token.balanceOf(accounts[2])
-      assert.equal(processorTokenBalance, config.PROCESSING_REWARD)
+      assert.equal(processorBalance, config.PROCESSING_REWARD)
 
       const guildBankBalance = await token.balanceOf(guildBank.address)
       assert.equal(guildBankBalance, proposal1.tokenTribute)
@@ -338,18 +352,18 @@ contract('Moloch', accounts => {
 
     it('fail - proposal does not exist', async () => {
       await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
-      await moloch.processProposal(1).should.be.rejectedWith(SolRevert)
+      await moloch.processProposal(1).should.be.rejectedWith('proposal does not exist')
     })
 
     it('fail - proposal is not ready to be processed', async () => {
       await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS - 1)
-      await moloch.processProposal(0).should.be.rejectedWith(SolRevert)
+      await moloch.processProposal(0).should.be.rejectedWith('proposal is not ready to be processed')
     })
 
     it('fail - proposal has already been processed', async () => {
       await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
       await moloch.processProposal(0)
-      await moloch.processProposal(0).should.be.rejectedWith(SolRevert)
+      await moloch.processProposal(0).should.be.rejectedWith('proposal has already been processed')
     })
 
     it('fail - previous proposal must be processed', async () => {
@@ -357,7 +371,7 @@ contract('Moloch', accounts => {
     })
   })
 
-  describe.only('ragequit', () => {
+  describe('ragequit', () => {
     beforeEach(async () => {
       proposal1.sharesRequested = 1 // make it so total shares is 2
 
