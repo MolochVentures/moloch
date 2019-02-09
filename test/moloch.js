@@ -5,13 +5,33 @@
 // - events
 // - processProposal if branches
 //   - aborted
-//   - dilutionBound
+//   - dilutionBound (mass ragequit)
 //   - success -> new member
+//     - force reset existing delegateKey
 //   - success -> existing member
 //   - failure
 // - combos
 //   - abort a proposal with votes
 //   - ragequit immediately after being eligible to
+// - simulation
+//   - 100 proposals
+//     - X new members w/ tribute
+//     - Y existing members
+//     - Z pure grants
+//   - everyone ragequits
+// - gnosis safe multisig
+//   - as delegateKey
+//   - as memberAddress
+// - old gnosis multisig
+//   - as delegateKey
+//   - as memberAddress
+// - test gaps in the queue (starting period for submitProposal)
+// - boundary conditions
+//   - submitVote on first / last possible period (error, first, last, error)
+//   - abort on first / last possible period
+//   - attempt to process proposal 1 period before ready
+//   - attempt to ragequit 1 period before ready
+// - wETH externally deposited to guild bank can still be withdrawn
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
@@ -264,7 +284,7 @@ contract('Moloch', accounts => {
     })
   })
 
-  describe('submitVote', () => {
+  describe.only('submitVote', () => {
     beforeEach(async () => {
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: creator })
       await token.approve(moloch.address, 10, { from: summoner })
@@ -589,6 +609,23 @@ contract('Moloch', accounts => {
   describe('guildbank.withdraw', () => {
     it('modifier - owner', async () => {
       await guildBank.withdraw(summoner, 1, 1).should.be.rejectedWith(SolRevert)
+    })
+  })
+
+  describe('two proposals', () => {
+    beforeEach(async () => {
+
+    })
+
+    it('submitVote - yes - dont update highestIndexYesVote', async () => {
+      // vote on p2 -> 2
+      // vote on p1 -> 2
+    })
+
+    it('submitVote - yes - dont update maxTotalSharesAtYesVote', async () => {
+      // 2. maxShares are higher (n -> n+)
+      // 3. maxShares are the same (n -> n)
+      // 4. maxShares are the lower (n -> n-)
     })
   })
 })
