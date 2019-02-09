@@ -251,7 +251,7 @@ contract Moloch {
 
             proposal.didPass = true;
 
-            // if the proposer is already a member, add to their existing shares
+            // if the applicant is already a member, add to their existing shares
             if (members[proposal.applicant].isActive) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
@@ -273,14 +273,9 @@ contract Moloch {
             totalShares = totalShares.add(proposal.sharesRequested);
 
             // transfer tokens to guild bank
-            // TODO is this necessary
             require(
-                approvedToken.approve(address(guildBank), proposal.tokenTribute),
-                "Moloch::processProposal - approval of token transfer to guild bank failed"
-            );
-            require(
-                guildBank.deposit(proposal.tokenTribute),
-                "Moloch::processProposal - passing vote token transfer failed"
+                approvedToken.transfer(address(guildBank), proposal.tokenTribute)
+                "Moloch::processProposal - token transfer to guild bank failed"
             );
 
         // PROPOSAL FAILED
