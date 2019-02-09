@@ -2,9 +2,7 @@
 /* eslint-env mocha */
 
 // TODO
-// - abort fn
 // - events
-// - modifiers (delegate / member)
 // - processProposal if branches
 //   - aborted
 //   - dilutionBound
@@ -260,6 +258,10 @@ contract('Moloch', accounts => {
       // SafeMath reverts in ERC20.transferFrom
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details).should.be.rejectedWith(SolRevert)
     })
+
+    it('modifier - delegate', async () => {
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: creator }).should.be.rejectedWith('not a delegate')
+    })
   })
 
   describe('submitVote', () => {
@@ -330,6 +332,11 @@ contract('Moloch', accounts => {
       await moloch.abort(0, { from: proposal1.applicant })
       await moveForwardPeriods(1)
       await moloch.submitVote(0, 1, { from: summoner }).should.be.rejectedWith('proposal has been aborted')
+    })
+
+    it('modifier - delegate', async () => {
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: creator }).should.be.rejectedWith('not a delegate')
     })
   })
 
@@ -451,6 +458,17 @@ contract('Moloch', accounts => {
       await moloch.ragequit(1, { from: summoner }).should.be.rejectedWith('cant ragequit until highest index proposal member voted YES on is processed')
     })
 
+    it('modifier - member - non-member', async () => {
+      await moloch.processProposal(0)
+      await moloch.ragequit(1, { from: creator }).should.be.rejectedWith('not a member')
+    })
+
+    it('modifier - member - member ragequit', async () => {
+      await moloch.processProposal(0)
+      await moloch.ragequit(1, { from: summoner })
+      await moloch.ragequit(1, { from: summoner }).should.be.rejectedWith('not a member')
+    })
+
     // TODO how might guildbank withdrawal fail?
   })
 
@@ -511,7 +529,7 @@ contract('Moloch', accounts => {
     // TODO how can token transfer to applicant fail?
   })
 
-  describe.only('updateDelegateKey', () => {
+  describe('updateDelegateKey', () => {
     beforeEach(async () => {
       // vote in a new member to test failing requires
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: creator })
@@ -548,6 +566,10 @@ contract('Moloch', accounts => {
       await moloch.updateDelegateKey(creator, { from: summoner }).should.be.rejectedWith('cant overwrite existing delegate keys')
     })
 
+    it('modifier - member', async () => {
+      await moloch.updateDelegateKey(creator, { from: creator }).should.be.rejectedWith('not a member')
+    })
+
     it('edge - can reset the delegatekey to your own member address', async () => {
       // first set the delegate key to the creator
       await moloch.updateDelegateKey(creator, { from: summoner })
@@ -558,13 +580,15 @@ contract('Moloch', accounts => {
     })
   })
 
-
-  // TODO test modifiers (should fail when called by non-owner)
   describe('guildbank.deposit', () => {
-
+    it('modifier - owner', async () => {
+      await guildBank.deposit(1).should.be.rejectedWith(SolRevert)
+    })
   })
 
   describe('guildbank.withdraw', () => {
-
+    it('modifier - owner', async () => {
+      await guildBank.withdraw(summoner, 1, 1).should.be.rejectedWith(SolRevert)
+    })
   })
 })
