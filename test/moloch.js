@@ -4,6 +4,7 @@
 // TODO
 // - abort fn
 // - events
+// - modifiers (delegate / member)
 // - processProposal if branches
 //   - aborted
 //   - dilutionBound
@@ -31,6 +32,8 @@ const should = require('chai').use(require('chai-as-promised')).use(require('cha
 
 const SolRevert = 'VM Exception while processing transaction: revert'
 const InvalidOpcode = 'VM Exception while processing transaction: invalid opcode'
+
+const zeroAddress = '0x0000000000000000000000000000000000000000'
 
 async function blockTime() {
   return (await web3.eth.getBlock('latest')).timestamp
@@ -98,6 +101,15 @@ const initSummonerBalance = 100
 
 contract('Moloch', accounts => {
   let snapshotId
+
+  const verifyUpdateDelegateKey = async (memberAddress, oldDelegateKey, newDelegateKey) => {
+    const member = await moloch.members(memberAddress)
+    assert.equal(member.delegateKey, newDelegateKey)
+    const memberByOldDelegateKey = await moloch.memberAddressByDelegateKey(oldDelegateKey)
+    assert.equal(memberByOldDelegateKey, zeroAddress)
+    const memberByNewDelegateKey = await moloch.memberAddressByDelegateKey(newDelegateKey)
+    assert.equal(memberByNewDelegateKey, memberAddress)
+  }
 
   before('deploy contracts', async () => {
     moloch = await Moloch.deployed()
@@ -442,7 +454,7 @@ contract('Moloch', accounts => {
     // TODO how might guildbank withdrawal fail?
   })
 
-  describe.only('abort', () => {
+  describe('abort', () => {
     beforeEach(async () => {
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: creator })
       await token.approve(moloch.address, 10, { from: summoner })
@@ -497,6 +509,53 @@ contract('Moloch', accounts => {
     })
 
     // TODO how can token transfer to applicant fail?
+  })
+
+  describe.only('updateDelegateKey', () => {
+    beforeEach(async () => {
+      // vote in a new member to test failing requires
+      await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: creator })
+      await token.approve(moloch.address, 10, { from: summoner })
+      await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner })
+
+      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(0, { from: processor })
+    })
+
+    it('happy case', async () => {
+      await moloch.updateDelegateKey(creator, { from: summoner })
+      await verifyUpdateDelegateKey(summoner, summoner, creator)
+    })
+
+    it('fail - newDelegateKey cannot be 0', async () => {
+      await moloch.updateDelegateKey(zeroAddress, { from: summoner }).should.be.rejectedWith('newDelegateKey cannot be 0')
+    })
+
+    it('fail - cant overwrite existing members', async () => {
+      await moloch.updateDelegateKey(proposal1.applicant, { from: summoner }).should.be.rejectedWith('cant overwrite existing members')
+    })
+
+    it('fail - cant overwrite existing delegate keys', async () => {
+      // first set the p1 applicant delegate key to the creator
+      await moloch.updateDelegateKey(creator, { from: proposal1.applicant })
+      // then try to overwrite it
+      await moloch.updateDelegateKey(creator, { from: summoner }).should.be.rejectedWith('cant overwrite existing delegate keys')
+    })
+
+    it('edge - can reset the delegatekey to your own member address', async () => {
+      // first set the delegate key to the creator
+      await moloch.updateDelegateKey(creator, { from: summoner })
+      await verifyUpdateDelegateKey(summoner, summoner, creator)
+      // then reset it to the summoner
+      await moloch.updateDelegateKey(summoner, { from: summoner })
+      await verifyUpdateDelegateKey(summoner, creator, summoner)
+    })
   })
 
 

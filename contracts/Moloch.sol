@@ -355,8 +355,8 @@ contract Moloch {
 
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
-            require(!members[newDelegateKey].isActive, "Moloch::updateDelegateKey - can't overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].isActive, "Moloch::updateDelegateKey - can't overwrite existing delegate keys");
+            require(!members[newDelegateKey].isActive, "Moloch::updateDelegateKey - cant overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].isActive, "Moloch::updateDelegateKey - cant overwrite existing delegate keys");
         }
 
         Member storage member = members[msg.sender];
