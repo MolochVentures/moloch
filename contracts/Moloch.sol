@@ -278,7 +278,7 @@ contract Moloch {
                 "Moloch::processProposal - token transfer to guild bank failed"
             );
 
-        // PROPOSAL FAILED
+        // PROPOSAL FAILED OR ABORTED
         } else {
             // return all tokens to the applicant
             require(
@@ -336,14 +336,11 @@ contract Moloch {
         Proposal storage proposal = proposalQueue[proposalIndex];
 
         require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
-        require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - proposal must not have entered grace period");
+        require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
 
         uint256 tokensToAbort = proposal.tokenTribute;
         proposal.tokenTribute = 0;
         proposal.aborted = true;
-
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
-        proposal.sharesRequested = 0;
 
         // return all tokens to the applicant
         require(
