@@ -25,10 +25,12 @@ contract Moloch {
     /***************
     EVENTS
     ***************/
-    event SubmitProposal(uint256 indexed index, address indexed applicant, address indexed memberAddress);
-    event ProcessProposal(uint256 indexed index, address indexed applicant, address indexed proposer, bool didPass, uint256 shares);
-    event SubmitVote(address indexed sender, address indexed memberAddress, uint256 indexed proposalIndex, uint8 uintVote);
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tokenTribute, uint256 sharesRequested);
+    event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
+    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tokenTribute, uint256 sharesRequested bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
+    event Abort(address indexed proposalIndex, address applicantAddress);
+    event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
 
     /******************
     INTERNAL ACCOUNTING
@@ -185,7 +187,7 @@ contract Moloch {
         proposalQueue.push(proposal);
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
-        emit SubmitProposal(proposalIndex, applicant, memberAddress);
+        emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -223,7 +225,7 @@ contract Moloch {
             proposal.noVotes = proposal.noVotes.add(member.shares);
         }
 
-        emit SubmitVote(msg.sender, memberAddress, proposalIndex, uintVote);
+        emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
     function processProposal(uint256 proposalIndex) public {
@@ -306,8 +308,9 @@ contract Moloch {
             proposalIndex,
             proposal.applicant,
             proposal.proposer,
-            didPass,
-            proposal.sharesRequested
+            proposal.tokenTribute,
+            proposal.sharesRequested,
+            didPass
         );
     }
 
@@ -352,6 +355,8 @@ contract Moloch {
             approvedToken.transfer(proposal.applicant, tokensToAbort),
             "Moloch::processProposal - failing vote token transfer failed"
         );
+
+        emit Abort(proposalIndex, msg.sender);
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
@@ -367,6 +372,8 @@ contract Moloch {
         memberAddressByDelegateKey[member.delegateKey] = address(0);
         memberAddressByDelegateKey[newDelegateKey] = msg.sender;
         member.delegateKey = newDelegateKey;
+
+        emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
     /***************
