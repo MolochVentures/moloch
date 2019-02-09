@@ -197,6 +197,7 @@ contract Moloch {
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
+        require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
 
         // store vote
         proposal.votesByMember[memberAddress] = vote;
