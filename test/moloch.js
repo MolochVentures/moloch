@@ -281,7 +281,7 @@ contract('Moloch', accounts => {
     })
   })
 
-  describe.only('submitVote', () => {
+  describe('submitVote', () => {
     beforeEach(async () => {
       await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: creator })
       await token.approve(moloch.address, 10, { from: summoner })
@@ -505,7 +505,7 @@ contract('Moloch', accounts => {
 
       const proposal = await moloch.proposalQueue.call(0)
       assert.equal(proposal.tokenTribute, 0)
-      assert.equal(proposal.sharesRequested, 0)
+      assert.equal(proposal.sharesRequested, 1)
       assert.equal(proposal.yesVotes, 0)
       assert.equal(proposal.noVotes, 0)
       assert.equal(proposal.maxTotalSharesAtYesVote, 0)
@@ -514,7 +514,7 @@ contract('Moloch', accounts => {
       assert.equal(proposal.aborted, true)
 
       const totalSharesRequested = await moloch.totalSharesRequested()
-      assert.equal(totalSharesRequested, 0)
+      assert.equal(totalSharesRequested, 1)
 
       const totalShares = await moloch.totalShares()
       assert.equal(totalShares, 1)
@@ -540,7 +540,7 @@ contract('Moloch', accounts => {
     it('fail - proposal must not have entered grace period', async () => {
       await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
-      await moloch.abort(0, { from: proposal1.applicant }).should.be.rejectedWith('proposal must not have entered grace period')
+      await moloch.abort(0, { from: proposal1.applicant }).should.be.rejectedWith('abort window must not have passed')
     })
 
     // TODO how can token transfer to applicant fail?
@@ -594,12 +594,6 @@ contract('Moloch', accounts => {
       // then reset it to the summoner
       await moloch.updateDelegateKey(summoner, { from: summoner })
       await verifyUpdateDelegateKey(summoner, creator, summoner)
-    })
-  })
-
-  describe('guildbank.deposit', () => {
-    it('modifier - owner', async () => {
-      await guildBank.deposit(1).should.be.rejectedWith(SolRevert)
     })
   })
 
