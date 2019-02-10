@@ -9,7 +9,6 @@ contract GuildBank is Ownable {
 
     ERC20 public approvedToken; // approved token contract reference
 
-    event Deposit(uint256 amount);
     event Withdrawal(address indexed receiver, uint256 amount);
 
     constructor(address approvedTokenAddress) public {
