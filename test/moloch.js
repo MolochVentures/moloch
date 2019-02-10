@@ -10,9 +10,6 @@
 //     - force reset existing delegateKey
 //   - success -> existing member
 //   - failure
-// - combos
-//   - abort a proposal with votes
-//   - ragequit immediately after being eligible to
 // - simulation
 //   - 100 proposals
 //     - X new members w/ tribute
