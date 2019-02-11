@@ -3,6 +3,8 @@
 
 // TODO
 // - events
+// - refactor
+//   - verification functions
 // - processProposal if branches
 //   - aborted
 //   - dilutionBound (mass ragequit)
@@ -119,6 +121,7 @@ async function moveForwardPeriods(periods) {
 
 let moloch, guildBank, token
 let proxyFactory, gnosisSafeMasterCopy, gnosisSafe, lw, executor
+let proposal1
 
 // used by gnosis safe
 const CALL = 0
@@ -658,6 +661,8 @@ contract('Moloch', accounts => {
         to: gnosisSafe.address,
         value: web3.utils.toWei('1', 'ether')
       })
+
+      proposal1.applicant = gnosisSafe.address
     })
 
     it('sends ether', async () => {
@@ -673,6 +678,107 @@ contract('Moloch', accounts => {
       await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
       const approvedAmount = await token.allowance(gnosisSafe.address, moloch.address)
       assert.equal(approvedAmount, 100)
+    })
+
+    it('abort', async () => {
+      // approve 100 eth from safe to moloch
+      let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
+      await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
+
+      // summoner approve for proposal deposit
+      await token.approve(moloch.address, 10, { from: summoner })
+      // summoner submits proposal for safe
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
+
+      // ABORT - gnosis safe aborts
+      const abortData = await moloch.contract.methods.abort(0).encodeABI()
+      await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, abortData, CALL, executor)
+      const abortedProposal = await moloch.proposalQueue.call(0)
+      assert.equal(abortedProposal.tokenTribute, 0)
+    })
+
+    describe.only('as a member, can execute all functions', async () => {
+      beforeEach(async () => {
+        // approve 100 eth from safe to moloch
+        let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
+
+        // summoner approves tokens and submits proposal for safe
+        await token.approve(moloch.address, 10, { from: summoner })
+        await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
+
+        // summoner votes yes for safe
+        await moveForwardPeriods(1)
+        await moloch.submitVote(0, 1, { from: summoner })
+
+        // fast forward until safe is a member
+        await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+        await moloch.processProposal(0, { from: processor })
+      })
+
+      it('submit proposal -> vote -> update delegate -> ragequit', async () => {
+        // confirm that the safe is a member
+        const safeMemberData = await moloch.members(gnosisSafe.address)
+        assert.equal(safeMemberData.isActive, true)
+
+        // create a new proposal
+        proposal2 = {
+          applicant: accounts[2],
+          tokenTribute: 100,
+          sharesRequested: 2,
+          details: ""
+        }
+
+        // send the applicant 100 tokens and have them do the approval
+        await token.transfer(proposal2.applicant, proposal2.tokenTribute, { from: creator })
+        await token.approve(moloch.address, proposal2.tokenTribute, { from: proposal2.applicant})
+
+        // safe needs to approve 10 for the deposit (get 10 more from creator)
+        await token.transfer(gnosisSafe.address, 10, { from: creator })
+        let data = await token.contract.methods.approve(moloch.address, 10).encodeABI()
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
+
+        // safe submits proposal
+        let submitProposalData = await moloch.contract.methods.submitProposal(proposal2.applicant, proposal2.tokenTribute, proposal2.sharesRequested, proposal2.details).encodeABI()
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'submit proposal to moloch', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, submitProposalData, CALL, executor)
+        // TODO use verification fn
+        const proposalData = await moloch.proposalQueue.call(1)
+        assert.equal(proposalData.proposer, gnosisSafe.address)
+        assert.equal(proposalData.applicant, proposal2.applicant)
+        assert.equal(proposalData.tokenTribute, proposal2.tokenTribute)
+        assert.equal(proposalData.sharesRequested, proposal2.sharesRequested)
+        assert.equal(proposalData.details, proposal2.details)
+
+        // safe submits vote
+        await moveForwardPeriods(1)
+        let voteData = await moloch.contract.methods.submitVote(1, 2).encodeABI() // vote no so we can ragequit easier
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'submit vote to moloch', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, voteData, CALL, executor)
+        // TODO use verification fn
+        const proposalDataAfterVote = await moloch.proposalQueue.call(1)
+        assert.equal(proposalDataAfterVote.yesVotes, 0)
+        assert.equal(proposalDataAfterVote.noVotes, 1)
+        assert.equal(proposalDataAfterVote.maxTotalSharesAtYesVote, 0)
+        const memberVote = await moloch.getMemberProposalVote(gnosisSafe.address, 1)
+        assert.equal(memberVote, 2)
+
+        const newDelegateKey = accounts[5]
+
+        // safe updates delegate key
+        const updateDelegateData = await moloch.contract.methods.updateDelegateKey(newDelegateKey).encodeABI()
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'update delegate key', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, updateDelegateData, CALL, executor)
+        await verifyUpdateDelegateKey(gnosisSafe.address, gnosisSafe.address, newDelegateKey)
+
+        // safe ragequits
+        const ragequitData = await moloch.contract.methods.ragequit(1).encodeABI()
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'ragequit the guild', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, ragequitData, CALL, executor)
+        const safeMemberDataAfterRagequit = await moloch.members(gnosisSafe.address)
+        assert.equal(safeMemberDataAfterRagequit.isActive, true)
+        assert.equal(safeMemberDataAfterRagequit.shares, 0)
+
+        const safeBalanceAfterRagequit = await token.balanceOf(gnosisSafe.address)
+        assert.equal(safeBalanceAfterRagequit, 50) // 100 eth & 2 shares at time of ragequit
+      })
     })
   })
 })
