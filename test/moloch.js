@@ -18,9 +18,6 @@
 //     - Y existing members
 //     - Z pure grants
 //   - everyone ragequits
-// - gnosis safe multisig
-//   - as delegateKey
-//   - as memberAddress
 // - old gnosis multisig
 //   - as delegateKey
 //   - as memberAddress
