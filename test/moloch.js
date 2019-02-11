@@ -2,32 +2,31 @@
 /* eslint-env mocha */
 
 // TODO
-// - events
-// - refactor
-//   - verification functions
-// - processProposal if branches
+// 2. processProposal if branches
 //   - aborted
 //   - dilutionBound (mass ragequit)
 //   - success -> new member
 //     - force reset existing delegateKey
 //   - success -> existing member
 //   - failure
-// - simulation
+// 3. boundary conditions
+//   - submitVote on first / last possible period (error, first, last, error)
+//   - abort on first / last possible period
+//   - attempt to process proposal 1 period before ready
+//   - attempt to ragequit 1 period before ready
+// 4. events
+// 5. test gaps in the queue (starting period for submitProposal)
+// 6. wETH externally deposited to guild bank can still be withdrawn
+// 7. simulation
 //   - 100 proposals
 //     - X new members w/ tribute
 //     - Y existing members
 //     - Z pure grants
 //   - everyone ragequits
-// - old gnosis multisig
+//   - maybe add verifications for abort / ragequit
+// 8. old gnosis multisig
 //   - as delegateKey
 //   - as memberAddress
-// - test gaps in the queue (starting period for submitProposal)
-// - boundary conditions
-//   - submitVote on first / last possible period (error, first, last, error)
-//   - abort on first / last possible period
-//   - attempt to process proposal 1 period before ready
-//   - attempt to ragequit 1 period before ready
-// - wETH externally deposited to guild bank can still be withdrawn
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
@@ -128,6 +127,66 @@ const initSummonerBalance = 100
 contract('Moloch', accounts => {
   let snapshotId
 
+  // VERIFY SUBMIT PROPOSAL
+  const verifySubmitProposal = async (proposal, proposalIndex, proposer, options) => {
+    const initialTotalSharesRequested = options.initialTotalSharesRequested ? options.initialTotalSharesRequested : 0
+    const initialTotalShares = options.initialTotalShares ? options.initialTotalShares : 0
+    const initialProposalLength = options.initialProposalLength ? options.initialProposalLength : 0
+    const initialMolochBalance = options.initialMolochBalance ? options.initialMolochBalance : 0
+    const initialApplicantBalance = options.initialApplicantBalance ? options.initialApplicantBalance : 0
+    const initialProposerBalance = options.initialProposerBalance ? options.initialProposerBalance : 0
+
+    const expectedStartingPeriod = options.expectedStartingPeriod ? options.expectedStartingPeriod : 1
+
+    const proposalData = await moloch.proposalQueue.call(proposalIndex)
+    assert.equal(proposalData.proposer, proposer)
+    assert.equal(proposalData.applicant, proposal.applicant)
+    assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
+    assert.equal(proposalData.startingPeriod, expectedStartingPeriod)
+    assert.equal(proposalData.yesVotes, 0)
+    assert.equal(proposalData.noVotes, 0)
+    assert.equal(proposalData.processed, false)
+    assert.equal(proposalData.didPass, false)
+    assert.equal(proposalData.aborted, false)
+    assert.equal(proposalData.tokenTribute, proposal.tokenTribute)
+    assert.equal(proposalData.details, proposal.details)
+    assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
+
+    const totalSharesRequested = await moloch.totalSharesRequested()
+    assert.equal(totalSharesRequested, proposal.sharesRequested + initialTotalSharesRequested)
+
+    const totalShares = await moloch.totalShares()
+    assert.equal(totalShares, initialTotalShares)
+
+    const proposalQueueLength = await moloch.getProposalQueueLength()
+    assert.equal(proposalQueueLength, initialProposalLength + 1)
+
+    const molochBalance = await token.balanceOf(moloch.address)
+    assert.equal(molochBalance, initialMolochBalance + proposal.tokenTribute + config.PROPOSAL_DEPOSIT)
+
+    const applicantBalance = await token.balanceOf(proposal.applicant)
+    assert.equal(applicantBalance, initialApplicantBalance - proposal.tokenTribute)
+
+    const proposerBalance = await token.balanceOf(proposer)
+    assert.equal(proposerBalance, initialProposerBalance - config.PROPOSAL_DEPOSIT)
+  }
+
+  // VERIFY SUBMIT VOTE
+  const verifySubmitVote = async (proposal, proposalIndex, memberAddress, expectedVote, options) => {
+    const initialYesVotes = options.initialYesVotes ? options.initialYesVotes : 0
+    const initialNoVotes = options.initialNoVotes ? options.initialNoVotes : 0
+    const expectedMaxSharesAtYesVote = options.expectedMaxSharesAtYesVote ? options.expectedMaxSharesAtYesVote : 0
+
+    const proposalData = await moloch.proposalQueue.call(proposalIndex)
+    assert.equal(proposalData.yesVotes, initialYesVotes + (expectedVote == 1 ? 1 : 0))
+    assert.equal(proposalData.noVotes, initialNoVotes + (expectedVote == 1 ? 0 : 1))
+    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
+
+    const memberVote = await moloch.getMemberProposalVote(memberAddress, proposalIndex)
+    assert.equal(memberVote, expectedVote)
+  }
+
+  // VERIFY UPDATE DELEGATE KEY
   const verifyUpdateDelegateKey = async (memberAddress, oldDelegateKey, newDelegateKey) => {
     const member = await moloch.members(memberAddress)
     assert.equal(member.delegateKey, newDelegateKey)
@@ -240,38 +299,11 @@ contract('Moloch', accounts => {
 
     it('happy case', async () => {
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
-
-      const proposal = await moloch.proposalQueue.call(0)
-      assert.equal(proposal.proposer, summoner)
-      assert.equal(proposal.applicant, proposal1.applicant)
-      assert.equal(proposal.sharesRequested, proposal1.sharesRequested)
-      assert.equal(proposal.startingPeriod, 1)
-      assert.equal(proposal.yesVotes, 0)
-      assert.equal(proposal.noVotes, 0)
-      assert.equal(proposal.processed, false)
-      assert.equal(proposal.didPass, false)
-      assert.equal(proposal.aborted, false)
-      assert.equal(proposal.tokenTribute, proposal1.tokenTribute)
-      assert.equal(proposal.details, proposal1.details)
-      assert.equal(proposal.maxTotalSharesAtYesVote, 0)
-
-      const totalSharesRequested = await moloch.totalSharesRequested()
-      assert.equal(totalSharesRequested, proposal1.sharesRequested)
-
-      const totalShares = await moloch.totalShares()
-      assert.equal(totalShares, 1)
-
-      const proposalQueueLength = await moloch.getProposalQueueLength()
-      assert.equal(proposalQueueLength, 1)
-
-      const molochBalance = await token.balanceOf(moloch.address)
-      assert.equal(molochBalance, proposal1.tokenTribute + config.PROPOSAL_DEPOSIT)
-
-      const summonerBalance = await token.balanceOf(summoner)
-      assert.equal(summonerBalance, initSummonerBalance - config.PROPOSAL_DEPOSIT)
-
-      const applicantBalance = await token.balanceOf(proposal1.applicant)
-      assert.equal(applicantBalance, 0)
+      await verifySubmitProposal(proposal1, 0, summoner, {
+        initialTotalShares: 1,
+        initialApplicantBalance: proposal1.tokenTribute,
+        initialProposerBalance: initSummonerBalance
+      })
     })
 
     // TODO trigger the uint overflow
@@ -307,27 +339,15 @@ contract('Moloch', accounts => {
     it('happy case - yes vote', async () => {
       await moveForwardPeriods(1)
       await moloch.submitVote(0, 1, { from: summoner })
-
-      const proposal = await moloch.proposalQueue.call(0)
-      assert.equal(proposal.yesVotes, 1)
-      assert.equal(proposal.noVotes, 0)
-      assert.equal(proposal.maxTotalSharesAtYesVote, 1)
-
-      const memberVote = await moloch.getMemberProposalVote(summoner, 0)
-      assert.equal(memberVote, 1)
+      await verifySubmitVote(proposal1, 0, summoner, 1, {
+        expectedMaxSharesAtYesVote: 1
+      })
     })
 
     it('happy case - no vote', async () => {
       await moveForwardPeriods(1)
       await moloch.submitVote(0, 2, { from: summoner })
-
-      const proposal = await moloch.proposalQueue.call(0)
-      assert.equal(proposal.yesVotes, 0)
-      assert.equal(proposal.noVotes, 1)
-      assert.equal(proposal.maxTotalSharesAtYesVote, 0)
-
-      const memberVote = await moloch.getMemberProposalVote(summoner, 0)
-      assert.equal(memberVote, 2)
+      await verifySubmitVote(proposal1, 0, summoner, 2, {})
     })
 
     it('fail - proposal does not exist', async () => {
@@ -634,7 +654,7 @@ contract('Moloch', accounts => {
     })
   })
 
-  describe.only('Gnosis Safe Integration', () => {
+  describe('Gnosis Safe Integration', () => {
     beforeEach(async () => {
       executor = creator // used to execute gnosis safe transactions
 
@@ -694,7 +714,7 @@ contract('Moloch', accounts => {
       assert.equal(abortedProposal.tokenTribute, 0)
     })
 
-    describe.only('as a member, can execute all functions', async () => {
+    describe('as a member, can execute all functions', async () => {
       beforeEach(async () => {
         // approve 100 eth from safe to moloch
         let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
@@ -739,25 +759,21 @@ contract('Moloch', accounts => {
         // safe submits proposal
         let submitProposalData = await moloch.contract.methods.submitProposal(proposal2.applicant, proposal2.tokenTribute, proposal2.sharesRequested, proposal2.details).encodeABI()
         await safeUtils.executeTransaction(lw, gnosisSafe, 'submit proposal to moloch', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, submitProposalData, CALL, executor)
-        // TODO use verification fn
-        const proposalData = await moloch.proposalQueue.call(1)
-        assert.equal(proposalData.proposer, gnosisSafe.address)
-        assert.equal(proposalData.applicant, proposal2.applicant)
-        assert.equal(proposalData.tokenTribute, proposal2.tokenTribute)
-        assert.equal(proposalData.sharesRequested, proposal2.sharesRequested)
-        assert.equal(proposalData.details, proposal2.details)
+
+        const expectedStartingPeriod = (await moloch.getCurrentPeriod()).toNumber() + 1
+        await verifySubmitProposal(proposal2, 1, gnosisSafe.address, {
+          initialTotalShares: 2,
+          initialProposalLength: 1,
+          initialApplicantBalance: proposal2.tokenTribute,
+          initialProposerBalance: 10,
+          expectedStartingPeriod: expectedStartingPeriod
+        })
 
         // safe submits vote
         await moveForwardPeriods(1)
         let voteData = await moloch.contract.methods.submitVote(1, 2).encodeABI() // vote no so we can ragequit easier
         await safeUtils.executeTransaction(lw, gnosisSafe, 'submit vote to moloch', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, voteData, CALL, executor)
-        // TODO use verification fn
-        const proposalDataAfterVote = await moloch.proposalQueue.call(1)
-        assert.equal(proposalDataAfterVote.yesVotes, 0)
-        assert.equal(proposalDataAfterVote.noVotes, 1)
-        assert.equal(proposalDataAfterVote.maxTotalSharesAtYesVote, 0)
-        const memberVote = await moloch.getMemberProposalVote(gnosisSafe.address, 1)
-        assert.equal(memberVote, 2)
+        await verifySubmitVote(proposal1, 1, gnosisSafe.address, 2, {})
 
         const newDelegateKey = accounts[5]
 
