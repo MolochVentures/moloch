@@ -33,6 +33,13 @@
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
+
+const GnosisSafe = artifacts.require("./GnosisSafePersonalEdition.sol")
+const ProxyFactory = artifacts.require("./ProxyFactory.sol")
+
+const utils = require('./utils')
+const safeUtils = require('./utilsPersonalSafe')
+
 const config = require('../migrations/config.json')
 
 const abi = require('web3-eth-abi')
@@ -111,6 +118,10 @@ async function moveForwardPeriods(periods) {
 }
 
 let moloch, guildBank, token
+let proxyFactory, gnosisSafeMasterCopy, gnosisSafe, lw, executor
+
+// used by gnosis safe
+const CALL = 0
 
 const initSummonerBalance = 100
 
@@ -131,6 +142,9 @@ contract('Moloch', accounts => {
     const guildBankAddress = await moloch.guildBank()
     guildBank = await GuildBank.at(guildBankAddress)
     token = await Token.deployed()
+
+    proxyFactory = await ProxyFactory.deployed()
+    gnosisSafeMasterCopy = await GnosisSafe.deployed()
   })
 
   beforeEach(async () => {
@@ -617,6 +631,48 @@ contract('Moloch', accounts => {
       // 2. maxShares are higher (n -> n+)
       // 3. maxShares are the same (n -> n)
       // 4. maxShares are the lower (n -> n-)
+    })
+  })
+
+  describe.only('Gnosis Safe Integration', () => {
+    beforeEach(async () => {
+      executor = creator // used to execute gnosis safe transactions
+
+      // Create lightwallet
+      lw = await utils.createLightwallet()
+      // Create Gnosis Safe
+
+      let gnosisSafeData = await gnosisSafeMasterCopy.contract.methods.setup([lw.accounts[0], lw.accounts[1], lw.accounts[2]], 2, 0, "0x").encodeABI()
+
+      gnosisSafe = await utils.getParamFromTxEvent(
+          await proxyFactory.createProxy(gnosisSafeMasterCopy.address, gnosisSafeData),
+          'ProxyCreation', 'proxy', proxyFactory.address, GnosisSafe, 'create Gnosis Safe',
+      )
+
+      // Transfer Tokens to Gnosis Safe
+      await token.transfer(gnosisSafe.address, 100, { from: creator })
+
+      // Transfer ETH to Gnosis Safe (because safe pays executor for gas)
+      await web3.eth.sendTransaction({
+        from: creator,
+        to: gnosisSafe.address,
+        value: web3.utils.toWei('1', 'ether')
+      })
+    })
+
+    it('sends ether', async () => {
+      const initSafeBalance = await web3.eth.getBalance(gnosisSafe.address)
+      assert.equal(initSafeBalance, 1000000000000000000)
+      await safeUtils.executeTransaction(lw, gnosisSafe, 'executeTransaction withdraw 1 ETH', [lw.accounts[0], lw.accounts[2]], creator, web3.utils.toWei('1', 'ether'), "0x", CALL, summoner)
+      const safeBalance = await web3.eth.getBalance(gnosisSafe.address)
+      assert.equal(safeBalance, 0)
+    })
+
+    it('token approval', async () => {
+      let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
+      await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
+      const approvedAmount = await token.allowance(gnosisSafe.address, moloch.address)
+      assert.equal(approvedAmount, 100)
     })
   })
 })
