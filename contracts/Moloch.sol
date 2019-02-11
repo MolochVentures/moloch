@@ -31,6 +31,7 @@ contract Moloch {
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
     event Abort(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
+    event SummonComplete(address indexed summoner, uint256 shares);
 
     /******************
     INTERNAL ACCOUNTING
@@ -123,6 +124,8 @@ contract Moloch {
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
+
+        emit SummonComplete(summoner, 1);
     }
 
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
