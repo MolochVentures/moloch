@@ -24,7 +24,6 @@ const EthRPC = require(`ethjs-rpc`)
 const ethRPC = new EthRPC(new HttpProvider('http://localhost:8545'))
 
 const BigNumber = web3.BigNumber
-// const BN = web3.utils.BN
 
 const should = require('chai').use(require('chai-as-promised')).use(require('chai-bignumber')(BigNumber)).should()
 
