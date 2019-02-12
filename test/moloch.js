@@ -2,29 +2,51 @@
 /* eslint-env mocha */
 
 // TODO
-// 2. processProposal if branches
+// 1. processProposal if branches
 //   - aborted
+//     - summoner votes YES, but proposal still fails b/c abort
 //   - dilutionBound (mass ragequit)
-//   - success -> new member
+//     - 1 share, summoner ragequits
+//   - success -> new member (happy case)
 //     - force reset existing delegateKey
+//       1. summoner submits
+//       2. summoner votes
+//       3. summoner updates delegate key to applicant
+//       4. fast forward -> processProposal
+//       5. verify force reset
 //   - success -> existing member
+//     - summoner submits proposal for themselves
 //   - failure
-// 3. boundary conditions
+//     - summoner votes no
+// 2. boundary conditions (can all be tested as part of function unit tests)
 //   - submitVote on first / last possible period (error, first, last, error)
 //   - abort on first / last possible period
 //   - attempt to process proposal 1 period before ready
 //   - attempt to ragequit 1 period before ready
-// 4. events
+// 3. helper functions
+//   - add members
+//     - member (# shares, address, tribute)
+//     - sends tokens from creator to each member
+//     - sends enough tokens to summoner for deposits
+//     - submits all proposals
+//     - fast forwards periods on a loop
+//       - if the proposal just entered voting period, vote yes
+//       - if proposal can be processed, process it
+//       - if the last proposal has been processed, exit
+// 4. dilution bound with multiple members / boundary condition
+//   - 4 shares (could be 2 members with 1 and 3)
+//     - 3 ragequit
 // 5. test gaps in the queue (starting period for submitProposal)
 // 6. wETH externally deposited to guild bank can still be withdrawn
-// 7. simulation
+// 7. events
+// 8. simulation
 //   - 100 proposals
 //     - X new members w/ tribute
 //     - Y existing members
 //     - Z pure grants
 //   - everyone ragequits
 //   - maybe add verifications for abort / ragequit
-// 8. old gnosis multisig
+// 9. old gnosis multisig
 //   - as delegateKey
 //   - as memberAddress
 
@@ -184,6 +206,49 @@ contract('Moloch', accounts => {
 
     const memberVote = await moloch.getMemberProposalVote(memberAddress, proposalIndex)
     assert.equal(memberVote, expectedVote)
+  }
+
+  // VERIFY PROCESS PROPOSAL
+  const verifyProcessProposal = async (proposal, proposalIndex, proposer, options) => {
+    const initialTotalSharesRequested = options.initialTotalSharesRequested ? options.initialTotalSharesRequested : 0
+    const initialTotalShares = options.initialTotalShares ? options.initialTotalShares : 0
+    const initialMolochBalance = options.initialMolochBalance ? options.initialMolochBalance : 0
+    const initialGuildBankBalance = options.initialGuildBankBalance ? options.initialGuildBankBalance : 0
+    const initialApplicantBalance = options.initialApplicantBalance ? options.initialApplicantBalance : 0
+    const initialProposerBalance = options.initialProposerBalance ? options.initialProposerBalance : 0
+    const initialProcessorBalance = options.initialProcessorBalance ? options.initialProcessorBalance : 0
+    const expectedYesVotes = options.expectedYesVotes ? options.expectedYesVotes : 0
+    const expectedNoVotes = options.expectedNoVotes ? options.expectedNoVotes : 0
+    const expectedMaxSharesAtYesVote = options.expectedMaxSharesAtYesVote ? options.expectedMaxSharesAtYesVote : 0
+    const expectedFinalTotalSharesRequested = options.expectedFinalTotalSharesRequested ? options.expectedFinalTotalSharesRequested : 0
+    const didPass = typeof options.didPass == 'boolean' ? options.didPass : true
+    const aborted = typeof options.aborted == 'boolean' ? options.aborted : false
+
+    const proposalData = await moloch.proposalQueue.call(proposalIndex)
+    assert.equal(proposalData.yesVotes, expectedYesVotes)
+    assert.equal(proposalData.noVotes, expectedNoVotes)
+    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
+    assert.equal(proposalData.processed, true)
+    assert.equal(proposalData.didPass, didPass)
+    assert.equal(proposalData.aborted, aborted)
+
+    const totalSharesRequested = await moloch.totalSharesRequested()
+    assert.equal(totalSharesRequested, expectedFinalTotalSharesRequested)
+
+    const totalShares = await moloch.totalShares()
+    assert.equal(totalShares, didPass ? initialTotalShares + proposal.sharesRequested : initialTotalShares)
+
+    const processorBalance = await token.balanceOf(processor)
+    assert.equal(processorBalance, initialProcessorBalance + config.PROCESSING_REWARD)
+
+    const guildBankBalance = await token.balanceOf(guildBank.address)
+    assert.equal(guildBankBalance, didPass ? initialGuildBankBalance + proposal.tokenTribute : initialGuildBankBalance)
+
+    const molochBalance = await token.balanceOf(moloch.address)
+    assert.equal(molochBalance, initialMolochBalance - proposal.tokenTribute - config.PROPOSAL_DEPOSIT)
+
+    const proposerBalance = await token.balanceOf(proposer)
+    assert.equal(proposerBalance, initialProposerBalance + config.PROPOSAL_DEPOSIT - config.PROCESSING_REWARD)
   }
 
   // VERIFY UPDATE DELEGATE KEY
@@ -405,35 +470,17 @@ contract('Moloch', accounts => {
       await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
     })
 
-    it('happy case', async () => {
+    it.only('happy case', async () => {
       await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
       await moloch.processProposal(0, { from: processor })
-
-      const proposal = await moloch.proposalQueue.call(0)
-      assert.equal(proposal.yesVotes, 1)
-      assert.equal(proposal.noVotes, 0)
-      assert.equal(proposal.maxTotalSharesAtYesVote, 1)
-      assert.equal(proposal.processed, true)
-      assert.equal(proposal.didPass, true)
-      assert.equal(proposal.aborted, false)
-
-      const totalSharesRequested = await moloch.totalSharesRequested()
-      assert.equal(totalSharesRequested, 0)
-
-      const totalShares = await moloch.totalShares()
-      assert.equal(totalShares, proposal1.sharesRequested + 1)
-
-      const processorBalance = await token.balanceOf(processor)
-      assert.equal(processorBalance, config.PROCESSING_REWARD)
-
-      const guildBankBalance = await token.balanceOf(guildBank.address)
-      assert.equal(guildBankBalance, proposal1.tokenTribute)
-
-      const molochBalance = await token.balanceOf(moloch.address)
-      assert.equal(molochBalance, 0)
-
-      const summonerBalance = await token.balanceOf(summoner)
-      assert.equal(summonerBalance, initSummonerBalance - config.PROCESSING_REWARD)
+      await verifyProcessProposal(proposal1, 0, summoner, {
+        initialTotalSharesRequested: 1,
+        initialTotalShares: 1,
+        initialMolochBalance: 110,
+        initialProposerBalance: initSummonerBalance - config.PROPOSAL_DEPOSIT,
+        expectedYesVotes: 1,
+        expectedMaxSharesAtYesVote: 1
+      })
     })
 
     it('fail - proposal does not exist', async () => {
@@ -456,6 +503,49 @@ contract('Moloch', accounts => {
       // TODO two proposals back to back
     })
   })
+
+  describe('processProposal + abort', () => {
+    beforeEach(async () => {
+      await token.transfer(proposal1.applicant, proposal1.tokenTribute, { from: creator })
+      await token.approve(moloch.address, 10, { from: summoner })
+      await token.approve(moloch.address, proposal1.tokenTribute, { from: proposal1.applicant })
+
+      await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: summoner })
+    })
+
+    it('passes when applicant does not abort', async () => {
+      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(0)
+    })
+
+    it('fails when applicant aborts', async () => {
+      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.abort(0, { from: proposal1.applicant })
+
+      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(0)
+    })
+  })
+
+  // 1. processProposal if branches
+  //   - dilutionBound (mass ragequit)
+  //     - 1 share, summoner ragequits
+  //   - success -> new member (happy case)
+  //     - force reset existing delegateKey
+  //       1. summoner submits
+  //       2. summoner votes
+  //       3. summoner updates delegate key to applicant
+  //       4. fast forward -> processProposal
+  //       5. verify force reset
+  //   - success -> existing member
+  //     - summoner submits proposal for themselves
+  //   - failure
+  //     - summoner votes no
 
   describe('ragequit', () => {
     beforeEach(async () => {
@@ -571,9 +661,8 @@ contract('Moloch', accounts => {
       await moloch.abort(0, { from: summoner }).should.be.rejectedWith('msg.sender must be applicant')
     })
 
-    it('fail - proposal must not have entered grace period', async () => {
-      await moveForwardPeriods(config.VOTING_DURATON_IN_PERIODS)
-      await moveForwardPeriods(config.GRACE_DURATON_IN_PERIODS)
+    it('fail - abort window must not have passed', async () => {
+      await moveForwardPeriods(config.ABORT_WINDOW_IN_PERIODS)
       await moloch.abort(0, { from: proposal1.applicant }).should.be.rejectedWith('abort window must not have passed')
     })
 
