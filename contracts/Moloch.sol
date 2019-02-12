@@ -22,6 +22,14 @@ contract Moloch {
     ERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
 
+    // HARD-CODED LIMITS
+    // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
+    // with periods or shares, yet big enough to not limit reasonable use cases.
+    uint256 constant MAX_VOTING_PERIOD_LENGTH = 10**18; // maximum length of voting period
+    uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
+    uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
+    uint256 constant MAX_NUMBER_OF_SHARES = 10**18; // maximum number of shares that can be minted
+
     /***************
     EVENTS
     ***************/
@@ -103,8 +111,12 @@ contract Moloch {
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
+        require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "Moloch::constructor - _votingPeriodLength exceeds limit");
+        require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "Moloch::constructor - _gracePeriodLength exceeds limit");
+        require(_abortWindow > 0, "Moloch::constructor - _abortWindow cannot be 0");
         require(_abortWindow <= _votingPeriodLength, "Moloch::constructor - _abortWindow must be smaller than _votingPeriodLength");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
+        require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
         approvedToken = ERC20(_approvedToken);
@@ -147,12 +159,10 @@ contract Moloch {
     {
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
-        // Make sure we won't run into overflows when we process this proposal.
+        // Make sure we won't run into overflows when doing calculations with shares.
         // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
-        // on the number of shares that can exist during and after the processing of this proposal.
-        // Hence, neither the dilution check nor the addition of the sharesRequested to the existing
-        // shares (in case the proposal is accepted) can overflow.
-        require(totalShares.add(totalSharesRequested).add(sharesRequested).mul(dilutionBound) >= 0); // we only care for the SafeMath operations, not for >= 0
+        // on the number of shares that can exist until this proposal has been processed.
+        require(totalShares.add(totalSharesRequested).add(sharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
 
         totalSharesRequested = totalSharesRequested.add(sharesRequested);
 
