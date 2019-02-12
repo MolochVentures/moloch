@@ -2,8 +2,8 @@
 /* eslint-env mocha */
 
 // TODO
-// 6.
-// 7. events
+// - events
+// - update docs
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
