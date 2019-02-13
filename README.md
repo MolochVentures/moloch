@@ -575,6 +575,12 @@ Returns true if the `highestIndexYesVote` proposal has been processed.
     }
 ```
 
+Note: At Moloch's inception, there will have been no proposals yet so the
+`proposalQueue.length` will be 0. This means no one can ragequit until at least
+one proposal has been processed. Fortunately, this only affects the summoner,
+and because the Guild Bank will have no value until the first proposals have
+passed anyways, it isn't a concern.
+
 #### hasVotingPeriodExpired
 ```
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
