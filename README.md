@@ -45,6 +45,14 @@ In this fashion, the ragequit mechanism also provides an interesting incentive i
 
 # Moloch.sol
 
+SECURITY NOTE: CALLING `APPROVE` ON THE MOLOCH CONTRACT IS NOT SAFE. ONLY `APPROVE` THE
+AMOUNT OF WETH YOU INTEND TO SEND AS TRIBUTE, AND CONFIRM FOR YOURSELF THAT YOUR
+APPLICATION PROPOSAL HAS THE CORRECT NUMBER OF SHARES REQUESTED. IF IT DOES
+NOT, IT IS YOUR RESPONSIBILITY TO ABORT THE PROPOSAL IMMEDIATELY.
+
+For more information about this, please see the documentation for the `abort`
+function below.
+
 ## Data Structures
 
 #### Global Constants
