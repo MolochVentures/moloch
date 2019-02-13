@@ -1,14 +1,5 @@
 pragma solidity 0.5.3;
 
-// TODO
-// - approve is unsafe -> add this to the docs
-//   - if members abuse this, I will deploy an upgrade with the fix
-//   - not planning on fixing yet because deadline
-//   - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
-
-// - update tests
-// - update readme
-
 import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
 import "./GuildBank.sol";

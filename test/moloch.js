@@ -3,8 +3,14 @@
 
 // TODO
 // - overflow boundaries
+//   - submit proposal total shares
 // - events
 // - update docs
+//   - test readme
+//   - approve is unsafe -> add this to the docs
+//     - if members abuse this, I will deploy an upgrade with the fix
+//     - not planning on fixing yet because deadline
+//     - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
@@ -25,12 +31,14 @@ const EthRPC = require(`ethjs-rpc`)
 const ethRPC = new EthRPC(new HttpProvider('http://localhost:8545'))
 
 const BigNumber = web3.BigNumber
+const BN = web3.utils.BN
 
 const should = require('chai').use(require('chai-as-promised')).use(require('chai-bignumber')(BigNumber)).should()
 
 const SolRevert = 'VM Exception while processing transaction: revert'
 
 const zeroAddress = '0x0000000000000000000000000000000000000000'
+const _1e18 = new BN('1000000000000000000') // 1e18
 
 async function blockTime() {
   const block = await web3.eth.getBlock('latest')
@@ -115,7 +123,11 @@ contract('Moloch', accounts => {
     const proposalData = await moloch.proposalQueue.call(proposalIndex)
     assert.equal(proposalData.proposer, proposer)
     assert.equal(proposalData.applicant, proposal.applicant)
-    assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
+    if (typeof proposal.sharesRequested == 'number') {
+      assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
+    } else { // for testing overflow boundary with BNs
+      assert(proposalData.sharesRequested.eq(proposal.sharesRequested))
+    }
     assert.equal(proposalData.startingPeriod, expectedStartingPeriod)
     assert.equal(proposalData.yesVotes, 0)
     assert.equal(proposalData.noVotes, 0)
@@ -127,7 +139,11 @@ contract('Moloch', accounts => {
     assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
 
     const totalSharesRequested = await moloch.totalSharesRequested()
-    assert.equal(totalSharesRequested, proposal.sharesRequested + initialTotalSharesRequested)
+    if (typeof proposal.sharesRequested == 'number') {
+      assert.equal(totalSharesRequested, proposal.sharesRequested + initialTotalSharesRequested)
+    } else { // for testing overflow boundary with BNs
+      assert(totalSharesRequested.eq(proposal.sharesRequested.add(new BN(initialTotalSharesRequested))))
+    }
 
     const totalShares = await moloch.totalShares()
     assert.equal(totalShares, initialTotalShares)
@@ -355,15 +371,14 @@ contract('Moloch', accounts => {
       })
     })
 
-    // TODO - get uint limit in js
-    describe.skip('uint overflow boundary', () => {
+    describe('uint overflow boundary', () => {
       it('require fail - uint overflow', async () => {
-        proposal1.sharesRequested = new BN('...')
-        await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner }).should.be.rejectedWith(SolRevert)
+        proposal1.sharesRequested = _1e18
+        await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner }).should.be.rejectedWith('too many shares requested')
       })
 
       it('success - request 1 less share than the overflow limit', async () => {
-        proposal1.sharesRequested = new BN('...') // 1 less
+        proposal1.sharesRequested = _1e18.sub(new BN(1)) // 1 less
         await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
         await verifySubmitProposal(proposal1, 0, summoner, {
           initialTotalShares: 1,
