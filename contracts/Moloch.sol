@@ -5,7 +5,6 @@ pragma solidity 0.5.3;
 //   - if members abuse this, I will deploy an upgrade with the fix
 //   - not planning on fixing yet because deadline
 //   - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
-// - add check for vote > 2
 // - can abort multiple times
 
 // - update tests
@@ -221,6 +220,7 @@ contract Moloch {
         require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
 
+        require(uintVote < 3, "Moloch::submitVote - uintVote must be less than 3");
         Vote vote = Vote(uintVote);
 
         require(getCurrentPeriod() >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
