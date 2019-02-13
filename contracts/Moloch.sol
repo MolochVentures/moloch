@@ -1,14 +1,5 @@
 pragma solidity 0.5.3;
 
-// TODO
-// - approve is unsafe -> add this to the docs
-//   - if members abuse this, I will deploy an upgrade with the fix
-//   - not planning on fixing yet because deadline
-//   - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
-
-// - update tests
-// - update readme
-
 import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
 import "./GuildBank.sol";
@@ -28,7 +19,7 @@ contract Moloch {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    ERC20 public approvedToken; // approved token contract reference; default = wETH
+    IERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
@@ -98,7 +89,7 @@ contract Moloch {
     }
 
     modifier onlyDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyDelegate - not a member");
+        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyDelegate - not a delegate");
         _;
     }
 
@@ -128,7 +119,7 @@ contract Moloch {
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
-        approvedToken = ERC20(_approvedToken);
+        approvedToken = IERC20(_approvedToken);
 
         guildBank = new GuildBank(_approvedToken);
 
@@ -147,10 +138,6 @@ contract Moloch {
         totalShares = 1;
 
         emit SummonComplete(summoner, 1);
-    }
-
-    function max(uint256 x, uint256 y) internal pure returns (uint256) {
-        return x >= y ? x : y;
     }
 
     /*****************
@@ -340,7 +327,7 @@ contract Moloch {
 
         require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
 
-        require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - can't ragequit until highest index proposal member voted YES on is processed or the vote fails");
+        require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - cant ragequit until highest index proposal member voted YES on is processed");
 
         // burn shares
         member.shares = member.shares.sub(sharesToBurn);
@@ -381,8 +368,8 @@ contract Moloch {
 
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
-            require(!members[newDelegateKey].exists, "Moloch::updateDelegateKey - can't overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "Moloch::updateDelegateKey - can't overwrite existing delegate keys");
+            require(!members[newDelegateKey].exists, "Moloch::updateDelegateKey - cant overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "Moloch::updateDelegateKey - cant overwrite existing delegate keys");
         }
 
         Member storage member = members[msg.sender];
@@ -397,8 +384,16 @@ contract Moloch {
     GETTER FUNCTIONS
     ***************/
 
+    function max(uint256 x, uint256 y) internal pure returns (uint256) {
+        return x >= y ? x : y;
+    }
+
     function getCurrentPeriod() public view returns (uint256) {
         return now.sub(summoningTime).div(periodDuration);
+    }
+
+    function getProposalQueueLength() public view returns (uint256) {
+        return proposalQueue.length;
     }
 
     // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass

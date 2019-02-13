@@ -7,12 +7,12 @@ import "./oz/SafeMath.sol";
 contract GuildBank is Ownable {
     using SafeMath for uint256;
 
-    ERC20 public approvedToken; // approved token contract reference
+    IERC20 public approvedToken; // approved token contract reference
 
     event Withdrawal(address indexed receiver, uint256 amount);
 
     constructor(address approvedTokenAddress) public {
-        approvedToken = ERC20(approvedTokenAddress);
+        approvedToken = IERC20(approvedTokenAddress);
     }
 
     function withdraw(address receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (bool) {
