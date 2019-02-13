@@ -2,6 +2,7 @@
 /* eslint-env mocha */
 
 // TODO
+// - overflow boundaries
 // - events
 // - update docs
 
@@ -28,7 +29,6 @@ const BigNumber = web3.BigNumber
 const should = require('chai').use(require('chai-as-promised')).use(require('chai-bignumber')(BigNumber)).should()
 
 const SolRevert = 'VM Exception while processing transaction: revert'
-const InvalidOpcode = 'VM Exception while processing transaction: invalid opcode'
 
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 
@@ -228,7 +228,7 @@ contract('Moloch', accounts => {
         const newMemberData = await moloch.members(proposal.applicant)
         assert.equal(newMemberData.delegateKey, proposal.applicant)
         assert.equal(newMemberData.shares, proposal.sharesRequested)
-        assert.equal(newMemberData.isActive, true)
+        assert.equal(newMemberData.exists, true)
         assert.equal(newMemberData.highestIndexYesVote, 0)
 
         const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(proposal.applicant)
@@ -321,7 +321,7 @@ contract('Moloch', accounts => {
     const summonerData = await moloch.members(config.SUMMONER)
     assert.equal(summonerData.delegateKey.toLowerCase(), config.SUMMONER) // delegateKey matches
     assert.equal(summonerData.shares, 1)
-    assert.equal(summonerData.isActive, true)
+    assert.equal(summonerData.exists, true)
     assert.equal(summonerData.highestIndexYesVote, 0)
 
     const summonerAddressByDelegateKey = await moloch.memberAddressByDelegateKey(config.SUMMONER)
@@ -472,7 +472,7 @@ contract('Moloch', accounts => {
       // vote null
       await moloch.submitVote(0, 0, { from: summoner }).should.be.rejectedWith('vote must be either Yes or No')
       // vote out of bounds
-      await moloch.submitVote(0, 3, { from: summoner }).should.be.rejectedWith(InvalidOpcode)
+      await moloch.submitVote(0, 3, { from: summoner }).should.be.rejectedWith('uintVote must be less than 3')
     })
 
     it('require fail - proposal has been aborted', async () => {
@@ -681,7 +681,7 @@ contract('Moloch', accounts => {
 
       const summonerData = await moloch.members(summoner)
       assert.equal(summonerData.shares, 0)
-      assert.equal(summonerData.isActive, true)
+      assert.equal(summonerData.exists, true)
       assert.equal(summonerData.highestIndexYesVote, 0)
 
       // can divide tokenTribute by 2 because 2 shares
@@ -783,6 +783,11 @@ contract('Moloch', accounts => {
 
     it('require fail - msg.sender must be applicant', async () => {
       await moloch.abort(0, { from: summoner }).should.be.rejectedWith('msg.sender must be applicant')
+    })
+
+    it('require fail - proposal must not have already been aborted', async () => {
+      await moloch.abort(0, { from: proposal1.applicant })
+      await moloch.abort(0, { from: proposal1.applicant }).should.be.rejectedWith('proposal must not have already been aborted')
     })
 
     describe('abort window boundary', () => {
@@ -1102,7 +1107,7 @@ contract('Moloch', accounts => {
       it('submit proposal -> vote -> update delegate -> ragequit', async () => {
         // confirm that the safe is a member
         const safeMemberData = await moloch.members(gnosisSafe.address)
-        assert.equal(safeMemberData.isActive, true)
+        assert.equal(safeMemberData.exists, true)
 
         // create a new proposal
         proposal2 = {
@@ -1151,7 +1156,7 @@ contract('Moloch', accounts => {
         const ragequitData = await moloch.contract.methods.ragequit(1).encodeABI()
         await safeUtils.executeTransaction(lw, gnosisSafe, 'ragequit the guild', [lw.accounts[0], lw.accounts[1]], moloch.address, 0, ragequitData, CALL, executor)
         const safeMemberDataAfterRagequit = await moloch.members(gnosisSafe.address)
-        assert.equal(safeMemberDataAfterRagequit.isActive, true)
+        assert.equal(safeMemberDataAfterRagequit.exists, true)
         assert.equal(safeMemberDataAfterRagequit.shares, 0)
 
         const safeBalanceAfterRagequit = await token.balanceOf(gnosisSafe.address)
