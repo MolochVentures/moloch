@@ -5,7 +5,6 @@ pragma solidity 0.5.3;
 //   - if members abuse this, I will deploy an upgrade with the fix
 //   - not planning on fixing yet because deadline
 //   - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
-// - can abort multiple times
 
 // - update tests
 // - update readme
@@ -362,6 +361,7 @@ contract Moloch {
 
         require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
         require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
+        require(!proposal.aborted, "Moloch::abort - proposal must not have already been aborted");
 
         uint256 tokensToAbort = proposal.tokenTribute;
         proposal.tokenTribute = 0;
