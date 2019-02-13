@@ -396,7 +396,7 @@ contract Moloch {
         return proposalQueue.length;
     }
 
-    // can only ragequit if the latest proposal you voted YES on has either been processed OR voting has expired and it didn't pass
+    // can only ragequit if the latest proposal you voted YES on has been processed
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
         return proposalQueue[highestIndexYesVote].processed;
