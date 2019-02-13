@@ -5,7 +5,6 @@ pragma solidity 0.5.3;
 //   - if members abuse this, I will deploy an upgrade with the fix
 //   - not planning on fixing yet because deadline
 //   - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
-// - fix guild bank withdrawal event emission
 // - use IERC20 instead of ERC20
 // - isActive -> wasAdmitted
 // - add check for vote > 2
