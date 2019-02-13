@@ -65,7 +65,7 @@ contract Moloch {
     struct Member {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 shares; // the # of shares assigned to this member
-        bool wasAdmitted; // always true once a member has been created
+        bool exists; // always true once a member has been created
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
@@ -276,13 +276,13 @@ contract Moloch {
             proposal.didPass = true;
 
             // if the applicant is already a member, add to their existing shares
-            if (members[proposal.applicant].wasAdmitted) {
+            if (members[proposal.applicant].exists) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
             // the applicant is a new member, create a new record for them
             } else {
                 // if the applicant address is already taken by a member's delegateKey, reset it to their member address
-                if (members[memberAddressByDelegateKey[proposal.applicant]].wasAdmitted) {
+                if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
                     address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
                     memberAddressByDelegateKey[memberToOverride] = memberToOverride;
                     members[memberToOverride].delegateKey = memberToOverride;
@@ -381,8 +381,8 @@ contract Moloch {
 
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
-            require(!members[newDelegateKey].wasAdmitted, "Moloch::updateDelegateKey - can't overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].wasAdmitted, "Moloch::updateDelegateKey - can't overwrite existing delegate keys");
+            require(!members[newDelegateKey].exists, "Moloch::updateDelegateKey - can't overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "Moloch::updateDelegateKey - can't overwrite existing delegate keys");
         }
 
         Member storage member = members[msg.sender];
@@ -412,7 +412,7 @@ contract Moloch {
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
-        require(members[memberAddress].wasAdmitted, "Moloch::getMemberProposalVote - member doesn't exist");
+        require(members[memberAddress].exists, "Moloch::getMemberProposalVote - member doesn't exist");
         require(proposalIndex < proposalQueue.length, "Moloch::getMemberProposalVote - proposal doesn't exist");
         return proposalQueue[proposalIndex].votesByMember[memberAddress];
     }
