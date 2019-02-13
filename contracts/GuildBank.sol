@@ -1,7 +1,7 @@
 pragma solidity 0.5.3;
 
 import "./oz/Ownable.sol";
-import "./oz/ERC20.sol";
+import "./oz/IERC20.sol";
 import "./oz/SafeMath.sol";
 
 contract GuildBank is Ownable {
