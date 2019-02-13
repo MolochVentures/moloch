@@ -1,5 +1,19 @@
 pragma solidity 0.5.3;
 
+// TODO
+// - approve is unsafe -> add this to the docs
+//   - if members abuse this, I will deploy an upgrade with the fix
+//   - not planning on fixing yet because deadline
+//   - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
+// - fix guild bank withdrawal event emission
+// - use IERC20 instead of ERC20
+// - isActive -> wasAdmitted
+// - add check for vote > 2
+// - can abort multiple times
+
+// - update tests
+// - update readme
+
 import "./oz/SafeMath.sol";
 import "./oz/ERC20.sol";
 import "./GuildBank.sol";
