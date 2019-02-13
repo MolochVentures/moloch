@@ -43,6 +43,17 @@ In the more likely case of a contentious vote, those who oppose strongly enough 
 
 In this fashion, the ragequit mechanism also provides an interesting incentive in favor of Guild cohesion. Guild members are disincentivized from voting **Yes** on proposals that they believe will make other members ragequit. Those who do vote **Yes** on contentious proposals will be forced to additionally dilute themselves proportional to the fraction of Voting Shares that ragequit in response.
 
+## Testing
+
+`npm i`
+`npm run compile` (note the gnosis safe contracts are in the artifacts/ repo)
+
+In a separate window: `npm run gcli`
+`Ganache CLI v6.1.5 (ganache-core: 2.1.4)`
+
+Then, `truffle test`
+`Truffle v5.0.0-beta.0`
+
 # Moloch.sol
 
 SECURITY NOTE: CALLING `APPROVE` ON THE MOLOCH CONTRACT IS NOT SAFE. ONLY `APPROVE` THE
