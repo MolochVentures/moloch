@@ -2,15 +2,7 @@
 /* eslint-env mocha */
 
 // TODO
-// - overflow boundaries
-//   - submit proposal total shares
 // - events
-// - update docs
-//   - test readme
-//   - approve is unsafe -> add this to the docs
-//     - if members abuse this, I will deploy an upgrade with the fix
-//     - not planning on fixing yet because deadline
-//     - DONT APPROVE MORE THAN YOU INTEND TO TRANSFER TO MOLOCH
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
@@ -22,7 +14,10 @@ const ProxyFactory = artifacts.require("./ProxyFactory.sol")
 const utils = require('./utils')
 const safeUtils = require('./utilsPersonalSafe')
 
-const config = require('../migrations/config.json')
+const config = process.env.target != 'mainnet' ? require('../migrations/config.json').test : require('../migrations/config.json').mainnet
+
+console.log(process.env.target)
+console.log(config)
 
 const abi = require('web3-eth-abi')
 
