@@ -20,12 +20,11 @@ interface Moloch {
 
 contract Offering is Ownable {
     uint public proposalNumber;
-    address molochAddress = 0x1234567890123456789012345678901234567890;
+    address public molochAddress;
 
-    function setProposalNumber(uint256 _ProposalNumber) public onlyOwner {
-        // only owner can call this
-        require(proposalNumber == 0, 'can only be set once!');
-        proposalNumber = _ProposalNumber;
+    constructor (uint256 _proposalNumber, address _molochAddress) public {
+        proposalNumber = _proposalNumber;
+        molochAddress = _molochAddress;
     }
     
     function checkProposalStatus() public {
@@ -45,9 +44,7 @@ contract Offering is Ownable {
         // If proposal was processed, check result;
         if (didPass) {
             // Proposal passed! Sacrifice the lamb, burn the incense, give the tribute
-        }
-        
-        if (!didPass || aborted) {
+        } else if (!didPass || aborted) {
             // Did not pass or was aborted: Save the lamb, keep the incense, take the tribute back to owner
         }
     }
