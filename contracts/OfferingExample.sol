@@ -18,7 +18,7 @@ interface Moloch {
     );
 }
 
-contract Proposal is Ownable {
+contract Offering is Ownable {
     uint public proposalNumber;
     address molochAddress = 0x1234567890123456789012345678901234567890;
 
@@ -44,11 +44,11 @@ contract Proposal is Ownable {
         
         // If proposal was processed, check result;
         if (didPass) {
-            // Proposal passed! Do whatever stuff you promised: send ether, send tokens, transfer a NFT, sire a kitty, etc
+            // Proposal passed! Sacrifice the lamb, burn the incense, give the tribute
         }
         
         if (!didPass || aborted) {
-            // Did not pass or was aborted: Cancel whatever you wanted, send money back to owner, get the kitten home, etc 
+            // Did not pass or was aborted: Save the lamb, keep the incense, take the tribute back to owner
         }
         
         
