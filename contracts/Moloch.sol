@@ -19,8 +19,6 @@ contract Moloch {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    IERC20 public approvedToken; // approved token contract reference; default = wETH
-    GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
     // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
@@ -35,11 +33,12 @@ contract Moloch {
     ***************/
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tokenTribute, uint256 sharesRequested);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tokenTribute, uint256 sharesRequested, bool didPass);
+    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 sharesRequested, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
     event Abort(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
+    event Withdrawal(address indexed receiver, uint256 amount, address token);
 
     /******************
     INTERNAL ACCOUNTING
@@ -119,10 +118,6 @@ contract Moloch {
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
-        approvedToken = IERC20(_approvedToken);
-
-        guildBank = new GuildBank(_approvedToken);
-
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
@@ -164,11 +159,6 @@ contract Moloch {
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
-        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
-
-        // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
         // compute startingPeriod for proposal
         uint256 startingPeriod = max(
@@ -283,46 +273,21 @@ contract Moloch {
             // mint new shares
             totalShares = totalShares.add(proposal.sharesRequested);
 
-            // transfer tokens to guild bank
-            require(
-                approvedToken.transfer(address(guildBank), proposal.tokenTribute),
-                "Moloch::processProposal - token transfer to guild bank failed"
-            );
+        } 
 
-        // PROPOSAL FAILED OR ABORTED
-        } else {
-            // return all tokens to the applicant
-            require(
-                approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
-                "Moloch::processProposal - failing vote token transfer failed"
-            );
-        }
-
-        // send msg.sender the processingReward
-        require(
-            approvedToken.transfer(msg.sender, processingReward),
-            "Moloch::processProposal - failed to send processing reward to msg.sender"
-        );
-
-        // return deposit to proposer (subtract processing reward)
-        require(
-            approvedToken.transfer(proposal.proposer, proposalDeposit.sub(processingReward)),
-            "Moloch::processProposal - failed to return proposal deposit to proposer"
-        );
 
         emit ProcessProposal(
             proposalIndex,
             proposal.applicant,
             proposal.proposer,
-            proposal.tokenTribute,
             proposal.sharesRequested,
             didPass
         );
     }
 
-    function ragequit(uint256 sharesToBurn) public onlyMember {
-        uint256 initialTotalShares = totalShares;
-
+    function ragequit(uint256 sharesToBurn, address[] memory tokensToTake) public onlyMember {
+        StandardToken selectToken;
+        uint256 amount;
         Member storage member = members[msg.sender];
 
         require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
@@ -334,10 +299,13 @@ contract Moloch {
         totalShares = totalShares.sub(sharesToBurn);
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
-        require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares),
-            "Moloch::ragequit - withdrawal of tokens from guildBank failed"
-        );
+        
+        for (uint i = 0; i < tokensToTake.length; i++) {
+            selectToken = StandardToken(tokensToTake[i]);
+            amount = selectToken.balanceOf(address(this)).mul(sharesToBurn).div(totalShares);
+            emit Withdrawal(msg.sender, amount, tokensToTake[i]);
+            selectToken.transfer(msg.sender, amount);
+        }
 
         emit Ragequit(msg.sender, sharesToBurn);
     }
@@ -350,15 +318,9 @@ contract Moloch {
         require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
         require(!proposal.aborted, "Moloch::abort - proposal must not have already been aborted");
 
-        uint256 tokensToAbort = proposal.tokenTribute;
         proposal.tokenTribute = 0;
         proposal.aborted = true;
 
-        // return all tokens to the applicant
-        require(
-            approvedToken.transfer(proposal.applicant, tokensToAbort),
-            "Moloch::processProposal - failed to return tribute to applicant"
-        );
 
         emit Abort(proposalIndex, msg.sender);
     }
