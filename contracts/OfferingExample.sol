@@ -50,12 +50,5 @@ contract Offering is Ownable {
         if (!didPass || aborted) {
             // Did not pass or was aborted: Save the lamb, keep the incense, take the tribute back to owner
         }
-        
-        
     }
-    
-    
-    
-
- 
 }
