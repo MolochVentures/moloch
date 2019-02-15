@@ -1,19 +1,7 @@
 pragma solidity 0.5.3;
 
 interface Moloch {
-    function proposalQueue(uint proposal) external returns ( 
-        address proposer,
-        address applicant, 
-        uint256 sharesRequested, 
-        uint256 startingPeriod, 
-        uint256 yesVotes,
-        uint256 noVotes,
-        bool processed,
-        bool didPass,
-        bool aborted,
-        string memory details,
-        uint256 maxTotalSharesAtYesVote
-    );
+    function proposalQueue(uint proposal) external returns (  address proposer, address applicant,  uint256 sharesRequested,  uint256 startingPeriod,  uint256 yesVotes, uint256 noVotes, bool processed, bool didPass, bool aborted, string memory details, uint256 maxTotalSharesAtYesVote);
 }
 
 contract Offering {
