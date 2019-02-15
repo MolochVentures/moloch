@@ -1,7 +1,5 @@
 pragma solidity 0.5.3;
 
-import "./oz/Ownable.sol";
-
 interface Moloch {
     function proposalQueue(uint proposal) external returns ( 
         address proposer,
@@ -18,7 +16,7 @@ interface Moloch {
     );
 }
 
-contract Offering is Ownable {
+contract Offering {
     uint public proposalNumber;
     address public molochAddress;
 
@@ -28,12 +26,10 @@ contract Offering is Ownable {
     }
     
     function checkProposalStatus() public {
-        // anyone can call this
+        // anyone can call this function
         
-        require(proposalNumber > 0, 'proposal number not set yet!');
+        // get current status from Moloch
         Moloch moloch = Moloch(molochAddress);
-        
-        // get data from proposal
         bool processed;
         bool didPass;
         bool aborted;
