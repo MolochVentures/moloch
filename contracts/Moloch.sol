@@ -57,6 +57,7 @@ contract Moloch {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 shares; // the # of shares assigned to this member
         bool exists; // always true once a member has been created
+        bool isInvestor;
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
@@ -133,7 +134,7 @@ contract Moloch {
 
         summoningTime = now;
 
-        members[summoner] = Member(summoner, 1, true, 0);
+        members[summoner] = Member(summoner, 1, true, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
 
@@ -167,8 +168,10 @@ contract Moloch {
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
         require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
 
-        // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
+        if(tokenTribute > 0) {
+            // collect tribute from applicant and store it in the Moloch until the proposal is processed
+            require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
+        }
 
         // compute startingPeriod for proposal
         uint256 startingPeriod = max(
@@ -275,19 +278,28 @@ contract Moloch {
                     members[memberToOverride].delegateKey = memberToOverride;
                 }
 
+                //check if applicant is investor or not
+                //if deposited token tribute than it is an investor
+                if(proposal.tokenTribute > 0) {
+                    members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, true, 0);
+                }
+                else {
+                    members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, false, 0);
+                }
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
             // mint new shares
             totalShares = totalShares.add(proposal.sharesRequested);
 
-            // transfer tokens to guild bank
-            require(
-                approvedToken.transfer(address(guildBank), proposal.tokenTribute),
-                "Moloch::processProposal - token transfer to guild bank failed"
-            );
+            //if applicant is an investor, transfer tokens to guild bank
+            if(proposal.tokenTribute > 0) {
+                require(
+                    approvedToken.transfer(address(guildBank), proposal.tokenTribute),
+                    "Moloch::processProposal - token transfer to guild bank failed"
+                );
+            }
 
         // PROPOSAL FAILED OR ABORTED
         } else {
