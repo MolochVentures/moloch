@@ -1,4 +1,4 @@
-pragma solidity 0.5.3;
+pragma solidity 0.5.2;
 
 import "./oz/Ownable.sol";
 import "./oz/IERC20.sol";
