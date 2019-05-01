@@ -53,8 +53,8 @@ In this fashion, the ragequit mechanism also provides an interesting incentive i
 In a separate window: `npm run gcli`
 `Ganache CLI v6.1.5 (ganache-core: 2.1.4)`
 
-Then, `truffle test`
-`Truffle v5.0.0-beta.0`
+Then, `npm run test`
+`Buidler 1.0.0-beta.4`
 
 # Moloch.sol
 

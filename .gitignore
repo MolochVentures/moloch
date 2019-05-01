@@ -1,2 +1,6 @@
 node_modules/
 build/
+cache/
+artifacts/
+.DS_Store
+.idea/

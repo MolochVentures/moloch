@@ -1,8 +1,6 @@
 /* global artifacts */
-const fse = require('fs-extra')
 
 const Moloch = artifacts.require('./Moloch')
-const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
 
 const config = process.env.target != 'mainnet' ? require('./config.json').test : require('./config.json').mainnet

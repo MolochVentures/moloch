@@ -1,0 +1,15 @@
+{
+    "env": {
+        "browser": true,
+        "commonjs": true,
+        "mocha": true,
+        "es6": true
+    },
+    "extends": "standard",
+    "globals": {
+        "contract": "readonly"
+    },
+    "parserOptions": {
+        "ecmaVersion": 2018
+    }
+}
