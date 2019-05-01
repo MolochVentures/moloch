@@ -4,3 +4,5 @@ cache/
 artifacts/
 .DS_Store
 .idea/
+coverage.json
+coverage/
