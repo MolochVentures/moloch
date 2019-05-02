@@ -4,6 +4,10 @@ import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
 import "./GuildBank.sol";
 
+/*
+    TODO: remove/change any code that use ERC20 approvedToken
+*/
+
 contract Moloch {
     using SafeMath for uint256;
 
@@ -167,6 +171,7 @@ contract Moloch {
         string memory details
     )
         public
+        payable
         onlyDelegate
     {
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
@@ -180,12 +185,16 @@ contract Moloch {
 
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
+        /*
+            TODO: need to change proposalDeposit from using WETH to ETH
+        */
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
         require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
 
+        //if applicant deposit amount of Trojan
+        //collect Trojan from applicant and store it in the Moloch until the proposal is processed
         if(tokenTribute > 0) {
-            // collect tribute from applicant and store it in the Moloch until the proposal is processed
-            require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
+            require(guildBank.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - trojan token transfer failed");
         }
 
         // compute startingPeriod for proposal
