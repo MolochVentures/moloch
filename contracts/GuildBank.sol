@@ -35,9 +35,9 @@ contract GuildBank is TrojanBondingCurve, Ownable {
         super.buy(tokens);
     }
 
-    function withdraw(address receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (bool) {
+    function withdraw(address payable receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (uint256) {
         uint256 amount = balanceOf(address(this)).mul(shares).div(totalShares);
         emit Withdrawal(receiver, amount);
-        return approvedToken.transfer(receiver, amount);
+        return sell(receiver, amount);
     }
 }
