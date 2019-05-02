@@ -23,7 +23,6 @@ contract Moloch {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    IERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
@@ -131,8 +130,6 @@ contract Moloch {
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
-        approvedToken = IERC20(_approvedToken);
-
         guildBank = new GuildBank(
             _wallet,
             bcTokenName,
@@ -188,8 +185,9 @@ contract Moloch {
         /*
             TODO: need to change proposalDeposit from using WETH to ETH
         */
-        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+        // collect proposal deposit (ETH) from proposer and store it in the Moloch until the proposal is processed
+        //convert address(this) to address payable
+        address(uint160(address(this))).transfer(msg.value);
 
         //if applicant deposit amount of Trojan
         //collect Trojan from applicant and store it in the Moloch until the proposal is processed
@@ -320,8 +318,8 @@ contract Moloch {
             //if applicant is an investor, transfer tokens to guild bank
             if(proposal.tokenTribute > 0) {
                 require(
-                    approvedToken.transfer(address(guildBank), proposal.tokenTribute),
-                    "Moloch::processProposal - token transfer to guild bank failed"
+                    guildBank.transfer(address(guildBank), proposal.tokenTribute),
+                    "Moloch::processProposal - trojan token transfer to guild bank failed"
                 );
             }
 
@@ -329,20 +327,20 @@ contract Moloch {
         } else {
             // return all tokens to the applicant
             require(
-                approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
+                guildBank.transfer(proposal.applicant, proposal.tokenTribute),
                 "Moloch::processProposal - failing vote token transfer failed"
             );
         }
 
         // send msg.sender the processingReward
         require(
-            approvedToken.transfer(msg.sender, processingReward),
+            msg.sender.transfer(processingReward),
             "Moloch::processProposal - failed to send processing reward to msg.sender"
         );
 
         // return deposit to proposer (subtract processing reward)
         require(
-            approvedToken.transfer(proposal.proposer, proposalDeposit.sub(processingReward)),
+            proposal.proposer.transfer(proposalDeposit.sub(processingReward)),
             "Moloch::processProposal - failed to return proposal deposit to proposer"
         );
 
@@ -392,7 +390,7 @@ contract Moloch {
 
         // return all tokens to the applicant
         require(
-            approvedToken.transfer(proposal.applicant, tokensToAbort),
+            guildBank.transfer(proposal.applicant, tokensToAbort),
             "Moloch::processProposal - failed to return tribute to applicant"
         );
 

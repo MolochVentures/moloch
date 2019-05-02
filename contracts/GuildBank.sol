@@ -8,8 +8,6 @@ import "./TrojanBondingCurve.sol";
 contract GuildBank is TrojanBondingCurve, Ownable {
     using SafeMath for uint256;
 
-    IERC20 public approvedToken; // approved token contract reference
-
     event Withdrawal(address indexed receiver, uint256 amount);
 
     constructor(
