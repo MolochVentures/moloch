@@ -17,10 +17,10 @@ contract TrojanBondingCurve is BondingCurve {
     event Payout(uint256 payout, uint256 indexed timestamp);
 
     constructor(
+        address payable _wallet,
         string memory name,
         string memory symbol,
         uint8 decimals,
-        address payable _wallet,
         uint256 _slopeNumerator,
         uint256 _slopeDenominator,
         uint256 _sellPercentage

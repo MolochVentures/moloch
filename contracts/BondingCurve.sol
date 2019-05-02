@@ -43,19 +43,17 @@ contract BondingCurve is ERC20, ERC20Detailed {
         emit CurveBuy(tokens, paid, now);
     }
 
-    function sell(uint256 tokens)
-        public returns (uint256 rewarded)
-    {
+    function sell(address payable receiver, uint256 tokens) internal returns (uint256 rewarded) {
         require(tokens > 0, "Must spend non-zero amount of tokens.");
         require(
             balanceOf(msg.sender) >= tokens,
-            "Sender does not have enough tokens to spend."
+            "Guild does not have enough tokens to spend."
         );
 
         rewarded = calculateSaleReturn(tokens);
         reserve = reserve.sub(rewarded);
         _burn(msg.sender, tokens);
-        msg.sender.transfer(rewarded);
+        receiver.transfer(rewarded);
 
         emit CurveSell(tokens, rewarded, now);
     }

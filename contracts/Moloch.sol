@@ -100,13 +100,20 @@ contract Moloch {
     constructor(
         address summoner,
         address _approvedToken,
+        address payable _wallet,
+        string memory bcTokenName,
+        string memory bcTokenSymbol,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
         uint256 _abortWindow,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
-        uint256 _processingReward
+        uint256 _processingReward,
+        uint256 _slopeNumerator,
+        uint256 _slopeDenominator,
+        uint256 _sellPercentage,
+        uint8 bcTokenDecimals
     ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
         require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
@@ -122,7 +129,15 @@ contract Moloch {
 
         approvedToken = IERC20(_approvedToken);
 
-        guildBank = new GuildBank(_approvedToken);
+        guildBank = new GuildBank(
+            _wallet,
+            bcTokenName,
+            bcTokenSymbol,
+            bcTokenDecimals,
+            _slopeNumerator,
+            _slopeDenominator,
+            _sellPercentage
+        );
 
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
