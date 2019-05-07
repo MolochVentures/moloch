@@ -48,10 +48,10 @@ In this fashion, the ragequit mechanism also provides an interesting incentive i
 ## Testing
 
 `npm i`
-`npm run compile` (note the gnosis safe contracts are in the artifacts/ repo)
+`npm run compile`
 
 In a separate window: `npm run gcli`
-`Ganache CLI v6.1.5 (ganache-core: 2.1.4)`
+`Ganache CLI v6.4.3 (ganache-core: 2.5.5)`
 
 Then, `npm run test`
 `Buidler 1.0.0-beta.4`
@@ -180,7 +180,7 @@ Applied only to `submitProposal` and `submitVote`.
 2. Deploys a new `GuildBank.sol` contract and saves the reference.
 3. Saves passed in values for global constants `periodDuration`, `votingPeriodLength`, `gracePeriodLength`, `abortWindow`, `proposalDeposit`, `dilutionBound`,  and `processingReward`.
 4. Saves the start time of Moloch `summoningTime = now`.
-6. Mints 1 share for the `summoner` and saves their membership.
+5. Mints 1 share for the `summoner` and saves their membership.
 
 ```
     constructor(
