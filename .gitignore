@@ -6,3 +6,6 @@ artifacts/
 .idea/
 coverage.json
 coverage/
+allFiredEvents
+coverageEnv/
+scTopics
