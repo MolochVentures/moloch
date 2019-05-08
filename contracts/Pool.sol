@@ -35,23 +35,6 @@ contract MolochPool {
         locked = false;
     }
 
-    // copy of the Moloch Proposal struct
-    struct Proposal {
-        address proposer; // the member who submitted the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
-        uint256 sharesRequested; // the # of shares the applicant is requesting
-        uint256 startingPeriod; // the period in which voting can start for this proposal
-        uint256 yesVotes; // the total number of YES votes for this proposal
-        uint256 noVotes; // the total number of NO votes for this proposal
-        bool processed; // true only if the proposal has been processed
-        bool didPass; // true only if the proposal passed
-        bool aborted; // true only if applicant calls "abort" fn before end of voting period
-        uint256 tokenTribute; // amount of tokens offered as tribute
-        string details; // proposal details - could be IPFS hash, plaintext, or JSON
-        uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
-        // mapping (address => Vote) votesByMember; // the votes on this proposal by each member
-    }
-
     constructor(address _moloch) public {
         moloch = Moloch(_moloch);
         approvedToken = IERC20(moloch.approvedToken());
@@ -75,14 +58,24 @@ contract MolochPool {
     function sync(uint256 toIndex) public active noReentrancy {
         require(toIndex <= moloch.getProposalQueueLength());
 
-        for (uint256 i = currentProposalIndex; i < toIndex; i++) {
-            Proposal memory proposal = Proposal(moloch.proposalQueue(currentProposalIndex));
+        // declare proposal params
+        address applicant;
+        uint256 sharesRequested;
+        bool processed;
+        bool didPass;
+        bool aborted;
+        uint256 tokenTribute;
+        uint256 maxTotalSharesAtYesVote;
 
-            if (proposal.processed && proposal.didPass && !proposal.aborted && proposal.sharesRequested > 0) {
+        for (uint256 i = currentProposalIndex; i < toIndex; i++) {
+
+            (, applicant, sharesRequested, , , , processed, didPass, aborted, tokenTribute, , maxTotalSharesAtYesVote) = moloch.proposalQueue(currentProposalIndex);
+
+            if (processed && didPass && !aborted && sharesRequested > 0) {
                 // passing grant proposal, mint pool shares proportionally on behalf of the applicant
-                if (proposal.tokenTribute == 0) {
-                    uint256 poolSharesToMint = totalPoolShares.mul(proposal.sharesRequested).div(proposal.maxTotalSharesAtYesVote);
-                    _mintSharesForAddress(poolSharesToMint, proposal.applicant);
+                if (tokenTribute == 0) {
+                    uint256 poolSharesToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote);
+                    _mintSharesForAddress(poolSharesToMint, applicant);
                 }
             }
         }
@@ -102,7 +95,7 @@ contract MolochPool {
 
     // burn shares to proportionally withdraw tokens in pool
     function withdraw(uint256 sharesToBurn) public active noReentrancy {
-        require(poolShares(msg.sender) >= sharesToBurn);
+        require(poolShares[msg.sender] >= sharesToBurn);
 
         uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
 
