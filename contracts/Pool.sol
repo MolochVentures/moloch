@@ -12,7 +12,6 @@ import "./oz/IERC20.sol";
 contract MolochPool {
     using SafeMath for uint256;
 
-    uint256 public active = false;
     uint256 public totalPoolShares = 0; // the total shares outstanding of the pool
     uint256 public currentProposalIndex = 0; // the moloch proposal index that this pool has been synced to
 
@@ -26,6 +25,7 @@ contract MolochPool {
 
     modifier active {
         require(totalPoolShares > 0);
+        _;
     }
 
     modifier noReentrancy() {
@@ -49,7 +49,7 @@ contract MolochPool {
         uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
-        mapping (address => Vote) votesByMember; // the votes on this proposal by each member
+        // mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
     constructor(address _moloch) public {
@@ -57,7 +57,7 @@ contract MolochPool {
         approvedToken = IERC20(moloch.approvedToken());
     }
 
-    function activate(uint256 initialTokens, uint256 initialPoolShares) noReentrancy {
+    function activate(uint256 initialTokens, uint256 initialPoolShares) public noReentrancy {
         require(totalPoolShares == 0);
 
         require(approvedToken.transferFrom(msg.sender, address(this), initialTokens));
@@ -72,11 +72,11 @@ contract MolochPool {
     //   - should be close enough if grant shares are small relative to total shares, which they should be
     //   - protects pool contributors if many Moloch members ragequit before the proposal is processed by reducing follow on funding
     //   - e.g. if 50% of Moloch shares ragequit after someone voted yes, the grant proposal would get 50% less follow-on from the pool
-    function sync(uint256 toIndex) active noReentrancy {
+    function sync(uint256 toIndex) public active noReentrancy {
         require(toIndex <= moloch.getProposalQueueLength());
 
         for (uint256 i = currentProposalIndex; i < toIndex; i++) {
-            Proposal memory proposal = moloch.proposalQueue(currentProposalIndex);
+            Proposal memory proposal = Proposal(moloch.proposalQueue(currentProposalIndex));
 
             if (proposal.processed && proposal.didPass && !proposal.aborted && proposal.sharesRequested > 0) {
                 // passing grant proposal, mint pool shares proportionally on behalf of the applicant
@@ -84,8 +84,6 @@ contract MolochPool {
                     uint256 poolSharesToMint = totalPoolShares.mul(proposal.sharesRequested).div(proposal.maxTotalSharesAtYesVote);
                     _mintSharesForAddress(poolSharesToMint, proposal.applicant);
                 }
-
-                currentMolochSharesMinted = currentMolochSharesMinted.add(proposal.sharesRequested);
             }
         }
 
@@ -93,17 +91,17 @@ contract MolochPool {
     }
 
     // add tokens to the pool, mint new shares proportionally
-    function deposit(uint256 tokenAmount) active noReentrancy {
+    function deposit(uint256 tokenAmount) public active noReentrancy {
 
         uint256 sharesToMint = totalPoolShares.mul(tokenAmount).div(approvedToken.balanceOf(address(this)));
 
         require(approvedToken.transferFrom(msg.sender, address(this), tokenAmount));
 
-        _mintSharesForAddress(poolSharesToMint, msg.sender);
+        _mintSharesForAddress(sharesToMint, msg.sender);
     }
 
     // burn shares to proportionally withdraw tokens in pool
-    function withdraw(uint256 sharesToBurn) active noReentrancy {
+    function withdraw(uint256 sharesToBurn) public active noReentrancy {
         require(poolShares(msg.sender) >= sharesToBurn);
 
         uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
