@@ -1,3 +1,14 @@
+// Goals
+// - Defensibility -> Kick out malicious members via forceRagequit
+// - Separation of Wealth and Power -> voting / loot tokens - grant pool can't be claimed (controlled by separate contract?)
+// - batch proposals -> 1 month between proposal batches, 2 week voting period, 2 week grace period
+// - better spam protection -> exponential increase in deposit for same member / option to claim deposit
+// - replacing members?
+//   - hasn't been discussed
+// - accountability to stakeholders
+//   - some kind of siganlling
+
+
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
