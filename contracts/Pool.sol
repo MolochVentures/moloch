@@ -103,9 +103,9 @@ contract MolochPool {
         _withdraw(msg.sender, sharesToBurn);
     }
 
-    // keeper burns shares to withdraw
+    // keeper burns shares to withdraw on behalf of the donor
     function keeperWithdraw(uint256 sharesToBurn, address recipient) public active noReentrancy {
-        require(donors[recipient].keeper == msg.sender);
+        require(donors[recipient].keepers[msg.sender]);
 
         _withdraw(recipient, sharesToBurn);
     }
