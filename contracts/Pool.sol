@@ -22,11 +22,11 @@ contract MolochPool {
 
     struct Donor {
         uint256 shares;
-        address keeper;
+        mapping (address => bool) keepers;
     }
 
     // the amount of shares each pool shareholder has
-    mapping (address => Donor) donors;
+    mapping (address => Donor) public donors;
 
     modifier active {
         require(totalPoolShares > 0);
@@ -89,7 +89,7 @@ contract MolochPool {
     }
 
     // add tokens to the pool, mint new shares proportionally
-    function deposit(uint256 tokenAmount, address keeper) public active noReentrancy {
+    function deposit(uint256 tokenAmount) public active noReentrancy {
 
         uint256 sharesToMint = totalPoolShares.mul(tokenAmount).div(approvedToken.balanceOf(address(this)));
 
@@ -100,14 +100,7 @@ contract MolochPool {
 
     // burn shares to proportionally withdraw tokens in pool
     function withdraw(uint256 sharesToBurn) public active noReentrancy {
-        require(donors[msg.sender].shares >= sharesToBurn);
-
-        uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
-
-        totalPoolShares = totalPoolShares.sub(sharesToBurn);
-        donors[msg.sender].shares = donors[msg.sender].shares.sub(sharesToBurn);
-
-        require(approvedToken.transfer(msg.sender, tokensToWithdraw));
+        _withdraw(msg.sender, sharesToBurn);
     }
 
     // keeper burns shares to withdraw
@@ -117,9 +110,20 @@ contract MolochPool {
         _withdraw(recipient, sharesToBurn);
     }
 
-    // update the keeper for this shareholder
-    function setKeeper(address newKeeper) public active noReentrancy {
-        donors[msg.sender].keeper = newKeeper;
+    function addKeepers(address[] newKeepers) public active noReentrancy {
+        Donor donor = donors[msg.sender];
+
+        for (uint256 i = 0; i < newKeepers.length; i++) {
+            donor.keepers[newKeepers[i]] = true;
+        }
+    }
+
+    function removeKeepers(address[] keepersToRemove) public active noReentrancy {
+        Donor donor = donors[msg.sender];
+
+        for (uint256 i = 0; i < keepersToRemove.length; i++) {
+            donor.keepers[keepersToRemove[i]] = false;
+        }
     }
 
     function _mintSharesForAddress(uint256 sharesToMint, address recipient) internal {
