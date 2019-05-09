@@ -2,7 +2,7 @@ pragma solidity 0.5.2;
 
 import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
-import "./GuildBank.sol";
+import "./CurvedGuildBank.sol";
 
 /*
     TODO: remove/change any code that use ERC20 approvedToken
@@ -23,7 +23,7 @@ contract Moloch {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    GuildBank public guildBank; // guild bank contract reference
+    CurvedGuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
     // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
@@ -130,7 +130,7 @@ contract Moloch {
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
-        guildBank = new GuildBank(
+        guildBank = new CurvedGuildBank(
             _wallet,
             bcTokenName,
             bcTokenSymbol,

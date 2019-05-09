@@ -1,9 +1,14 @@
-pragma solidity ^0.5.2;
+pragma solidity 0.5.2;
 
-
+import "./oz/Ownable.sol";
+import "./oz/IERC20.sol";
+import "./oz/SafeMath.sol";
 import "./BondingCurve.sol";
 
-contract TrojanBondingCurve is BondingCurve {
+contract CurvedGuildBank is BondingCurve, Ownable {
+    using SafeMath for uint256;
+
+    event Withdrawal(address indexed receiver, uint256 amount);
 
     address payable wallet;
 
@@ -35,21 +40,15 @@ contract TrojanBondingCurve is BondingCurve {
         sellPercentage = _sellPercentage;
     }
 
-    function buyIntegral(uint256 x)
-        internal view returns (uint256)
-    {
+    function buyIntegral(uint256 x) internal view returns (uint256) {
         return (slopeNumerator * x * x) / (2 * slopeDenominator);
     }
 
-    function sellIntegral(uint256 x)
-        internal view returns (uint256)
-    {
+    function sellIntegral(uint256 x) internal view returns (uint256) {
         return (slopeNumerator * x * x * sellPercentage) / (200 * slopeDenominator);
     }
 
-    function spread(uint256 toX)
-        public view returns (uint256)
-    {
+    function spread(uint256 toX) public view returns (uint256) {
         uint256 buy = buyIntegral(toX);
         uint256 sell = sellIntegral(toX);
         return buy.sub(sell);
@@ -69,20 +68,22 @@ contract TrojanBondingCurve is BondingCurve {
         emit Payout(spreadPayout, now);
     }
 
-    function calculatePurchaseReturn(uint256 tokens)
-        public view returns (uint256)
-    {
+    function calculatePurchaseReturn(uint256 tokens) public view returns (uint256) {
         return buyIntegral(
             totalSupply().add(tokens)
         ).sub(reserve);
     }
 
-    function calculateSaleReturn(uint256 tokens)
-        public view returns (uint256)
-    {
+    function calculateSaleReturn(uint256 tokens) public view returns (uint256) {
         return reserve.sub(
             sellIntegral(
                 totalSupply().sub(tokens)
         ));
+    }
+
+    function withdraw(address payable receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (uint256) {
+        uint256 amount = balanceOf(address(this)).mul(shares).div(totalShares);
+        emit Withdrawal(receiver, amount);
+        return sell(receiver, amount);
     }
 }
