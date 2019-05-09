@@ -1,7 +1,7 @@
 // Pool.sol
 // - mints a pool share when someone donates tokens
 // - syncs with Moloch proposal queue to mint shares for grantees
-// - allows shareholders to withdraw tokens at any time
+// - allows donors to withdraw tokens at any time
 
 pragma solidity 0.5.3;
 
@@ -20,8 +20,13 @@ contract MolochPool {
 
     bool locked; // prevent re-entrancy
 
+    struct Donor {
+        uint256 shares;
+        address keeper;
+    }
+
     // the amount of shares each pool shareholder has
-    mapping (address => uint256) poolShares;
+    mapping (address => Donor) donors;
 
     modifier active {
         require(totalPoolShares > 0);
@@ -74,8 +79,8 @@ contract MolochPool {
             if (processed && didPass && !aborted && sharesRequested > 0) {
                 // passing grant proposal, mint pool shares proportionally on behalf of the applicant
                 if (tokenTribute == 0) {
-                    uint256 poolSharesToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote);
-                    _mintSharesForAddress(poolSharesToMint, applicant);
+                    uint256 donorsToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote);
+                    _mintSharesForAddress(donorsToMint, applicant);
                 }
             }
         }
@@ -84,7 +89,7 @@ contract MolochPool {
     }
 
     // add tokens to the pool, mint new shares proportionally
-    function deposit(uint256 tokenAmount) public active noReentrancy {
+    function deposit(uint256 tokenAmount, address keeper) public active noReentrancy {
 
         uint256 sharesToMint = totalPoolShares.mul(tokenAmount).div(approvedToken.balanceOf(address(this)));
 
@@ -95,18 +100,44 @@ contract MolochPool {
 
     // burn shares to proportionally withdraw tokens in pool
     function withdraw(uint256 sharesToBurn) public active noReentrancy {
-        require(poolShares[msg.sender] >= sharesToBurn);
+        require(donors[msg.sender].shares >= sharesToBurn);
 
         uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
 
         totalPoolShares = totalPoolShares.sub(sharesToBurn);
-        poolShares[msg.sender] = poolShares[msg.sender].sub(sharesToBurn);
+        donors[msg.sender].shares = donors[msg.sender].shares.sub(sharesToBurn);
 
         require(approvedToken.transfer(msg.sender, tokensToWithdraw));
     }
 
+    // keeper burns shares to withdraw
+    function keeperWithdraw(uint256 sharesToBurn, address recipient) public active noReentrancy {
+        require(donors[recipient].keeper == msg.sender);
+
+        _withdraw(recipient, sharesToBurn);
+    }
+
+    // update the keeper for this shareholder
+    function setKeeper(address newKeeper) public active noReentrancy {
+        donors[msg.sender].keeper = newKeeper;
+    }
+
     function _mintSharesForAddress(uint256 sharesToMint, address recipient) internal {
         totalPoolShares = totalPoolShares.add(sharesToMint);
-        poolShares[recipient] = poolShares[recipient].add(sharesToMint);
+        donors[recipient].shares = donors[recipient].shares.add(sharesToMint);
     }
+
+    function _withdraw(address recipient, uint256 sharesToBurn) {
+        Donor donor = donors[recipient];
+
+        require(donors[recipient].shares >= sharesToBurn);
+
+        uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
+
+        totalPoolShares = totalPoolShares.sub(sharesToBurn);
+        donors[msg.sender].shares = donors[msg.sender].shares.sub(sharesToBurn);
+
+        require(approvedToken.transfer(msg.sender, tokensToWithdraw));
+    }
+
 }
