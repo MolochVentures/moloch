@@ -111,8 +111,7 @@ contract Moloch {
         uint256 _processingReward,
         uint256 _slopeNumerator,
         uint256 _slopeDenominator,
-        uint256 _sellPercentage,
-        uint8 bcTokenDecimals
+        uint256 _sellPercentage
     ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");

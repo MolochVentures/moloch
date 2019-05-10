@@ -1,7 +1,6 @@
 pragma solidity 0.5.2;
 
 import "./oz/Ownable.sol";
-import "./oz/IERC20.sol";
 import "./oz/SafeMath.sol";
 import "./BondingCurve.sol";
 
@@ -53,20 +52,6 @@ contract CurvedGuildBank is BondingCurve, Ownable {
         return buy.sub(sell);
     }
 
-    /// Overwrite
-    function buy(uint256 tokens) public payable {
-        //uint256 spreadBefore = spread(totalSupply());
-        super.buy(tokens);
-
-        //uint256 spreadAfter = spread(totalSupply());
-
-        //uint256 spreadPayout = spreadAfter.sub(spreadBefore);
-        //reserve = reserve.sub(spreadPayout);
-        //wallet.transfer(spreadPayout);
-
-        //emit Payout(spreadPayout, now);
-    }
-
     function calculatePurchaseReturn(uint256 tokens) public view returns (uint256) {
         return buyIntegral(
             totalSupply().add(tokens)
@@ -78,6 +63,25 @@ contract CurvedGuildBank is BondingCurve, Ownable {
             sellIntegral(
                 totalSupply().sub(tokens)
         ));
+    }
+
+    function buy(uint256 tokens) public payable onlyOwner {
+        require(tokens > 0, "Must request non-zero amount of tokens.");
+
+        uint256 paid = calculatePurchaseReturn(tokens);
+        require(
+            msg.value >= paid,
+            "Did not send enough ether to buy!"
+        );
+
+        reserve = reserve.add(paid);
+        _mint(msg.sender, tokens);
+        //extra funds handling
+        if (msg.value > paid) {
+            msg.sender.transfer(msg.value.sub(paid));
+        }
+
+        emit CurveBuy(tokens, paid, now);
     }
 
     function withdraw(address payable receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (uint256) {
