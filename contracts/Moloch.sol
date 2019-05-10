@@ -4,9 +4,6 @@ import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
 import "./CurvedGuildBank.sol";
 
-/*
-    TODO: remove/change any code that use ERC20 approvedToken
-*/
 
 contract Moloch {
     using SafeMath for uint256;
@@ -102,7 +99,6 @@ contract Moloch {
     ********/
     constructor(
         address summoner,
-        address _approvedToken,
         address payable _wallet,
         string memory bcTokenName,
         string memory bcTokenSymbol,
@@ -119,7 +115,6 @@ contract Moloch {
         uint8 bcTokenDecimals
     ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
-        require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "Moloch::constructor - _votingPeriodLength exceeds limit");
