@@ -99,7 +99,7 @@ contract Moloch {
     ********/
     constructor(
         address summoner,
-        address payable _wallet,
+        //address payable _wallet,
         string memory bcTokenName,
         string memory bcTokenSymbol,
         uint256 _periodDuration,
@@ -126,7 +126,7 @@ contract Moloch {
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
         guildBank = new CurvedGuildBank(
-            _wallet,
+            //_wallet,
             bcTokenName,
             bcTokenSymbol,
             _slopeNumerator,

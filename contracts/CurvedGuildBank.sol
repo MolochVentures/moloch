@@ -10,7 +10,7 @@ contract CurvedGuildBank is BondingCurve, Ownable {
 
     event Withdrawal(address indexed receiver, uint256 amount);
 
-    address payable wallet;
+    //address payable wallet;
 
     // Desired Curve: Linear Progression W/ % Buy/Sell Delta
     // Ex: Sell is always 90% of buy price.
@@ -22,7 +22,7 @@ contract CurvedGuildBank is BondingCurve, Ownable {
     event Payout(uint256 payout, uint256 indexed timestamp);
 
     constructor(
-        address payable _wallet,
+        //address payable _wallet,
         string memory name,
         string memory symbol,
         uint256 _slopeNumerator,
@@ -33,7 +33,7 @@ contract CurvedGuildBank is BondingCurve, Ownable {
             _sellPercentage < 100 && _sellPercentage != 0,
             "Percentage must be between 0 & 100"
         );
-        wallet = _wallet;
+        //wallet = _wallet;
         slopeNumerator = _slopeNumerator;
         slopeDenominator = _slopeDenominator;
         sellPercentage = _sellPercentage;
@@ -55,16 +55,16 @@ contract CurvedGuildBank is BondingCurve, Ownable {
 
     /// Overwrite
     function buy(uint256 tokens) public payable {
-        uint256 spreadBefore = spread(totalSupply());
+        //uint256 spreadBefore = spread(totalSupply());
         super.buy(tokens);
 
-        uint256 spreadAfter = spread(totalSupply());
+        //uint256 spreadAfter = spread(totalSupply());
 
-        uint256 spreadPayout = spreadAfter.sub(spreadBefore);
-        reserve = reserve.sub(spreadPayout);
-        wallet.transfer(spreadPayout);
+        //uint256 spreadPayout = spreadAfter.sub(spreadBefore);
+        //reserve = reserve.sub(spreadPayout);
+        //wallet.transfer(spreadPayout);
 
-        emit Payout(spreadPayout, now);
+        //emit Payout(spreadPayout, now);
     }
 
     function calculatePurchaseReturn(uint256 tokens) public view returns (uint256) {
