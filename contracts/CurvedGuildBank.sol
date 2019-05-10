@@ -25,11 +25,10 @@ contract CurvedGuildBank is BondingCurve, Ownable {
         address payable _wallet,
         string memory name,
         string memory symbol,
-        uint8 decimals,
         uint256 _slopeNumerator,
         uint256 _slopeDenominator,
         uint256 _sellPercentage
-    ) public BondingCurve(name, symbol, decimals) {
+    ) public BondingCurve(name, symbol) {
         require(
             _sellPercentage < 100 && _sellPercentage != 0,
             "Percentage must be between 0 & 100"

@@ -14,8 +14,8 @@ contract BondingCurve is ERC20, ERC20Detailed {
     event CurveBuy(uint256 amount, uint256 paid, uint256 indexed when);
     event CurveSell(uint256 amount, uint256 rewarded, uint256 indexed when);
 
-    constructor(string memory name, string memory symbol, uint8 decimals) public ERC20Detailed(name, symbol, decimals) {
-    }
+    constructor(string memory name, string memory symbol) public ERC20Detailed(name, symbol, 18) {
+    }tokens
 
     /**
      * Curve function interfaces 

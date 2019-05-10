@@ -129,7 +129,6 @@ contract Moloch {
             _wallet,
             bcTokenName,
             bcTokenSymbol,
-            bcTokenDecimals,
             _slopeNumerator,
             _slopeDenominator,
             _sellPercentage
