@@ -62,16 +62,17 @@ contract Moloch {
     }
 
     struct Proposal {
-        address proposer; // the member who submitted the proposal
         address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        uint256 value; //ETH value in case deposited
+        uint256 tokenTribute; //amount of tokens to mint with the deposited ETH
         uint256 sharesRequested; // the # of shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
+        bool depositedETH; // true in case proposal is investor
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
-        uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
@@ -155,16 +156,14 @@ contract Moloch {
     *****************/
 
     function submitProposal(
-        address applicant,
         uint256 tokenTribute,
         uint256 sharesRequested,
         string memory details
     )
         public
         payable
-        onlyDelegate
     {
-        require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
+        require(msg.sender != address(0), "Curved::submitProposal - applicant cannot be 0");
 
         // Make sure we won't run into overflows when doing calculations with shares.
         // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
@@ -172,21 +171,6 @@ contract Moloch {
         require(totalShares.add(totalSharesRequested).add(sharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
 
         totalSharesRequested = totalSharesRequested.add(sharesRequested);
-
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
-
-        /*
-            TODO: need to change proposalDeposit from using WETH to ETH
-        */
-        // collect proposal deposit (ETH) from proposer and store it in the Moloch until the proposal is processed
-        //convert address(this) to address payable
-        address(uint160(address(this))).transfer(msg.value);
-
-        //if applicant deposit amount of Trojan
-        //collect Trojan from applicant and store it in the Moloch until the proposal is processed
-        if(tokenTribute > 0) {
-            require(guildBank.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - trojan token transfer failed");
-        }
 
         // compute startingPeriod for proposal
         uint256 startingPeriod = max(
@@ -196,25 +180,36 @@ contract Moloch {
 
         // create proposal ...
         Proposal memory proposal = Proposal({
-            proposer: memberAddress,
-            applicant: applicant,
+            applicant: msg.sender,
+            value: 0,
+            tokenTribute: 0,
             sharesRequested: sharesRequested,
             startingPeriod: startingPeriod,
             yesVotes: 0,
             noVotes: 0,
+            depositedETH: false,
             processed: false,
             didPass: false,
             aborted: false,
-            tokenTribute: tokenTribute,
             details: details,
             maxTotalSharesAtYesVote: 0
         });
+
+        // if sender deposit ETH collect proposal deposit (ETH) and store it in the Moloch until the proposal is processed
+        if(msg.value > 0) {
+            proposal.depositedETH = true;
+            proposal.value = msg.value;
+            proposal.tokenTribute = tokenTribute;
+
+            //convert address(this) to address payable & held into Moloch the deposited ETH
+            require(address(this).transfer(msg.value), "Curved::submitProposal - ETH transfer failed");
+        }
 
         // ... and append it to the queue
         proposalQueue.push(proposal);
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
-        emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        emit SubmitProposal(proposalIndex, msg.sender, msg.sender, sharesRequested);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -295,7 +290,7 @@ contract Moloch {
 
                 //check if applicant is investor or not
                 //if deposited token tribute than it is an investor
-                if(proposal.tokenTribute > 0) {
+                if(proposal.depositedETH == true) {
                     members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, true, 0);
                 }
                 else {
@@ -308,35 +303,27 @@ contract Moloch {
             // mint new shares
             totalShares = totalShares.add(proposal.sharesRequested);
 
-            //if applicant is an investor, transfer tokens to guild bank
-            if(proposal.tokenTribute > 0) {
+            //if there is a deposited ETH
+            //mint amount of tokens(submited tokenTribute) into the curved guild bank
+            //send to msg.sender spreadPayout as processing reward
+            if(proposal.depositedETH == true) {
                 require(
-                    guildBank.transfer(address(guildBank), proposal.tokenTribute),
-                    "Moloch::processProposal - trojan token transfer to guild bank failed"
+                    guildBank.buy.value(proposal.depositedETH)(msg.sender, proposal.applicant, proposal.tokenTribute),
+                    "Moloch::processProposal - ETH transfer to curved guild bank or trojan token mint failed"
                 );
             }
 
         // PROPOSAL FAILED OR ABORTED
         } else {
-            // return all tokens to the applicant
+            // return all ETH to the applicant
             require(
-                guildBank.transfer(proposal.applicant, proposal.tokenTribute),
-                "Moloch::processProposal - failing vote token transfer failed"
+                proposal.applicant.transfer(proposal.depositedETH),
+                "Moloch::processProposal - ETH transfer back failed"
             );
         }
-
-        // send msg.sender the processingReward
-        require(
-            msg.sender.transfer(processingReward),
-            "Moloch::processProposal - failed to send processing reward to msg.sender"
-        );
-
-        // return deposit to proposer (subtract processing reward)
-        require(
-            proposal.proposer.transfer(proposalDeposit.sub(processingReward)),
-            "Moloch::processProposal - failed to return proposal deposit to proposer"
-        );
-
+        /*
+            TODO: modify events
+        */
         emit ProcessProposal(
             proposalIndex,
             proposal.applicant,
