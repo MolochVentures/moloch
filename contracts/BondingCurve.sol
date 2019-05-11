@@ -23,7 +23,26 @@ contract BondingCurve is ERC20, ERC20Detailed {
     function calculatePurchaseReturn(uint256 tokens) public view returns (uint256 thePrice);
     function calculateSaleReturn(uint256 tokens) public view returns (uint256 theReward);
 
-    function sell(address payable receiver, uint256 tokens) internal returns (uint256 rewarded) {
+    function buy(address processor, address payable proposer, uint256 tokens) public payable {
+        require(tokens > 0, "Must request non-zero amount of tokens.");
+
+        uint256 paid = calculatePurchaseReturn(tokens);
+        require(
+            msg.value >= paid,
+            "Did not send enough ether to buy!"
+        );
+
+        reserve = reserve.add(paid);
+        _mint(msg.sender, tokens);
+        //extra funds handling
+        if (msg.value > paid) {
+            proposer.transfer(msg.value.sub(paid));
+        }
+
+        emit CurveBuy(tokens, paid, now);
+    }
+    
+    function sell(address payable receiver, uint256 tokens) public returns (uint256 rewarded) {
         require(tokens > 0, "Must spend non-zero amount of tokens.");
         require(
             balanceOf(msg.sender) >= tokens,

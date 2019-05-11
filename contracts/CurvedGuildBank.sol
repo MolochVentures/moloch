@@ -65,28 +65,23 @@ contract CurvedGuildBank is BondingCurve, Ownable {
         ));
     }
 
-    function buy(uint256 tokens) public payable onlyOwner {
-        require(tokens > 0, "Must request non-zero amount of tokens.");
+    /// Overwrite
+    function buy(address payable processor, address payable proposer, uint256 tokens) public payable onlyOwner {
+        uint256 spreadBefore = spread(totalSupply());
+        super.buy(processor, proposer, tokens);
 
-        uint256 paid = calculatePurchaseReturn(tokens);
-        require(
-            msg.value >= paid,
-            "Did not send enough ether to buy!"
-        );
+        uint256 spreadAfter = spread(totalSupply());
 
-        reserve = reserve.add(paid);
-        _mint(msg.sender, tokens);
-        //extra funds handling
-        if (msg.value > paid) {
-            msg.sender.transfer(msg.value.sub(paid));
-        }
+        uint256 spreadPayout = spreadAfter.sub(spreadBefore);
+        reserve = reserve.sub(spreadPayout);
+        processor.transfer(spreadPayout);
 
-        emit CurveBuy(tokens, paid, now);
+        emit Payout(spreadPayout, now);
     }
 
-    function withdraw(address payable receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (uint256) {
+    function withdraw(address payable receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (bool) {
         uint256 amount = balanceOf(address(this)).mul(shares).div(totalShares);
         emit Withdrawal(receiver, amount);
-        return sell(receiver, amount);
+        return transfer(receiver, amount);
     }
 }
