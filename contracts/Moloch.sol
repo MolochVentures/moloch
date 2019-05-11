@@ -201,8 +201,9 @@ contract Moloch {
             proposal.value = msg.value;
             proposal.tokenTribute = tokenTribute;
 
-            //convert address(this) to address payable & held into Moloch the deposited ETH
-            require(address(this).transfer(msg.value), "Curved::submitProposal - ETH transfer failed");
+            //cast type address to address payable, does it work?
+            address addr = address(uint160(address(this)));
+            require(addr.transfer(msg.value), "Curved::submitProposal - ETH transfer failed");
         }
 
         // ... and append it to the queue
