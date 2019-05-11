@@ -356,6 +356,9 @@ contract Moloch {
         emit Ragequit(msg.sender, sharesToBurn);
     }
 
+    /*
+        TODO: modify the abort functionality
+    */
     function abort(uint256 proposalIndex) public {
         require(proposalIndex < proposalQueue.length, "Moloch::abort - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
