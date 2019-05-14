@@ -100,7 +100,6 @@ contract Moloch {
     ********/
     constructor(
         address summoner,
-        //address payable _wallet,
         string memory bcTokenName,
         string memory bcTokenSymbol,
         uint256 _periodDuration,
@@ -123,7 +122,6 @@ contract Moloch {
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
 
         guildBank = new CurvedGuildBank(
-            //_wallet,
             bcTokenName,
             bcTokenSymbol,
             _slopeNumerator,

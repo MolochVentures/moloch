@@ -21,7 +21,6 @@ contract CurvedGuildBank is BondingCurve, Ownable {
     event Payout(uint256 payout, uint256 indexed timestamp);
 
     constructor(
-        //address payable _wallet,
         string memory name,
         string memory symbol,
         uint256 _slopeNumerator,
@@ -32,7 +31,6 @@ contract CurvedGuildBank is BondingCurve, Ownable {
             _sellPercentage < 100 && _sellPercentage != 0,
             "Percentage must be between 0 & 100"
         );
-        //wallet = _wallet;
         slopeNumerator = _slopeNumerator;
         slopeDenominator = _slopeDenominator;
         sellPercentage = _sellPercentage;
