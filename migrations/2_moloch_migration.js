@@ -9,8 +9,6 @@ const config = process.env.target != 'mainnet' ? require('./config.json').test :
 module.exports = (deployer, network, accounts) => {
   deployer.then(async () => {
 
-    const approvedToken = await deployer.deploy(Token, config.TOKEN_SUPPLY)
-
     await deployer.deploy(
       Moloch,
       accounts[0],
@@ -20,9 +18,10 @@ module.exports = (deployer, network, accounts) => {
       config.VOTING_DURATON_IN_PERIODS,
       config.GRACE_DURATON_IN_PERIODS,
       config.ABORT_WINDOW_IN_PERIODS,
-      config.PROPOSAL_DEPOSIT,
       config.DILUTION_BOUND,
-      config.PROCESSING_REWARD,
+      config.SLOPE_NUMERATOR,
+      config.SLOPE_DENOMINATOR,
+      config.SELL_PERCENTAGE,
       { gas: 6000000 }
     )
   })
