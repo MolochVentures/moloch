@@ -107,9 +107,7 @@ contract Moloch {
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
         uint256 _abortWindow,
-        uint256 _proposalDeposit,
         uint256 _dilutionBound,
-        uint256 _processingReward,
         uint256 _slopeNumerator,
         uint256 _slopeDenominator,
         uint256 _sellPercentage
@@ -123,7 +121,6 @@ contract Moloch {
         require(_abortWindow <= _votingPeriodLength, "Moloch::constructor - _abortWindow must be smaller than or equal to _votingPeriodLength");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
-        require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
         guildBank = new CurvedGuildBank(
             //_wallet,
@@ -138,9 +135,7 @@ contract Moloch {
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
         abortWindow = _abortWindow;
-        proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
-        processingReward = _processingReward;
 
         summoningTime = now;
 

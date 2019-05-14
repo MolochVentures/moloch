@@ -6,7 +6,7 @@
 
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
-const Token = artifacts.require('./Token')
+//const Token = artifacts.require('./Token')
 
 const GnosisSafe = artifacts.require("./GnosisSafePersonalEdition.sol")
 const ProxyFactory = artifacts.require("./ProxyFactory.sol")

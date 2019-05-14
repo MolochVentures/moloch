@@ -2,8 +2,7 @@
 const fse = require('fs-extra')
 
 const Moloch = artifacts.require('./Moloch')
-const GuildBank = artifacts.require('./GuildBank')
-const Token = artifacts.require('./Token')
+const CurvedGuildBank = artifacts.require('./CurvedGuildBank')
 
 const config = process.env.target != 'mainnet' ? require('./config.json').test : require('./config.json').mainnet
 
@@ -14,8 +13,9 @@ module.exports = (deployer, network, accounts) => {
 
     await deployer.deploy(
       Moloch,
-      config.SUMMONER,
-      approvedToken.address,
+      accounts[0],
+      config.TOKEN_NAME,
+      config.TOKEN_SYMBOL,
       config.PERIOD_DURATION_IN_SECONDS,
       config.VOTING_DURATON_IN_PERIODS,
       config.GRACE_DURATON_IN_PERIODS,
