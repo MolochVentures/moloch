@@ -72,20 +72,24 @@ contract MolochPool {
         uint256 tokenTribute;
         uint256 maxTotalSharesAtYesVote;
 
-        for (uint256 i = currentProposalIndex; i < toIndex; i++) {
+        uint256 i = currentProposalIndex;
 
-            (, applicant, sharesRequested, , , , processed, didPass, aborted, tokenTribute, , maxTotalSharesAtYesVote) = moloch.proposalQueue(currentProposalIndex);
+        while (i < toIndex) {
 
-            if (processed && didPass && !aborted && sharesRequested > 0) {
-                // passing grant proposal, mint pool shares proportionally on behalf of the applicant
-                if (tokenTribute == 0) {
-                    uint256 donorsToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote);
-                    _mintSharesForAddress(donorsToMint, applicant);
-                }
+            (, applicant, sharesRequested, , , , processed, didPass, aborted, tokenTribute, , maxTotalSharesAtYesVote) = moloch.proposalQueue(i);
+
+            if (!processed) { break; }
+
+            // passing grant proposal, mint pool shares proportionally on behalf of the applicant
+            if (!aborted && didPass && tokenTribute == 0 && sharesRequested > 0) {
+                uint256 sharesToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote); // for a passing proposal, maxTotalSharesAtYesVote is > 0
+                _mintSharesForAddress(sharesToMint, applicant);
             }
+
+            i++;
         }
 
-        currentProposalIndex = toIndex;
+        currentProposalIndex = i;
     }
 
     // add tokens to the pool, mint new shares proportionally
