@@ -110,16 +110,16 @@ contract MolochPool {
         _withdraw(recipient, sharesToBurn);
     }
 
-    function addKeepers(address[] newKeepers) public active noReentrancy {
-        Donor donor = donors[msg.sender];
+    function addKeepers(address[] calldata newKeepers) external active noReentrancy {
+        Donor storage donor = donors[msg.sender];
 
         for (uint256 i = 0; i < newKeepers.length; i++) {
             donor.keepers[newKeepers[i]] = true;
         }
     }
 
-    function removeKeepers(address[] keepersToRemove) public active noReentrancy {
-        Donor donor = donors[msg.sender];
+    function removeKeepers(address[] calldata keepersToRemove) external active noReentrancy {
+        Donor storage donor = donors[msg.sender];
 
         for (uint256 i = 0; i < keepersToRemove.length; i++) {
             donor.keepers[keepersToRemove[i]] = false;
@@ -131,8 +131,8 @@ contract MolochPool {
         donors[recipient].shares = donors[recipient].shares.add(sharesToMint);
     }
 
-    function _withdraw(address recipient, uint256 sharesToBurn) {
-        Donor donor = donors[recipient];
+    function _withdraw(address recipient, uint256 sharesToBurn) internal {
+        Donor storage donor = donors[recipient];
 
         require(donors[recipient].shares >= sharesToBurn);
 
