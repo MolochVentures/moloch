@@ -134,14 +134,14 @@ contract MolochPool {
     function _withdraw(address recipient, uint256 sharesToBurn) internal {
         Donor storage donor = donors[recipient];
 
-        require(donors[recipient].shares >= sharesToBurn);
+        require(donor.shares >= sharesToBurn);
 
         uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
 
         totalPoolShares = totalPoolShares.sub(sharesToBurn);
-        donors[msg.sender].shares = donors[msg.sender].shares.sub(sharesToBurn);
+        donor.shares = donor.shares.sub(sharesToBurn);
 
-        require(approvedToken.transfer(msg.sender, tokensToWithdraw));
+        require(approvedToken.transfer(recipient, tokensToWithdraw));
     }
 
 }
