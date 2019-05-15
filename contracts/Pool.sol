@@ -20,6 +20,8 @@ contract MolochPool {
 
     bool locked; // prevent re-entrancy
 
+    uint256 constant MAX_NUMBER_OF_SHARES = 10**30; // maximum number of shares that can be minted
+
     struct Donor {
         uint256 shares;
         mapping (address => bool) keepers;
@@ -133,6 +135,8 @@ contract MolochPool {
     function _mintSharesForAddress(uint256 sharesToMint, address recipient) internal {
         totalPoolShares = totalPoolShares.add(sharesToMint);
         donors[recipient].shares = donors[recipient].shares.add(sharesToMint);
+
+        require(totalPoolShares <= MAX_NUMBER_OF_SHARES);
     }
 
     function _withdraw(address recipient, uint256 sharesToBurn) internal {
