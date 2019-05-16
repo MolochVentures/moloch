@@ -1,7 +1,6 @@
 pragma solidity 0.5.2;
 
 import "./oz/SafeMath.sol";
-import "./oz/IERC20.sol";
 import "./CurvedGuildBank.sol";
 
 
@@ -62,7 +61,7 @@ contract Moloch {
     }
 
     struct Proposal {
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
+        address payable applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 value; //ETH value in case deposited
         uint256 tokenTribute; //amount of tokens to mint with the deposited ETH
         uint256 sharesRequested; // the # of shares the applicant is requesting
@@ -144,6 +143,10 @@ contract Moloch {
         emit SummonComplete(summoner, 1);
     }
 
+    function() external payable {
+        getCurrentPeriod();
+    }
+
     /*****************
     PROPOSAL FUNCTIONS
     *****************/
@@ -195,15 +198,15 @@ contract Moloch {
             proposal.tokenTribute = tokenTribute;
 
             //cast type address to address payable, does it work?
-            address addr = address(uint160(address(this)));
-            require(addr.transfer(msg.value), "Curved::submitProposal - ETH transfer failed");
+            //require(address(this).transfer(msg.value), "Curved::submitProposal - ETH transfer failed");
+            address(this).transfer(msg.value);
         }
 
         // ... and append it to the queue
         proposalQueue.push(proposal);
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
-        emit SubmitProposal(proposalIndex, msg.sender, msg.sender, sharesRequested);
+        //emit SubmitProposal(proposalIndex, msg.sender, msg.sender, sharesRequested);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -301,23 +304,25 @@ contract Moloch {
             //mint amount of tokens(submited tokenTribute) into the curved guild bank
             //send to msg.sender spreadPayout as processing reward
             if(proposal.depositedETH == true) {
-                require(
-                    guildBank.buy.value(proposal.depositedETH)(msg.sender, proposal.applicant, proposal.tokenTribute),
+                /*require(
+                    guildBank.buy.value(proposal.value)(msg.sender, proposal.applicant, proposal.tokenTribute),
                     "Moloch::processProposal - ETH transfer to curved guild bank or trojan token mint failed"
-                );
+                );*/
+                guildBank.buy.value(proposal.value)(msg.sender, proposal.applicant, proposal.tokenTribute);
             }
 
         // PROPOSAL FAILED OR ABORTED
         } else {
             // return all ETH to the applicant
-            require(
+            /*require(
                 proposal.applicant.transfer(proposal.depositedETH),
                 "Moloch::processProposal - ETH transfer back failed"
-            );
+            );*/
+            proposal.applicant.transfer(proposal.value);
         }
         /*
             TODO: modify events
-        */
+        
         emit ProcessProposal(
             proposalIndex,
             proposal.applicant,
@@ -326,6 +331,7 @@ contract Moloch {
             proposal.sharesRequested,
             didPass
         );
+        */
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
