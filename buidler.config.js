@@ -1,4 +1,4 @@
-require('@nomiclabs/buidler-truffle5')
+usePlugin('@nomiclabs/buidler-truffle5')
 
 module.exports = {
   networks: {
