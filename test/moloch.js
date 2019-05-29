@@ -7,12 +7,10 @@ const { assert } = chai
 const safeUtils = require('./utilsPersonalSafe')
 const utils = require('./utils')
 
-const BigNumber = web3.BigNumber
 const BN = web3.utils.BN
 
 chai
   .use(require('chai-as-promised'))
-  .use(require('chai-bignumber')(BigNumber))
   .should()
 
 const Moloch = artifacts.require('./Moloch')
