@@ -124,6 +124,10 @@ contract MolochPool {
 
             // passing grant proposal, mint pool shares proportionally on behalf of the applicant
             if (!aborted && didPass && tokenTribute == 0 && sharesRequested > 0) {
+                // This can't revert:
+                //   1. maxTotalSharesAtYesVote > 0, otherwise nobody could have voted.
+                //   2. sharesRequested is <= 10**18 (see Moloch.sol:172), and
+                //      totalPoolShares <= 10**30, so multiplying them is <= 10**48 and < 2**160
                 uint256 sharesToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote); // for a passing proposal, maxTotalSharesAtYesVote is > 0
                 _mintSharesForAddress(sharesToMint, applicant);
             }
