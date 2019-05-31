@@ -6,6 +6,7 @@ module.exports = {
   skipFiles: [
     'Migrations.sol',
     'Token.sol',
-    'oz'
+    'oz',
+    'gnosis-safe'
   ]
 }
