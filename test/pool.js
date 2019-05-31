@@ -51,7 +51,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       PROCESSING_REWARD
     )
 
-    pool = await MolochPool.new(moloch.address, { gas: 2500000 })
+    pool = await MolochPool.new(moloch.address, { gas: 8000000 })
   })
 
   async function sendTokensTo (receiver, amount) {
