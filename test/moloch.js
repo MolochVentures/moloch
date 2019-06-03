@@ -20,15 +20,15 @@ const ProxyFactory = artifacts.require('./ProxyFactory')
 const GnosisSafe = artifacts.require('./GnosisSafe')
 
 const deploymentConfig = {
-  "SUMMONER": "0x9a8d670c323e894dda9a045372a75d607a47cb9e",
-  "PERIOD_DURATION_IN_SECONDS" : 17280,
-  "VOTING_DURATON_IN_PERIODS" : 35,
-  "GRACE_DURATON_IN_PERIODS" : 35,
-  "ABORT_WINDOW_IN_PERIODS" : 5,
-  "PROPOSAL_DEPOSIT" : 10,
-  "DILUTION_BOUND": 3,
-  "PROCESSING_REWARD": 1,
-  "TOKEN_SUPPLY": 10000
+  'SUMMONER': '0x9a8d670c323e894dda9a045372a75d607a47cb9e',
+  'PERIOD_DURATION_IN_SECONDS': 17280,
+  'VOTING_DURATON_IN_PERIODS': 35,
+  'GRACE_DURATON_IN_PERIODS': 35,
+  'ABORT_WINDOW_IN_PERIODS': 5,
+  'PROPOSAL_DEPOSIT': 10,
+  'DILUTION_BOUND': 3,
+  'PROCESSING_REWARD': 1,
+  'TOKEN_SUPPLY': 10000
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
