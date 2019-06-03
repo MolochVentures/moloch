@@ -53,14 +53,14 @@ task('pool-deploy', 'Deploys a new instance of the pool and activates it')
       return
     }
 
-    console.log("Deploying...")
-    
+    console.log('Deploying...')
+
     // We set the gas manually here because of
     // https://github.com/nomiclabs/buidler/issues/272
-    // TODO: Remove this when the issue gets fixed
+    // TODO(@alcuadrado): Remove this when the issue gets fixed
     const pool = await Pool.new(moloch.address, { gas: 2500000 })
 
-    console.log("")
+    console.log('')
     console.log('Pool deployed. Address:', pool.address)
     console.log("Set this address in buidler.config.js's networks section to use the other tasks")
 
@@ -173,9 +173,8 @@ task('pool-keeper-withdraw', "Withdraw other users' tokens from the pool")
       console.log('Withdrawal was successful')
     } catch (error) {
       console.error('Withdrawal failed. Make sure that you are actually a keeper')
-      console.error(error);
+      console.error(error)
     }
-    
   })
 
 task('pool-add-keeper', 'Adds a keeper')
