@@ -1,5 +1,10 @@
 const { artifacts, web3, ethereum } = require('@nomiclabs/buidler')
-const { assert } = require('chai')
+const chai = require('chai')
+const { assert } = chai
+
+chai
+  .use(require('chai-as-promised'))
+  .should()
 
 const BN = web3.utils.BN
 
@@ -51,6 +56,9 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       PROCESSING_REWARD
     )
 
+    // We set the gas manually here because of
+    // https://github.com/nomiclabs/buidler/issues/272
+    // TODO(@alcuadrado): Remove this when the issue gets fixed
     pool = await MolochPool.new(moloch.address, { gas: 8000000 })
   })
 
@@ -91,7 +99,11 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
   async function activatePool (activator, initialTokens, initialShares) {
     await sendTokensTo(activator, initialTokens)
     await giveAllowanceToMolochPool(activator)
-    await pool.activate(initialTokens, initialShares, { from: activator })
+
+    // We set the gas manually here because of
+    // https://github.com/nomiclabs/buidler/issues/272
+    // TODO(@alcuadrado): Remove this when the issue gets fixed
+    return pool.activate(initialTokens, initialShares, { from: activator, gas: 2000000 })
   }
 
   async function assertBNEquals (bnOrPromiseToBn, expectedBnNumberOrString) {
@@ -145,15 +157,19 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
 
       it("Shouldn't work when already activated", async () => {
         await activatePool(firstPoolMember, 1, 2)
-        await activatePool(firstPoolMember, 1, 2).should.be.rejected
+        await activatePool(firstPoolMember, 1, 2).should.be.rejectedWith('MolochPool: Already active')
       })
 
       it("Shouldn't accept more than MAX_NUMBER_OF_SHARES initial shares", async () => {
-        await activatePool(firstPoolMember, 1, MAX_NUMBER_OF_SHARES.add(new BN(1))).should.be.rejected
+        await activatePool(firstPoolMember, 1, MAX_NUMBER_OF_SHARES.add(new BN(1)))
+          .should.be.rejectedWith('MolochPool: Max number of shares exceeded')
       })
 
       it('Should fail if no allowance is given', async () => {
         await sendTokensTo(firstPoolMember, 1)
+        // This should be rejected rejectedWith("MolochPool: Initial tokens transfer failed")
+        // But the token used for testing doesn't return a boolean, but reverts on errors,
+        // so the MolochPool contract never gets to return a revert reason.
         await pool.activate(1, 1, { from: firstPoolMember }).should.be.rejected
       })
     })
@@ -162,37 +178,43 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       it("Shouldn't be callable", async () => {
         await sendTokensTo(deployer, 123)
         await giveAllowanceToMolochPool(deployer)
-        await pool.deposit(123, { from: deployer }).should.be.rejected
+        await pool.deposit(123, { from: deployer })
+          .should.be.rejectedWith('MolochPool: Not active')
       })
     })
 
     describe('withdraw', () => {
       it("Shouldn't be callable", async () => {
-        await pool.withdraw(0, { from: deployer }).should.be.rejected
+        await pool.withdraw(0, { from: deployer })
+          .should.be.rejectedWith('MolochPool: Not active')
       })
     })
 
     describe('keeperWithdraw', () => {
       it("Shouldn't be callable", async () => {
-        await pool.keeperWithdraw(0, deployer, { from: deployer }).should.be.rejected
+        await pool.keeperWithdraw(0, deployer, { from: deployer })
+          .should.be.rejectedWith('MolochPool: Not active')
       })
     })
 
     describe('addKeepers', () => {
       it("Shouldn't be callable", async () => {
-        await pool.addKeepers([], { from: deployer }).should.be.rejected
+        await pool.addKeepers([], { from: deployer })
+          .should.be.rejectedWith('MolochPool: Not active')
       })
     })
 
     describe('removeKeepers', () => {
       it("Shouldn't be callable", async () => {
-        await pool.removeKeepers([], { from: deployer }).should.be.rejected
+        await pool.removeKeepers([], { from: deployer })
+          .should.be.rejectedWith('MolochPool: Not active')
       })
     })
 
     describe('sync', () => {
       it("Shouldn't be callable", async () => {
-        await pool.sync(0, { from: deployer }).should.be.rejected
+        await pool.sync(0, { from: deployer })
+          .should.be.rejectedWith('MolochPool: Not active')
       })
     })
   })
@@ -226,7 +248,11 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
         await sendTokensTo(depositor, tokensNeeded)
         await giveAllowanceToMolochPool(depositor)
 
-        await pool.deposit(tokensNeeded, { from: depositor }).should.be.rejected
+        // We set the gas manually here because of
+        // https://github.com/nomiclabs/buidler/issues/272
+        // TODO(@alcuadrado): Remove this when the issue gets fixed
+        await pool.deposit(tokensNeeded, { from: depositor, gas: 2000000 })
+          .should.be.rejectedWith('MolochPool: Max number of shares exceeded')
       })
 
       it('Should be callable by anyone', async () => {
@@ -240,6 +266,9 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
 
       it('Should fail if no allowance is given', async () => {
         await sendTokensTo(depositor, 1)
+        // This should be rejected rejectedWith("MolochPool: Deposit transfer failed")
+        // But the token used for testing doesn't return a boolean, but reverts on errors,
+        // so the MolochPool contract never gets to return a revert reason.
         await pool.deposit(1, { from: depositor }).should.be.rejected
       })
     })
@@ -253,11 +282,13 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       })
 
       it('should fail if trying to withdraw more shares than the ones you own', async () => {
-        await pool.withdraw(initialShares + 1, { from: firstPoolMember }).should.be.rejected
+        await pool.withdraw(initialShares + 1, { from: firstPoolMember })
+          .should.be.rejectedWith('MolochPool: Not enough shares to burn')
       })
 
-      it("should fail if trying to any share if you aren't a donor", async () => {
-        await pool.withdraw(1, { from: depositor }).should.be.rejected
+      it("should fail if trying with any share if you aren't a donor", async () => {
+        await pool.withdraw(1, { from: depositor })
+          .should.be.rejectedWith('MolochPool: Not enough shares to burn')
       })
 
       it('Should transfer a proportional amount of tokens according to the shares burnt, and burn the shares', async () => {
@@ -288,7 +319,8 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       })
 
       it("should fail if you aren't a keeper", async () => {
-        await pool.keeperWithdraw(0, firstPoolMember, { from: otherAccounts[0] }).should.be.rejected
+        await pool.keeperWithdraw(0, firstPoolMember, { from: otherAccounts[0] })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
       })
 
       it('should be callable with 0 shares', async () => {
@@ -299,11 +331,13 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       })
 
       it('should fail if trying to withdraw more shares than the ones you own', async () => {
-        await pool.keeperWithdraw(initialShares + 1, firstPoolMember, { from: firstMemeberKeeper }).should.be.rejected
+        await pool.keeperWithdraw(initialShares + 1, firstPoolMember, { from: firstMemeberKeeper })
+          .should.be.rejectedWith('MolochPool: Not enough shares to burn')
       })
 
       it("should fail if trying to any share if you aren't a donor", async () => {
-        await pool.keeperWithdraw(1, depositor, { from: depositorKeeper }).should.be.rejected
+        await pool.keeperWithdraw(1, depositor, { from: depositorKeeper })
+          .should.be.rejectedWith('MolochPool: Not enough shares to burn')
       })
 
       it('Should transfer a proportional amount of tokens according to the shares burnt, and burn the shares, whithout affecting the keeper', async () => {
@@ -349,9 +383,12 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
         await pool.deposit(initialTokens * 2, { from: depositor })
 
         // try to call it with keepers before adding it
-        await pool.keeperWithdraw(initialShares, depositor, { from: depositorKeeper }).should.be.rejected
-        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[0] }).should.be.rejected
-        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[1] }).should.be.rejected
+        await pool.keeperWithdraw(initialShares, depositor, { from: depositorKeeper })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
+        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[0] })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
+        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[1] })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
 
         // Add them as keepers
         await pool.addKeepers([depositorKeeper, otherAccounts[0]], { from: depositor })
@@ -361,7 +398,8 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
         await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[0] }).should.be.fulfilled
 
         // This one shouldn't, it wasn't added
-        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[1] }).should.be.rejected
+        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[1] })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
       })
 
       it('should be callable with addresses that are already keepers', async () => {
@@ -393,8 +431,10 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
         await pool.removeKeepers([depositorKeeper, otherAccounts[0]], { from: depositor })
 
         // They shouldn't now
-        await pool.keeperWithdraw(initialShares, depositor, { from: depositorKeeper }).should.be.rejected
-        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[0] }).should.be.rejected
+        await pool.keeperWithdraw(initialShares, depositor, { from: depositorKeeper })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
+        await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[0] })
+          .should.be.rejectedWith('MolochPool: Sender is not a keeper')
 
         // Except this one, that wasn't removed
         await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[1] }).should.be.fulfilled
@@ -404,18 +444,23 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
     describe('Moloch syncing', () => {
       const proposed = otherAccounts[3]
 
-      it("Shouldn't fail if called with a toIndex larger than the number of proposals", async () => {
-        await pool.sync(1).should.be.rejected
+      it('Should fail if called with a toIndex larger than the number of proposals', async () => {
+        // We set the gas manually here because of
+        // https://github.com/nomiclabs/buidler/issues/272
+        // TODO(@alcuadrado): Remove this when the issue gets fixed
+        await pool.sync(1, { gas: 2000000 }).should.be.rejectedWith('MolochPool: Proposal index too high')
 
         await submitProposal(proposed, summoner, 0, 1, '')
 
         await pool.sync(1).should.be.fulfilled
-        await pool.sync(2).should.be.rejected
+
+        await pool.sync(2, { gas: 2000000 }).should.be.rejectedWith('MolochPool: Proposal index too high')
 
         await submitProposal(otherAccounts[0], summoner, 0, 1, '')
 
         await pool.sync(2).should.be.fulfilled
-        await pool.sync(3).should.be.rejected
+
+        await pool.sync(3, { gas: 2000000 }).should.be.rejectedWith('MolochPool: Proposal index too high')
       })
 
       it('Should be callable by anyone', async () => {
