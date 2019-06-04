@@ -12,6 +12,10 @@ import "./oz/IERC20.sol";
 contract MolochPool {
     using SafeMath for uint256;
 
+    event Sync (
+        uint256 currentProposalIndex
+    );
+
     event Deposit (
         uint256 tokenAmount,
         address donor
@@ -128,6 +132,8 @@ contract MolochPool {
         }
 
         currentProposalIndex = i;
+
+        emit Sync(currentProposalIndex);
     }
 
     // add tokens to the pool, mint new shares proportionally
