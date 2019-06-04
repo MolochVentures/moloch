@@ -12,6 +12,42 @@ import "./oz/IERC20.sol";
 contract MolochPool {
     using SafeMath for uint256;
 
+    event Deposit (
+        uint256 tokenAmount,
+        address donor
+    );
+
+    event Withdraw (
+        uint256 sharesToBurn,
+        address donor
+    );
+
+    event KeeperWithdraw (
+        uint256 sharesToBurn,
+        address donor,
+        address keeper
+    );
+
+    event AddKeepers (
+        address[] addedKeepers
+    );
+
+    event RemoveKeepers (
+        address[] removedKeepers
+    );
+
+    event SharesMinted (
+        uint256 sharesToMint,
+        address recipient,
+        uint256 totalPoolShares
+    );
+
+    event SharesBurned (
+        uint256 sharesToBurn,
+        address recipient,
+        uint256 totalPoolShares
+    );
+
     uint256 public totalPoolShares = 0; // the total shares outstanding of the pool
     uint256 public currentProposalIndex = 0; // the moloch proposal index that this pool has been synced to
 
@@ -102,11 +138,21 @@ contract MolochPool {
         require(approvedToken.transferFrom(msg.sender, address(this), tokenAmount));
 
         _mintSharesForAddress(sharesToMint, msg.sender);
+
+        emit Deposit(
+            tokenAmount,
+            msg.sender
+        );
     }
 
     // burn shares to proportionally withdraw tokens in pool
     function withdraw(uint256 sharesToBurn) public active noReentrancy {
         _withdraw(msg.sender, sharesToBurn);
+
+        emit Withdraw(
+            sharesToBurn,
+            msg.sender
+        );
     }
 
     // keeper burns shares to withdraw on behalf of the donor
@@ -114,6 +160,12 @@ contract MolochPool {
         require(donors[recipient].keepers[msg.sender]);
 
         _withdraw(recipient, sharesToBurn);
+
+        emit KeeperWithdraw(
+            sharesToBurn,
+            recipient,
+            msg.sender
+        );
     }
 
     function addKeepers(address[] calldata newKeepers) external active noReentrancy {
@@ -122,6 +174,8 @@ contract MolochPool {
         for (uint256 i = 0; i < newKeepers.length; i++) {
             donor.keepers[newKeepers[i]] = true;
         }
+
+        emit AddKeepers(newKeepers);
     }
 
     function removeKeepers(address[] calldata keepersToRemove) external active noReentrancy {
@@ -130,6 +184,8 @@ contract MolochPool {
         for (uint256 i = 0; i < keepersToRemove.length; i++) {
             donor.keepers[keepersToRemove[i]] = false;
         }
+
+        emit RemoveKeepers(keepersToRemove);
     }
 
     function _mintSharesForAddress(uint256 sharesToMint, address recipient) internal {
@@ -137,6 +193,12 @@ contract MolochPool {
         donors[recipient].shares = donors[recipient].shares.add(sharesToMint);
 
         require(totalPoolShares <= MAX_NUMBER_OF_SHARES);
+
+        emit SharesMinted(
+            sharesToMint,
+            recipient,
+            totalPoolShares
+        );
     }
 
     function _withdraw(address recipient, uint256 sharesToBurn) internal {
@@ -150,6 +212,12 @@ contract MolochPool {
         donor.shares = donor.shares.sub(sharesToBurn);
 
         require(approvedToken.transfer(recipient, tokensToWithdraw));
+
+        emit SharesBurned(
+            sharesToBurn,
+            recipient,
+            totalPoolShares
+        );
     }
 
 }
