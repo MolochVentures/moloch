@@ -37,7 +37,7 @@ async function advanceTimeInPeriods (periods) {
   await advanceTime(periods * PERIOD_DURATION_IN_SECONDS)
 }
 
-contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberKeeper, depositorKeeper, ...otherAccounts]) => {
+contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKeeper, depositorKeeper, ...otherAccounts]) => {
   let moloch
   let token
   let pool
@@ -315,7 +315,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
     describe('keeperWithdraw', () => {
       beforeEach('Add a keeper to depositor', async () => {
         await pool.addKeepers([depositorKeeper], { from: depositor })
-        await pool.addKeepers([firstMemeberKeeper], { from: firstPoolMember })
+        await pool.addKeepers([firstMemberKeeper], { from: firstPoolMember })
       })
 
       it("should fail if you aren't a keeper", async () => {
@@ -331,7 +331,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
       })
 
       it('should fail if trying to withdraw more shares than the ones you own', async () => {
-        await pool.keeperWithdraw(initialShares + 1, firstPoolMember, { from: firstMemeberKeeper })
+        await pool.keeperWithdraw(initialShares + 1, firstPoolMember, { from: firstMemberKeeper })
           .should.be.rejectedWith('MolochPool: Not enough shares to burn')
       })
 
@@ -601,7 +601,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
                 await assertTotalShares(initialShares)
                 await assertCurrentProposalIndex(1)
 
-                // Now we propose the memeber we want to test
+                // Now we propose the member we want to test
                 await submitProposal(proposed, summoner, 0, 1, '')
 
                 await advanceTimeInPeriods(ABORT_WINDOW_IN_PERIODS)
@@ -627,11 +627,11 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
                 await assertTotalShares(initialShares)
                 await assertCurrentProposalIndex(0)
 
-                // We first propose this memeber that doesn't get processed
+                // We first propose this member that doesn't get processed
                 // until the tested one is proposed and voted
                 await submitProposal(ignoredMember, summoner, 1, 1, '')
 
-                // Now we propose the memeber we want to test
+                // Now we propose the member we want to test
                 await submitProposal(proposed, summoner, 0, 1, '')
 
                 await advanceTimeInPeriods(ABORT_WINDOW_IN_PERIODS)
@@ -862,7 +862,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemeberK
               name: 'sharesToBurn'
             }
           ]
-        }, [firstMemeberKeeper, '1'])
+        }, [firstMemberKeeper, '1'])
 
         await web3.eth.sendTransaction({
           to: pool.address,
