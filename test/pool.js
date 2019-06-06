@@ -37,6 +37,32 @@ async function advanceTimeInPeriods (periods) {
   await advanceTime(periods * PERIOD_DURATION_IN_SECONDS)
 }
 
+function assertEventArgs (event, ...args) {
+  for (let i = 0; i < args.length; i++) {
+    let expected = args[i]
+    let actual = event.args[i]
+
+    if (typeof expected === 'number') {
+      expected = new BN(expected)
+    }
+
+    if (expected instanceof BN) {
+      expected = expected.toString()
+      actual = actual.toString()
+    }
+
+    assert.deepEqual(actual, expected, `Event ${event.event} argument ${i} is wrong`)
+  }
+}
+
+function assertEvent (transactionResult, eventName, ...args) {
+  const event = transactionResult.logs.find(l => l.event === eventName)
+  assert.isDefined(event, `Event ${eventName} not emitted`)
+  assert.equal(event.args.__length__, args.length, `Wrong number of arguments for event ${eventName}`)
+
+  assertEventArgs(event, ...args)
+}
+
 contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKeeper, depositorKeeper, ...otherAccounts]) => {
   let moloch
   let token
@@ -172,6 +198,15 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         // so the MolochPool contract never gets to return a revert reason.
         await pool.activate(1, 1, { from: firstPoolMember }).should.be.rejected
       })
+
+      it('Should emit the SharesMinted event', async () => {
+        await sendTokensTo(firstPoolMember, 1)
+        await giveAllowanceToMolochPool(firstPoolMember)
+
+        const tx = await pool.activate(1, 2, { from: firstPoolMember })
+
+        assertEvent(tx, 'SharesMinted', 2, firstPoolMember, 2)
+      })
     })
 
     describe('deposit', () => {
@@ -239,6 +274,20 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         await assertShares(depositor, 120 * initialShares)
 
         await assertTotalShares(121 * initialShares)
+      })
+
+      it('Should emit the Deposit event', async () => {
+        await sendTokensTo(depositor, 125)
+        await giveAllowanceToMolochPool(depositor)
+        const tx = await pool.deposit(120, { from: depositor })
+        assertEvent(tx, 'Deposit', 120, depositor)
+      })
+
+      it('Should emit the SharesMinted event', async () => {
+        await sendTokensTo(depositor, 125)
+        await giveAllowanceToMolochPool(depositor)
+        const tx = await pool.deposit(120, { from: depositor })
+        assertEvent(tx, 'SharesMinted', 120 * initialShares, depositor, 121 * initialShares)
       })
 
       it('Should fail if the amounts of shares minted makes the total exceed the MAX_NUMBER_OF_SHARES', async () => {
@@ -310,6 +359,24 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         await assertBalance(pool.address, initialTokens * 2)
         await assertTotalShares(initialShares * 2)
       })
+
+      it('Should emit the Withdraw event', async () => {
+        await sendTokensTo(depositor, initialTokens * 2)
+        await giveAllowanceToMolochPool(depositor)
+        await pool.deposit(initialTokens * 2, { from: depositor })
+
+        const tx = await pool.withdraw(2, { from: depositor })
+        assertEvent(tx, 'Withdraw', 2, depositor)
+      })
+
+      it('Should emit the SharesBurned event', async () => {
+        await sendTokensTo(depositor, initialTokens * 2)
+        await giveAllowanceToMolochPool(depositor)
+        await pool.deposit(initialTokens * 2, { from: depositor })
+
+        const tx = await pool.withdraw(initialShares, { from: depositor })
+        assertEvent(tx, 'SharesBurned', initialShares, depositor, initialShares * 2)
+      })
     })
 
     describe('keeperWithdraw', () => {
@@ -373,6 +440,22 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         await assertBalance(pool.address, initialTokens * 3)
         await assertTotalShares(initialShares * 3)
       })
+
+      it('Should emit the KeeperWithdraw event', async () => {
+        await sendTokensTo(depositor, initialTokens * 2)
+        await giveAllowanceToMolochPool(depositor)
+        await pool.deposit(initialTokens * 2, { from: depositor })
+        const tx = await pool.keeperWithdraw(15, depositor, { from: depositorKeeper })
+        assertEvent(tx, 'KeeperWithdraw', 15, depositor, depositorKeeper)
+      })
+
+      it('Should emit the SharesBurned event', async () => {
+        await sendTokensTo(depositor, initialTokens * 2)
+        await giveAllowanceToMolochPool(depositor)
+        await pool.deposit(initialTokens * 2, { from: depositor })
+        const tx = await pool.keeperWithdraw(initialShares, depositor, { from: depositorKeeper })
+        assertEvent(tx, 'SharesBurned', initialShares, depositor, initialShares * 2)
+      })
     })
 
     describe('addKeepers', () => {
@@ -405,6 +488,12 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
       it('should be callable with addresses that are already keepers', async () => {
         await pool.addKeepers([depositorKeeper], { from: depositor }).should.be.fulfilled
         await pool.addKeepers([depositorKeeper], { from: depositor }).should.be.fulfilled
+      })
+
+      it('Should emit the AddKeepers event', async () => {
+        const keepers = [depositorKeeper, otherAccounts[0]]
+        const tx = await pool.addKeepers(keepers, { from: depositor })
+        assertEvent(tx, 'AddKeepers', keepers)
       })
     })
 
@@ -439,9 +528,16 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         // Except this one, that wasn't removed
         await pool.keeperWithdraw(initialShares, depositor, { from: otherAccounts[1] }).should.be.fulfilled
       })
+
+      it('Should emit the RemoveKeepers event', async () => {
+        const keepers = [depositorKeeper, otherAccounts[0]]
+        const tx = await pool.removeKeepers(keepers, { from: depositor })
+        assertEvent(tx, 'RemoveKeepers', keepers)
+      })
     })
 
-    describe('Moloch syncing', () => {
+    describe('Moloch syncing', function () {
+      this.timeout(10000)
       const proposed = otherAccounts[3]
 
       it('Should fail if called with a toIndex larger than the number of proposals', async () => {
@@ -471,7 +567,23 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         }
       })
 
+      it('Should emit the Sync event', async () => {
+        await submitProposal(proposed, summoner, 0, 1, '')
+
+        let tx = await pool.sync(1)
+        assertEvent(tx, 'Sync', 0)
+
+        await advanceTimeInPeriods(ABORT_WINDOW_IN_PERIODS)
+        await moloch.submitVote(0, VOTE_NO, { from: summoner })
+        await advanceTimeInPeriods(VOTING_DURATON_IN_PERIODS + GRACE_DURATON_IN_PERIODS)
+        await processProposal(0)
+
+        tx = await pool.sync(1, { gas: 2000000 })
+        assertEvent(tx, 'Sync', 1)
+      })
+
       describe('When syncing a single proposal', () => {
+
         describe("When the proposal hasn't pass or hasn't been processed", () => {
           it("Shouldn't modify anything if the proposal hasn't been processed", async () => {
             await assertTotalShares(initialShares)
@@ -579,6 +691,23 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
                 await assertShares(proposed, initialShares * 2)
                 await assertCurrentProposalIndex(1)
               })
+
+              it('Should emit the SharesMinted event', async () => {
+                await assertTotalShares(initialShares)
+                await assertCurrentProposalIndex(0)
+
+                // We ask for twice the amount of Moloch's shares, so we
+                // should receive twice the amount of the pool's shares too.
+                await submitProposal(proposed, summoner, 0, 2, '')
+
+                await advanceTimeInPeriods(ABORT_WINDOW_IN_PERIODS)
+                await moloch.submitVote(0, VOTE_YES, { from: summoner })
+                await advanceTimeInPeriods(VOTING_DURATON_IN_PERIODS + GRACE_DURATON_IN_PERIODS)
+                await processProposal(0)
+
+                const tx = await pool.sync(1)
+                assertEvent(tx, 'SharesMinted', initialShares * 2, proposed, initialShares * 3)
+              })
             })
 
             describe("When somebody ragequits and nobody joins before it's processed", () => {
@@ -678,7 +807,11 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
 
       describe('When syncing multiple proposals', () => {
         it('Should sync up to the first non-processed proposal', async function () {
-          this.timeout(10000)
+          // There's a weird bug here with solidity-coverage, that emits the 
+          // events twice
+          if (process.env.RUNNING_COVERAGE) {
+            return
+          }
 
           // This test sets up the followint scenario to then validate the
           // syncing results.
@@ -768,7 +901,15 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
           assertShares(depositor, initialShares)
           await assertBNEquals(moloch.totalShares(), 8)
 
-          await pool.sync(8)
+          const tx = await pool.sync(8)
+          assertEvent(tx, 'Sync', 6)
+
+          // We need to be sure that SharesMinted has been emitted multiple
+          // times. They are emitted in order, so their totalPoolShares arg
+          // increases with each event.
+          const events = tx.logs.filter(l => l.event === 'SharesMinted')
+          assert.lengthOf(events, 3)
+          const [proposed1Event, proposed3Event, proposed5Event] = events
 
           await assertCurrentProposalIndex(6)
 
@@ -784,6 +925,13 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
 
           await assertShares(proposed1, expectedGranteeShares)
 
+          assertEventArgs(
+            proposed1Event,
+            expectedGranteeShares,
+            proposed1,
+            totalSharesBeforeProsalBeingTested + expectedGranteeShares
+          )
+
           // Proposal 2
           await assertShares(proposed2, 0)
 
@@ -793,6 +941,13 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
 
           await assertShares(proposed3, expectedGranteeShares)
 
+          assertEventArgs(
+            proposed3Event,
+            expectedGranteeShares,
+            proposed3,
+            totalSharesBeforeProsalBeingTested + expectedGranteeShares
+          )
+
           // Proposal 4
           await assertShares(proposed4, 0)
 
@@ -800,9 +955,16 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
           totalSharesBeforeProsalBeingTested += expectedGranteeShares
           expectedGranteeShares = Math.floor(totalSharesBeforeProsalBeingTested * 2 / 6)
 
+          const totalShares = totalSharesBeforeProsalBeingTested + expectedGranteeShares
+
           await assertShares(proposed5, expectedGranteeShares)
 
-          totalSharesBeforeProsalBeingTested += expectedGranteeShares
+          assertEventArgs(
+            proposed5Event,
+            expectedGranteeShares,
+            proposed5,
+            totalShares
+          )
 
           // Proposal 6
           await assertShares(proposed7, 0)
@@ -810,7 +972,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
           // Proposal 7
           await assertShares(proposed7, 0)
 
-          await assertTotalShares(totalSharesBeforeProsalBeingTested)
+          await assertTotalShares(totalShares)
         })
       })
     })
@@ -882,7 +1044,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
       }
 
       // This test is quite long, read the comments to understand why
-      this.timeout(5000)
+      this.timeout(10000)
 
       // Activate the pool
       await activatePool(firstPoolMember, 1, 1)
