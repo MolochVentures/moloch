@@ -1,3 +1,12 @@
 node_modules/
 build/
+cache/
+artifacts/
+.DS_Store
+.idea/
+coverage.json
+coverage/
+allFiredEvents
+coverageEnv/
+scTopics
 .DS_Store

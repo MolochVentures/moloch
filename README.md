@@ -45,16 +45,96 @@ In the more likely case of a contentious vote, those who oppose strongly enough 
 
 In this fashion, the ragequit mechanism also provides an interesting incentive in favor of Guild cohesion. Guild members are disincentivized from voting **Yes** on proposals that they believe will make other members ragequit. Those who do vote **Yes** on contentious proposals will be forced to additionally dilute themselves proportional to the fraction of Voting Shares that ragequit in response.
 
+## Installation
+
+To intall this project run `npm install`.
+
 ## Testing
 
-`npm i`
-`npm run compile` (note the gnosis safe contracts are in the artifacts/ repo)
+To tests the contracts run `npm run test`.
 
-In a separate window: `npm run gcli`
-`Ganache CLI v6.1.5 (ganache-core: 2.1.4)`
+To compute their code coverage run `npm run coverage`.
 
-Then, `truffle test`
-`Truffle v5.0.0-beta.0`
+## Deploying an interacting with a Moloch DAO and a Pool
+
+This project includes Buidler tasks for deploying and using DAOs and Pools.
+
+### Deployment
+
+
+#### Deploying a new DAO
+
+Follow this instructions to deploy a new DAO:
+
+1. Edit `buidler.config.js`, setting the values for `INFURA_API_KEY` and `MAINNET_PRIVATE_KEY`.
+2. Edit `deployment-params.js`, setting your desired deployment parameters.
+3. Run `npx buidler moloch-deploy --network mainnet`
+4. Edit `buidler.config.js`, setting the address of the DAO in `networks.mainnet.deployedContracts.moloch`.
+
+#### Deploying a new Pool
+
+Follow this instructions to deploy a new Pool:
+
+1. Edit `buidler.config.js`, setting the values for `INFURA_API_KEY` and `MAINNET_PRIVATE_KEY`.
+2. Make sure you have the right address in `buidler.config.js`'s `networks.mainnet.deployedContracts.moloch` field.
+3. Run `npx buidler pool-deploy --network mainnet --shares <shares> --tokens <tokens>` with the initial amount of tokens you want to donate to the pool, and how many shares you want in return.
+
+### Interacting with the smart contracts
+
+This project has tasks to work with DAOs and Pools. To use them, you should first follow this instructions:
+
+1. Edit `buidler.config.js`, setting the values for `INFURA_API_KEY` and `MAINNET_PRIVATE_KEY`.
+2. Make sure you have the right address in `buidler.config.js`'s `networks.mainnet.deployedContracts.moloch` field.
+3. If you want to use a Pool, make sure you have the right address in `buidler.config.js`'s `networks.mainnet.deployedContracts.pool` field.
+
+After following those instructions, you can run `npx buidler` to get a list with all the tasks:
+
+```
+$ npx buidler
+AVAILABLE TASKS:
+
+  clean                         Clears the cache and deletes all artifacts
+  compile                       Compiles the entire project, building all artifacts
+  console                       Opens a buidler console
+  flatten                       Flattens and prints all contracts and their dependencies
+  help                          Prints this message
+  moloch-deploy                 Deploys a new instance of the Moloch DAO
+  moloch-process-proposal       Processes a proposal
+  moloch-ragequit               Ragequits, burning some shares and getting tokens back
+  moloch-submit-proposal        Submits a proposal
+  moloch-submit-vote            Submits a vote
+  moloch-update-delegate        Updates your delegate
+  pool-add-keeper               Adds a keeper
+  pool-deploy                   Deploys a new instance of the pool and activates it
+  pool-deposit                  Donates tokens to the pool
+  pool-keeper-withdraw          Withdraw other users' tokens from the pool
+  pool-remove-keeper            Removes a keeper
+  pool-sync                     Syncs the pool
+  pool-withdraw                 Withdraw tokens from the pool
+  run                           Runs a user-defined script after compiling the project
+  test                          Runs mocha tests
+```
+
+
+You can run `npx buidler help <task>` to get help about each tasks and their parameters. For example:
+
+```
+$ npx buidler help moloch-submit-proposal
+Buidler version 1.0.0-beta.7
+
+Usage: buidler [GLOBAL OPTIONS] moloch-submit-proposal --applicant <STRING> --details <STRING> --shares <STRING> --tribute <STRING>
+
+OPTIONS:
+
+  --applicant   The address of the applicant
+  --details     The proposal's details
+  --shares      The number of shares requested
+  --tribute     The number of token's wei offered as tribute
+
+moloch-submit-proposal: Submits a proposal
+
+For global options help run: buidler help
+```
 
 # Moloch.sol
 
@@ -180,7 +260,7 @@ Applied only to `submitProposal` and `submitVote`.
 2. Deploys a new `GuildBank.sol` contract and saves the reference.
 3. Saves passed in values for global constants `periodDuration`, `votingPeriodLength`, `gracePeriodLength`, `abortWindow`, `proposalDeposit`, `dilutionBound`,  and `processingReward`.
 4. Saves the start time of Moloch `summoningTime = now`.
-6. Mints 1 share for the `summoner` and saves their membership.
+5. Mints 1 share for the `summoner` and saves their membership.
 
 ```
     constructor(

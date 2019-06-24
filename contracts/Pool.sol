@@ -71,12 +71,12 @@ contract MolochPool {
     mapping (address => Donor) public donors;
 
     modifier active {
-        require(totalPoolShares > 0);
+        require(totalPoolShares > 0, "MolochPool: Not active");
         _;
     }
 
     modifier noReentrancy() {
-        require(!locked, "Reentrant call.");
+        require(!locked, "MolochPool: Reentrant call");
         locked = true;
         _;
         locked = false;
@@ -88,9 +88,12 @@ contract MolochPool {
     }
 
     function activate(uint256 initialTokens, uint256 initialPoolShares) public noReentrancy {
-        require(totalPoolShares == 0);
+        require(totalPoolShares == 0, "MolochPool: Already active");
 
-        require(approvedToken.transferFrom(msg.sender, address(this), initialTokens));
+        require(
+            approvedToken.transferFrom(msg.sender, address(this), initialTokens),
+            "MolochPool: Initial tokens transfer failed"
+        );
         _mintSharesForAddress(initialPoolShares, msg.sender);
     }
 
@@ -103,7 +106,10 @@ contract MolochPool {
     //   - protects pool contributors if many Moloch members ragequit before the proposal is processed by reducing follow on funding
     //   - e.g. if 50% of Moloch shares ragequit after someone voted yes, the grant proposal would get 50% less follow-on from the pool
     function sync(uint256 toIndex) public active noReentrancy {
-        require(toIndex <= moloch.getProposalQueueLength());
+        require(
+            toIndex <= moloch.getProposalQueueLength(),
+            "MolochPool: Proposal index too high"
+        );
 
         // declare proposal params
         address applicant;
@@ -124,6 +130,10 @@ contract MolochPool {
 
             // passing grant proposal, mint pool shares proportionally on behalf of the applicant
             if (!aborted && didPass && tokenTribute == 0 && sharesRequested > 0) {
+                // This can't revert:
+                //   1. maxTotalSharesAtYesVote > 0, otherwise nobody could have voted.
+                //   2. sharesRequested is <= 10**18 (see Moloch.sol:172), and
+                //      totalPoolShares <= 10**30, so multiplying them is <= 10**48 and < 2**160
                 uint256 sharesToMint = totalPoolShares.mul(sharesRequested).div(maxTotalSharesAtYesVote); // for a passing proposal, maxTotalSharesAtYesVote is > 0
                 _mintSharesForAddress(sharesToMint, applicant);
             }
@@ -141,7 +151,10 @@ contract MolochPool {
 
         uint256 sharesToMint = totalPoolShares.mul(tokenAmount).div(approvedToken.balanceOf(address(this)));
 
-        require(approvedToken.transferFrom(msg.sender, address(this), tokenAmount));
+        require(
+            approvedToken.transferFrom(msg.sender, address(this), tokenAmount),
+            "MolochPool: Deposit transfer failed"
+        );
 
         _mintSharesForAddress(sharesToMint, msg.sender);
 
@@ -163,7 +176,10 @@ contract MolochPool {
 
     // keeper burns shares to withdraw on behalf of the donor
     function keeperWithdraw(uint256 sharesToBurn, address recipient) public active noReentrancy {
-        require(donors[recipient].keepers[msg.sender]);
+        require(
+            donors[recipient].keepers[msg.sender],
+            "MolochPool: Sender is not a keeper"
+        );
 
         _withdraw(recipient, sharesToBurn);
 
@@ -198,7 +214,10 @@ contract MolochPool {
         totalPoolShares = totalPoolShares.add(sharesToMint);
         donors[recipient].shares = donors[recipient].shares.add(sharesToMint);
 
-        require(totalPoolShares <= MAX_NUMBER_OF_SHARES);
+        require(
+            totalPoolShares <= MAX_NUMBER_OF_SHARES,
+            "MolochPool: Max number of shares exceeded"
+        );
 
         emit SharesMinted(
             sharesToMint,
@@ -210,14 +229,20 @@ contract MolochPool {
     function _withdraw(address recipient, uint256 sharesToBurn) internal {
         Donor storage donor = donors[recipient];
 
-        require(donor.shares >= sharesToBurn);
+        require(
+            donor.shares >= sharesToBurn,
+            "MolochPool: Not enough shares to burn"
+        );
 
         uint256 tokensToWithdraw = approvedToken.balanceOf(address(this)).mul(sharesToBurn).div(totalPoolShares);
 
         totalPoolShares = totalPoolShares.sub(sharesToBurn);
         donor.shares = donor.shares.sub(sharesToBurn);
 
-        require(approvedToken.transfer(recipient, tokensToWithdraw));
+        require(
+            approvedToken.transfer(recipient, tokensToWithdraw),
+            "MolochPool: Withdrawal transfer failed"
+        );
 
         emit SharesBurned(
             sharesToBurn,

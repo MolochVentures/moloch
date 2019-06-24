@@ -21,7 +21,7 @@ contract Moloch {
     /***************
     GLOBAL CONSTANTS
     ***************/
-    uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
+  uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
     uint256 public abortWindow; // default = 5 periods (1 day)
