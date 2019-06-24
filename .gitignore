@@ -9,3 +9,4 @@ coverage/
 allFiredEvents
 coverageEnv/
 scTopics
+.DS_Store
