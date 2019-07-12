@@ -1,3 +1,4 @@
+require('console.table')
 const BN = require('bn.js')
 const deploymentParams = require('../deployment-params')
 
@@ -9,6 +10,8 @@ const {
   hasEnoughAllowance,
   giveAllowance
 } = require('./utils')
+
+const { getProposals, getDetailedProposal } = require('./proposal-utils')
 
 task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
   .setAction(async () => {
@@ -44,7 +47,7 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
 
     const Moloch = artifacts.require('Moloch')
 
-    console.log("Deploying...")
+    console.log('Deploying...')
     const moloch = await Moloch.new(
       deploymentParams.SUMMONER,
       deploymentParams.TOKEN,
@@ -57,7 +60,7 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
       deploymentParams.PROCESSING_REWARD
     )
 
-    console.log("")
+    console.log('')
     console.log('Moloch DAO deployed. Address:', moloch.address)
     console.log("Set this address in buidler.config.js's networks section to use the other tasks")
   })
@@ -177,4 +180,45 @@ task('moloch-update-delegate', 'Updates your delegate')
 
     await moloch.updateDelegateKey(delegate)
     console.log(`Delegate updated`)
+  })
+
+task('moloch-list-proposals', 'List all proposals').setAction(async () => {
+  await run('compile')
+
+  const moloch = await getDeployedMoloch()
+  if (moloch === undefined) {
+    return
+  }
+
+  console.log('Fetching proposals...')
+
+  try {
+    // Get all the proposals in parallel
+    const proposals = await getProposals(moloch)
+
+    console.table(proposals)
+  } catch ({ error }) {
+    console.log('Something bad happened! Please try again in a few minutes.')
+  }
+})
+
+task('moloch-proposal-details', 'Displays all the information for a proposal')
+  .addParam('proposalId', 'The id for the proposal', undefined, types.int)
+  .setAction(async ({ proposalId }) => {
+    await run('compile')
+
+    const moloch = await getDeployedMoloch()
+    if (moloch === undefined) {
+      return
+    }
+
+    console.log(`Fetching proposal ${proposalId}...\n`)
+
+    const proposal = await getDetailedProposal(moloch, proposalId)
+
+    if (proposal === undefined) {
+      return
+    }
+
+    console.log(proposal)
   })

@@ -24,7 +24,7 @@ task('pool-deploy', 'Deploys a new instance of the pool and activates it')
     }
 
     const token = await getApprovedToken()
-    if (token == undefined) {
+    if (token === undefined) {
       return
     }
 
@@ -110,7 +110,7 @@ task('pool-deposit', 'Donates tokens to the pool')
     }
 
     const token = await getApprovedToken()
-    if (token == undefined) {
+    if (token === undefined) {
       return
     }
 
