@@ -3,6 +3,12 @@
 // - syncs with Moloch proposal queue to mint shares for grantees
 // - allows donors to withdraw tokens at any time
 
+// TODO Tests
+// - empty the pool of shares, re-activate
+//   - do this but at the same proposal index
+//   - (startingProposalIndex = currentProposalIndex)
+// - does follow on grant for the startingProposalIndex (if it is a grant)
+
 pragma solidity 0.5.3;
 
 import "./Moloch.sol";
@@ -87,13 +93,19 @@ contract MolochPool {
         approvedToken = IERC20(moloch.approvedToken());
     }
 
-    function activate(uint256 initialTokens, uint256 initialPoolShares) public noReentrancy {
+    function activate(uint256 initialTokens, uint256 initialPoolShares, uint256 startingProposalIndex) public noReentrancy {
         require(totalPoolShares == 0, "MolochPool: Already active");
 
         require(
             approvedToken.transferFrom(msg.sender, address(this), initialTokens),
             "MolochPool: Initial tokens transfer failed"
         );
+
+        require(startingProposalIndex >= currentProposalIndex, "MolochPool: Can't regress to an already synced proposal index");
+
+        (, , , , , , processed, , , , , ) = moloch.proposalQueue(startingProposalIndex);
+        require(processed, "MolochPool: Starting proposal must have been processed");
+
         _mintSharesForAddress(initialPoolShares, msg.sender);
     }
 
