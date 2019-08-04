@@ -17,26 +17,29 @@ contract MolochPool {
     );
 
     event Deposit (
-        uint256 tokenAmount,
-        address donor
+        address donor,
+        uint256 sharesMinted,
+        uint256 tokensDeposited
     );
 
     event Withdraw (
-        uint256 sharesToBurn,
-        address donor
+        address donor,
+        uint256 sharesBurned
     );
 
     event KeeperWithdraw (
-        uint256 sharesToBurn,
         address donor,
+        uint256 sharesToBurn,
         address keeper
     );
 
     event AddKeepers (
+        address donor,
         address[] addedKeepers
     );
 
     event RemoveKeepers (
+        address donor,
         address[] removedKeepers
     );
 
@@ -159,8 +162,9 @@ contract MolochPool {
         _mintSharesForAddress(sharesToMint, msg.sender);
 
         emit Deposit(
-            tokenAmount,
-            msg.sender
+            msg.sender,
+            sharesToMint,
+            tokenAmount
         );
     }
 
@@ -169,8 +173,8 @@ contract MolochPool {
         _withdraw(msg.sender, sharesToBurn);
 
         emit Withdraw(
-            sharesToBurn,
-            msg.sender
+            msg.sender,
+            sharesToBurn
         );
     }
 
@@ -184,8 +188,8 @@ contract MolochPool {
         _withdraw(recipient, sharesToBurn);
 
         emit KeeperWithdraw(
-            sharesToBurn,
             recipient,
+            sharesToBurn,
             msg.sender
         );
     }
@@ -197,7 +201,7 @@ contract MolochPool {
             donor.keepers[newKeepers[i]] = true;
         }
 
-        emit AddKeepers(newKeepers);
+        emit AddKeepers(msg.sender, newKeepers);
     }
 
     function removeKeepers(address[] calldata keepersToRemove) external active noReentrancy {
@@ -207,7 +211,7 @@ contract MolochPool {
             donor.keepers[keepersToRemove[i]] = false;
         }
 
-        emit RemoveKeepers(keepersToRemove);
+        emit RemoveKeepers(msg.sender, keepersToRemove);
     }
 
     function _mintSharesForAddress(uint256 sharesToMint, address recipient) internal {
