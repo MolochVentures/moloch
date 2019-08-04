@@ -29,7 +29,7 @@ contract MolochPool {
 
     event KeeperWithdraw (
         address donor,
-        uint256 sharesToBurn,
+        uint256 sharesBurned,
         address keeper
     );
 
