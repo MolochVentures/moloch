@@ -6,7 +6,7 @@
 // - replacing members?
 //   - hasn't been discussed
 // - accountability to stakeholders
-//   - some kind of siganlling
+//   - some kind of signalling
 
 
 pragma solidity 0.5.3;
@@ -80,7 +80,7 @@ contract Moloch {
         uint256 noVotes; // the total number of NO votes for this proposal
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
-        bool aborted; // true only if applicant calls "abort" fn before end of voting period
+        bool aborted; // true only if applicant calls "abort" before end of voting period
         uint256 tokenTribute; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
