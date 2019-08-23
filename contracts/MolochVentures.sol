@@ -132,6 +132,7 @@ contract Moloch {
     /******************
     INTERNAL ACCOUNTING
     ******************/
+    uint256 public proposalCount = 0; // total proposals submitted
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalSharesRequested = 0; // total shares that have been requested in unprocessed proposals
 
@@ -148,6 +149,7 @@ contract Moloch {
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
+
     struct Proposal {
         address proposer; // the member who submitted the proposal
         address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
@@ -155,6 +157,7 @@ contract Moloch {
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
+        bool sponsored; // true only if the proposal has been submitted by a member
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
@@ -166,6 +169,11 @@ contract Moloch {
 
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
+
+    // proposals by ID
+    mapping (uint => Proposal) public proposals;
+
+    // TODO have this be an array of proposalIds to prevent duplicate storage
     Proposal[] public proposalQueue;
 
     /********
@@ -239,7 +247,6 @@ contract Moloch {
         string memory details
     )
         public
-        onlyDelegate
     {
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
@@ -258,20 +265,15 @@ contract Moloch {
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
 
-        // compute startingPeriod for proposal
-        uint256 startingPeriod = max(
-            getCurrentPeriod(),
-            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
-        ).add(1);
-
         // create proposal ...
         Proposal memory proposal = Proposal({
             proposer: memberAddress,
             applicant: applicant,
             sharesRequested: sharesRequested,
-            startingPeriod: startingPeriod,
+            startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
+            sponsored: false,
             processed: false,
             didPass: false,
             aborted: false,
@@ -280,11 +282,33 @@ contract Moloch {
             maxTotalSharesAtYesVote: 0
         });
 
+        proposals[proposalCount] = proposal; // save proposal by its id
+        proposalCount += 1; // increment proposal counter
+    }
+
+    function sponsorProposal(
+        uint256 proposalId
+    )
+        public
+        onlyDelegate
+    {
+        Proposal memory proposal = proposals[proposalId];
+
+        require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
+
+        // compute startingPeriod for proposal
+        uint256 startingPeriod = max(
+            getCurrentPeriod(),
+            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
+        ).add(1);
+
+        proposal.startingPeriod = startingPeriod;
+
         // ... and append it to the queue
         proposalQueue.push(proposal);
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
-        emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // TODO emit SponsorProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -430,6 +454,11 @@ contract Moloch {
         emit Ragequit(msg.sender, sharesToBurn);
     }
 
+
+    // TODO
+    // - convert to use id not index
+    // - need to convert the whole damn contract...
+    // - allow aborting propsosals EITHER in queue but in abortWindow OR not-yet-sponsored proposals
     function abort(uint256 proposalIndex) public {
         require(proposalIndex < proposalQueue.length, "Moloch::abort - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
