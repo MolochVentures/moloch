@@ -149,11 +149,14 @@ contract Moloch {
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
+    // Multi-applicant proposals
+    // - stageProposal takes address[], shares[]
+    //   - allow multi-token tribute per member?
 
     struct Proposal {
         address proposer; // the member who submitted the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
-        uint256 sharesRequested; // the # of shares the applicant is requesting
+        address[] applicants; // the applicant who wishes to become a member - this key will be used for withdrawals
+        uint256[] sharesRequested; // the # of shares the applicant is requesting
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
@@ -161,7 +164,7 @@ contract Moloch {
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
-        uint256 tokenTribute; // amount of tokens offered as tribute
+        uint256[] tokenTributes; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
@@ -241,34 +244,28 @@ contract Moloch {
     *****************/
 
     function submitProposal(
-        address applicant,
-        uint256 tokenTribute,
-        uint256 sharesRequested,
+        address[] applicants,
+        uint256[] tokenTributes,
+        uint256[] sharesRequested,
         string memory details
     )
         public
     {
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
-        // Make sure we won't run into overflows when doing calculations with shares.
-        // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
-        // on the number of shares that can exist until this proposal has been processed.
-        require(totalShares.add(totalSharesRequested).add(sharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
+        // TODO one line?
+        require(applicants.length == tokenTributes.length);
+        require(applicants.length == sharesRequested.length);
 
-        totalSharesRequested = totalSharesRequested.add(sharesRequested);
-
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
-
-        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
-
-        // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(applicant, address(this), tokenTribute), "Moloch::submitProposal - tribute token transfer failed");
+        for (var j=0; j < applicants.length; j++) {
+            // collect tribute from applicant and store it in the Moloch until the proposal is processed
+            require(approvedToken.transferFrom(applicants[j], address(this), tokenTributes[j]), "Moloch::submitProposal - tribute token transfer failed");
+        }
 
         // create proposal ...
         Proposal memory proposal = Proposal({
-            proposer: memberAddress,
-            applicant: applicant,
+            proposer: address(0),
+            applicants: applicants,
             sharesRequested: sharesRequested,
             startingPeriod: 0,
             yesVotes: 0,
@@ -277,7 +274,7 @@ contract Moloch {
             processed: false,
             didPass: false,
             aborted: false,
-            tokenTribute: tokenTribute,
+            tokenTributes: tokenTributes,
             details: details,
             maxTotalSharesAtYesVote: 0
         });
@@ -292,7 +289,25 @@ contract Moloch {
         public
         onlyDelegate
     {
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+
+        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
+        require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+
         Proposal memory proposal = proposals[proposalId];
+
+        uint256 memory proposalSharesRequested = 0;
+        for (var i=0; i < proposal.sharesRequested.length; i++) {
+            proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
+        }
+
+        // Make sure we won't run into overflows when doing calculations with shares.
+        // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
+        // on the number of shares that can exist until this proposal has been processed.
+        require(totalShares.add(totalSharesRequested).add(proposalSharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
+
+        totalSharesRequested = totalSharesRequested.add(proposalSharesRequested);
+
 
         require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
 
@@ -303,6 +318,7 @@ contract Moloch {
         ).add(1);
 
         proposal.startingPeriod = startingPeriod;
+        proposal.proposer = msg.sender;
 
         // ... and append it to the queue
         proposalQueue.push(proposal);
@@ -351,6 +367,8 @@ contract Moloch {
         emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
+    // TODO
+    // - proposalQueue to track ids of proposals, then lookup by mapping
     function processProposal(uint256 proposalIndex) public {
         require(proposalIndex < proposalQueue.length, "Moloch::processProposal - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
@@ -359,8 +377,14 @@ contract Moloch {
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
         require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
 
+        // TODO probably better to save total shares requested for a proposal to avoid needing to compute via loops multiple times
+        uint256 memory proposalSharesRequested = 0;
+        for (var i=0; i < proposal.sharesRequested.length; i++) {
+            proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
+        }
+
         proposal.processed = true;
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+        totalSharesRequested = totalSharesRequested.sub(proposal.proposalSharesRequested);
 
         bool didPass = proposal.yesVotes > proposal.noVotes;
 
@@ -374,23 +398,26 @@ contract Moloch {
 
             proposal.didPass = true;
 
-            // if the applicant is already a member, add to their existing shares
-            if (members[proposal.applicant].exists) {
-                members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
+            for (var j=0; j < proposal.applicants.length; j++) {
+                // if the applicant is already a member, add to their existing shares
+                if (members[proposal.applicant].exists) {
+                    members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
-            // the applicant is a new member, create a new record for them
-            } else {
-                // if the applicant address is already taken by a member's delegateKey, reset it to their member address
-                if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
-                    address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
-                    memberAddressByDelegateKey[memberToOverride] = memberToOverride;
-                    members[memberToOverride].delegateKey = memberToOverride;
+                // the applicant is a new member, create a new record for them
+                } else {
+                    // if the applicant address is already taken by a member's delegateKey, reset it to their member address
+                    if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
+                        address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
+                        memberAddressByDelegateKey[memberToOverride] = memberToOverride;
+                        members[memberToOverride].delegateKey = memberToOverride;
+                    }
+
+                    // use applicant address as delegateKey by default
+                    members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
+                    memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
                 }
-
-                // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
-                memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
+
 
             // mint new shares
             totalShares = totalShares.add(proposal.sharesRequested);
