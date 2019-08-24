@@ -1,7 +1,3 @@
-// Status
-// - just added payment token distribution (and balance check) on process proposal
-
-
 // Goals
 // - Safe Approvals (two-phase)
 // - Multi-applicant proposals
@@ -48,6 +44,14 @@
 //     - If yes, keep it on Moloch
 //     - If no, keep a copy on the GuildBank and keep them synchronized
 // - single token tribute / payment per proposal
+// - If for whatever reason a whitelisted ERC20 breaks and can't be transferred
+//   - add an escape hatch which triggers after 1 week of not processing the proposal
+//   - if 1 week passes, the proposal is considered processed and failed
+//     - no tribute is returned
+//     - no payments are made
+//     - no shares are minted
+//   - make a special bool for this to indicate?
+//     - escaped?
 
 // ERC20 Rebalancing
 // - Proposals to send and receive individual tokens
@@ -552,6 +556,23 @@ contract MolochVentures {
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
+        _ragequit(sharesToBurn, approvedTokens);
+
+        emit Ragequit(msg.sender, sharesToBurn);
+    }
+
+    function safeRagequit(uint256 sharesToBurn, address[] tokenList) public onlyMember {
+        // all tokens in tokenList must be in the tokenWhitelist
+        for (var i=0; i < tokenList.length; i++) {
+            require(tokenWhitelist[tokenList[i]]);
+        }
+
+        _ragequit(sharesToBurn, tokenList);
+
+        // TODO emit SafeRagequit(msg.sender, sharesToBurn, tokenList);
+    }
+
+    function _ragequit(uint256 sharesToBurn, address[] approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
@@ -566,11 +587,9 @@ contract MolochVentures {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares),
+            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, approvedTokens),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
-
-        emit Ragequit(msg.sender, sharesToBurn);
     }
 
     // TODO
