@@ -10,7 +10,7 @@
 // - Contract Interaction
 // - Separation of Voting Power and Capital
 
-// Usage Patterns
+// Usage Patterns To Support
 // - rDAI investing (interest rate swaps)
 // - provide liquidity on uniswap
 // - open a CDP
@@ -32,17 +32,9 @@
 // ERC20 Support
 // - ERC20 whitelist + safeRedeem
 // - proposal field for "whitelistToken"
-//   - check that tribute / shares are 0
-//   - check that applicant is address(0)
-//   - check that ERC20 is not already whitelisted
 // - whitelist mapping
 // - appovedTokens becomes array
 //   - loop over it for ragequit
-// - question -> where should approvedToken / whitelist live?
-//   - Moloch? GuildBank? Both?
-//   - Can GuildBank read from the approvedToken array?
-//     - If yes, keep it on Moloch
-//     - If no, keep a copy on the GuildBank and keep them synchronized
 // - single token tribute / payment per proposal
 // - If for whatever reason a whitelisted ERC20 breaks and can't be transferred
 //   - add an escape hatch which triggers after 1 week of not processing the proposal
@@ -114,19 +106,6 @@
 
 // Separation of Voting Power and Capital
 // - bring back Loot Tokens
-
-function forward(address destination, uint value, bytes data) public onlyOwner {
-    require(executeCall(destination, value, data));
-    Forwarded(destination, value, data);
-}
-
-// copied from GnosisSafe
-// https://github.com/gnosis/gnosis-safe-contracts/blob/master/contracts/GnosisSafe.sol
-function executeCall(address to, uint256 value, bytes data) internal returns (bool success) {
-    assembly {
-        success := call(gas, to, value, add(data, 0x20), mload(data), 0, 0)
-    }
-}
 
 // Open Questions
 // - Should we keep the 1 week voting / grace periods?
@@ -208,6 +187,8 @@ contract MolochVentures {
         address tributeToken; // token being offered as tribute
         uint256[] paymentsRequested; // the payments requested for each applicant
         address paymentToken; // token to send payment in
+        address proxyAddress; // address of proxy contract to interact with
+        bytes proxyPayload; // payload to send to proxy contract
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
@@ -245,6 +226,11 @@ contract MolochVentures {
 
     modifier onlyDelegate {
         require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyDelegate - not a delegate");
+        _;
+    }
+
+    modifier onlyAuthorizedProxy {
+        require(msg.sender == authorizedProxy); // must be called by authorizedProxy
         _;
     }
 
@@ -315,6 +301,8 @@ contract MolochVentures {
         address tributeToken,
         uint256[] paymentsRequested,
         address paymentToken,
+        address proxyAddress,
+        bytes proxyPayload,
         string memory details
     )
         public
@@ -496,7 +484,7 @@ contract MolochVentures {
             proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
         }
 
-        proposal.processed = true;
+        proposal.processed = true; // will prevent re-entry of this function from the proxy call
         totalSharesRequested = totalSharesRequested.sub(proposal.proposalSharesRequested);
 
         bool didPass = proposal.yesVotes > proposal.noVotes;
@@ -515,6 +503,18 @@ contract MolochVentures {
         // Make sure there is enough tokens for payments, or auto-fail
         if (IERC20(proposal.paymentToken).balanceOf(address(guildBank)) >= totalPaymentsRequested) {
             didPass = false;
+        }
+
+        // Note - We execute the proxy transaction here so that if it fails we can make the proposal fail
+        if (didPass && !proposal.aborted) {
+            authorizedProxy = proposal.proxyAddress;
+            // TODO
+            // - very important that the proxy contract is audited to ensure that it returns true if it succeeds
+            // - otherwise it could withdraw tokens and still receive tribute tokens back
+            if (!executeCall(proposal.proxyAddress, proposal.proxyPayload)) {
+                didPass = false
+            }
+            authorizedProxy = address(0);
         }
 
         // PROPOSAL PASSED
@@ -646,10 +646,9 @@ contract MolochVentures {
         );
     }
 
-    // TODO
-    function withdrawTokens(address tokenAddress, uint256 amount) public {
+    function proxyWithdrawTokens(address tokenAddress, address receiver, uint256 amount) public onlyAuthorizedProxy {
+        require(guildBank.withdrawToken(tokenAddress, receiver, amount));
     }
-
 
     // TODO
     // - convert to use id not index
@@ -693,6 +692,13 @@ contract MolochVentures {
         member.delegateKey = newDelegateKey;
 
         emit UpdateDelegateKey(msg.sender, newDelegateKey);
+    }
+
+    // https://github.com/gnosis/gnosis-safe-contracts/blob/master/contracts/GnosisSafe.sol
+    function executeCall(address to, bytes data) internal returns (bool success) {
+        assembly {
+            success := call(gas, to, 0, add(data, 0x20), mload(data), 0, 0)
+        }
     }
 
     /***************
