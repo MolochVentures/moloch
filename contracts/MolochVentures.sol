@@ -8,6 +8,7 @@
 // - Guild Kick
 // - Spam Protection
 // - Contract Interaction
+// - Separation of Voting Power and Capital
 
 // Usage Patterns
 // - rDAI investing (interest rate swaps)
@@ -29,38 +30,20 @@
 //   - allow multi-token tribute per member?
 
 // ERC20 Support
-// - how to avoid risk of malicious token?
-//   - ATTACK -> escrow bad token, disable token transfers, can no longer process proposals
-//   - possible to operate a token whitelist?
-//     - before any proposals to interact with a token, it must be added to the whitelist
-//       - possibly have a list of approvedERC20s that are set at deployment to save time
-//         - or do this as part of a "summoning phase"
-//       - this means there are now multiple types of proposals... more complexity
-//   - is there a way to remove a token if it breaks / becomes malicious
-//     - this might be better than a whilelist because even if we have a whitelist we might want this,
-//       but if we just operate a blacklist then we might not need a whitelist
-//     - issue -> if we only have 1 proposal track and enforce order, we can't submit a blacklisting proposal
-// - probably the best compromise -> whitelist + safeRedeem
-//   - if a token breaks before its proposal is processed, no more proposals can be processed
-//     - everyone is forced to ragequit...
-//   - proposal field for "isERC20Whitelisting"
-//     - check that tribute / shares are 0
-//     - check that applicant is address(0)
-//     - check that ERC20 is not already whitelisted
-//   - whitelist mapping
-//   - appovedTokens becomes array
-//     - loop over it for ragequit
-//     - add a safeRagequit
-//   - proposals can withdraw multiple ERC20 from each applicant ???
-//     - how important is this?
-//       - Scenario #1 -> Rebalance multiple ERC20s simultaneously
-//       - Scenario #2 -> Grant multiple ERC20s (to multiple addresses? just applicant?)
-//       - Scenario #3 -> Receive tribute from multiple applicants
-//     - alternative -> restrict proposals to a single ERC20 for tribute, and a single (possibly different) ERC20 for payment
-//       - this seems simpler but less flexible
-//     - V recommended just executing contracts and offloading the complexity to that
-//       - need to understand complexity of this for all three above scenarios
-//       - might be a good idea to combine this with the alternative above so we *can* do multi token nonsense if needed
+// - ERC20 whitelist + safeRedeem
+// - proposal field for "whitelistToken"
+//   - check that tribute / shares are 0
+//   - check that applicant is address(0)
+//   - check that ERC20 is not already whitelisted
+// - whitelist mapping
+// - appovedTokens becomes array
+//   - loop over it for ragequit
+// - question -> where should approvedToken / whitelist live?
+//   - Moloch? GuildBank? Both?
+//   - Can GuildBank read from the approvedToken array?
+//     - If yes, keep it on Moloch
+//     - If no, keep a copy on the GuildBank and keep them synchronized
+// - single token tribute / payment per proposal
 
 // ERC20 Rebalancing
 // - Proposals to send and receive individual tokens
@@ -121,6 +104,9 @@
 //         4. if failure -> send original tokens back to the guild bank
 //         - note -> failure cases need to be carefully coded to prevent error or theft
 
+// Separation of Voting Power and Capital
+// - bring back Loot Tokens
+
 function forward(address destination, uint value, bytes data) public onlyOwner {
     require(executeCall(destination, value, data));
     Forwarded(destination, value, data);
@@ -162,7 +148,6 @@ contract Moloch {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    IERC20 public approvedToken; // approved token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
@@ -226,6 +211,9 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
+    mapping (address => bool) public tokenWhitelist;
+    IERC20[] approvedTokens;
+
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
 
@@ -252,10 +240,9 @@ contract Moloch {
     FUNCTIONS
     ********/
 
-    // TODO add array of approvedTokens to start with
     constructor(
         address summoner,
-        address _approvedToken,
+        address _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
@@ -265,7 +252,6 @@ contract Moloch {
         uint256 _processingReward
     ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
-        require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "Moloch::constructor - _votingPeriodLength exceeds limit");
@@ -276,7 +262,12 @@ contract Moloch {
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
-        approvedToken = IERC20(_approvedToken);
+        for (var i=0; i < _approvedTokens.length; i++) {
+            require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
+            require(!tokenWhitelist[_approvedTokens[i]], "Moloch::constructor - duplicate approved token");
+            tokenWhitelist[_approvedTokens[i]] = true;
+            approvedTokens.push(IERC20(_approvedTokens[i]));
+        }
 
         guildBank = new GuildBank(_approvedToken);
 
@@ -303,17 +294,22 @@ contract Moloch {
 
     function submitProposal(
         address[] applicants,
-        uint256[] tokenTributes,
         uint256[] sharesRequested,
+        uint256[] tokenTributes,
+        address tributeToken,
+        uint256[] paymentsRequested,
+        address paymentToken,
         string memory details
     )
         public
     {
         require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
-        // TODO one line?
-        require(applicants.length == tokenTributes.length);
         require(applicants.length == sharesRequested.length);
+        require(applicants.length == tokenTributes.length);
+        require(applicants.length == paymentsRequested.length);
+
+        require(tokenWhitelist[tributeToken]);
 
         for (var j=0; j < applicants.length; j++) {
             // collect tribute from applicant and store it in the Moloch until the proposal is processed
