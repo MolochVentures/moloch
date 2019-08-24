@@ -400,41 +400,44 @@ contract Moloch {
 
             for (var j=0; j < proposal.applicants.length; j++) {
                 // if the applicant is already a member, add to their existing shares
-                if (members[proposal.applicant].exists) {
-                    members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
+                if (members[proposal.applicants[j]].exists) {
+                    members[proposal.applicants[j]].shares = members[proposal.applicants[j]].shares.add(proposal.sharesRequested[j]);
 
                 // the applicant is a new member, create a new record for them
                 } else {
                     // if the applicant address is already taken by a member's delegateKey, reset it to their member address
-                    if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
-                        address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
+                    if (members[memberAddressByDelegateKey[proposal.applicants[j]]].exists) {
+                        address memberToOverride = memberAddressByDelegateKey[proposal.applicants[j]];
                         memberAddressByDelegateKey[memberToOverride] = memberToOverride;
                         members[memberToOverride].delegateKey = memberToOverride;
                     }
 
                     // use applicant address as delegateKey by default
-                    members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
-                    memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
+                    members[proposal.applicants[j]] = Member(proposal.applicants[j], proposal.sharesRequested[j], true, 0);
+                    memberAddressByDelegateKey[proposal.applicants[j]] = proposal.applicants[j];
                 }
+
+                // transfer tokens to guild bank
+                require(
+                    approvedToken.transfer(address(guildBank), proposal.tokenTributes[j]),
+                    "Moloch::processProposal - token transfer to guild bank failed"
+                );
             }
 
-
             // mint new shares
-            totalShares = totalShares.add(proposal.sharesRequested);
+            totalShares = totalShares.add(proposalSharesRequested);
 
-            // transfer tokens to guild bank
-            require(
-                approvedToken.transfer(address(guildBank), proposal.tokenTribute),
-                "Moloch::processProposal - token transfer to guild bank failed"
-            );
 
         // PROPOSAL FAILED OR ABORTED
         } else {
-            // return all tokens to the applicant
-            require(
-                approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
-                "Moloch::processProposal - failing vote token transfer failed"
-            );
+
+            for (var k=0; k < proposal.applicants.length; k++) {
+                // return all tokens to the applicants
+                require(
+                    approvedToken.transfer(proposal.applicants[k], proposal.tokenTributes[k]),
+                    "Moloch::processProposal - failing vote token transfer failed"
+                );
+            }
         }
 
         // send msg.sender the processingReward
@@ -451,9 +454,9 @@ contract Moloch {
 
         emit ProcessProposal(
             proposalIndex,
-            proposal.applicant,
+            proposal.applicants,
             proposal.proposer,
-            proposal.tokenTribute,
+            proposal.tokenTributes,
             proposal.sharesRequested,
             didPass
         );
