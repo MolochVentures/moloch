@@ -417,6 +417,7 @@ contract Moloch {
                     memberAddressByDelegateKey[proposal.applicants[j]] = proposal.applicants[j];
                 }
 
+                // TODO technically this doesn't have to be looped over because it could be aggregated and sent once
                 // transfer tokens to guild bank
                 require(
                     approvedToken.transfer(address(guildBank), proposal.tokenTributes[j]),
@@ -501,11 +502,13 @@ contract Moloch {
         proposal.tokenTribute = 0;
         proposal.aborted = true;
 
-        // return all tokens to the applicant
-        require(
-            approvedToken.transfer(proposal.applicant, tokensToAbort),
-            "Moloch::processProposal - failed to return tribute to applicant"
-        );
+        for (var i=0; i < proposal.applicants.length; i++) {
+            // return all tokens to the applicant
+            require(
+                approvedToken.transfer(proposal.applicant, tokensToAbort),
+                "Moloch::processProposal - failed to return tribute to applicant"
+            );
+        }
 
         emit Abort(proposalIndex, msg.sender);
     }
