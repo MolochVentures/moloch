@@ -3,32 +3,37 @@ pragma solidity 0.5.3;
 import "./oz/Ownable.sol";
 import "./oz/IERC20.sol";
 import "./oz/SafeMath.sol";
+import "./MolochVentures.sol";
 
 contract GuildBank is Ownable {
     using SafeMath for uint256;
 
-    // TODO make this just "Token"
-    // - update share based withdraw to loop over all tokens
-    IERC20 public approvedToken; // approved token contract reference
+    // Not sure we need this either because we read approvedTokens from Moloch
+    // IERC20 public approvedToken; // approved token contract reference
+
+    MolochVentures public moloch;
 
     event Withdrawal(address indexed receiver, uint256 amount);
 
-    constructor(address approvedTokenAddress) public {
-        approvedToken = IERC20(approvedTokenAddress);
+    constructor(address molochAddress) public {
+        moloch = MolochVentures(molochAddress);
     }
 
     function withdraw(address receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (bool) {
-        uint256 amount = approvedToken.balanceOf(address(this)).mul(shares).div(totalShares);
-        emit Withdrawal(receiver, amount);
-        return approvedToken.transfer(receiver, amount);
+        // TODO make sure this works
+        IERC20[] approvedTokens = moloch.approvedTokens();
+
+        for (var i=0; i < approvedTokens.length; i++) {
+            uint256 amount = approvedTokens[i].balanceOf(address(this)).mul(shares).div(totalShares);
+            return approvedTokens[i].transfer(receiver, amount);
+        }
+
+        // emit Withdrawal(receiver, amount);
     }
 
-    // TODO function to withdraw token from address / amount
-    // - onlyOwner
-    // - called when proposals require payment
-    function withdrawToken(address receiver, address token) public onlyOwner returns (bool) {
+    function withdrawToken(address tokenAddress, address receiver, uint256 amount) public onlyOwner returns (bool) {
         emit Withdrawal(receiver, amount);
-        return approvedToken.transfer(receiver, amount);
+        return IERC20(tokenAddress).transfer(receiver, amount);
     }
 
 }

@@ -1,3 +1,7 @@
+// Status
+// - just added payment token distribution (and balance check) on process proposal
+
+
 // Goals
 // - Safe Approvals (two-phase)
 // - Multi-applicant proposals
@@ -133,7 +137,7 @@ import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
 import "./GuildBank.sol";
 
-contract Moloch {
+contract MolochVentures {
     using SafeMath for uint256;
 
     /***************
@@ -148,6 +152,7 @@ contract Moloch {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
+    IERC20 public depositToken; // reference to the deposit token
     GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
@@ -211,7 +216,7 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-    mapping (address => bool) public tokenWhitelist;
+    mapping (address => IERC20) public tokenWhitelist;
     IERC20[] approvedTokens;
 
     mapping (address => Member) public members;
@@ -261,15 +266,19 @@ contract Moloch {
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
+        require(_approvedTokens.length > 0); // at least 1 approved token
+
+        // first approved token is the deposit token
+        depositToken = IERC20(_approvedTokens[0]);
 
         for (var i=0; i < _approvedTokens.length; i++) {
             require(_approvedToken != address(0), "Moloch::constructor - _approvedToken cannot be 0");
             require(!tokenWhitelist[_approvedTokens[i]], "Moloch::constructor - duplicate approved token");
-            tokenWhitelist[_approvedTokens[i]] = true;
+            tokenWhitelist[_approvedTokens[i]] = IERC20(_approvedTokens[i]);
             approvedTokens.push(IERC20(_approvedTokens[i]));
         }
 
-        guildBank = new GuildBank(_approvedToken);
+        guildBank = new GuildBank(address(this));
 
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
@@ -309,7 +318,9 @@ contract Moloch {
         require(applicants.length == tokenTributes.length);
         require(applicants.length == paymentsRequested.length);
 
+        // TODO make sure this works
         require(tokenWhitelist[tributeToken]);
+        require(tokenWhitelist[paymentToken]);
 
         for (var j=0; j < applicants.length; j++) {
             // collect tribute from applicant and store it in the Moloch until the proposal is processed
@@ -321,6 +332,10 @@ contract Moloch {
             proposer: address(0),
             applicants: applicants,
             sharesRequested: sharesRequested,
+            tokenTributes: tokenTributes,
+            tributeToken: tributeToken,
+            paymentsRequested; paymentsRequested,
+            paymentToken: paymentToken,
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
@@ -328,7 +343,6 @@ contract Moloch {
             processed: false,
             didPass: false,
             aborted: false,
-            tokenTributes: tokenTributes,
             details: details,
             maxTotalSharesAtYesVote: 0
         });
@@ -346,7 +360,7 @@ contract Moloch {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
 
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+        require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
 
         Proposal memory proposal = proposals[proposalId];
 
@@ -447,6 +461,17 @@ contract Moloch {
             didPass = false;
         }
 
+        // Possibly compute and store at submission?
+        uint256 totalPaymentRequested = 0;
+        for (var x=0; x < paymentsRequested.length; x++) {
+            totalPaymentsRequested = totalPaymentsRequested + paymentsRequested[x];
+        }
+
+        // Make sure there is enough tokens for payments, or auto-fail
+        if (IERC20(proposal.paymentToken).balanceOf(address(guildBank)) >= totalPaymentsRequested) {
+            didPass = false;
+        }
+
         // PROPOSAL PASSED
         if (didPass && !proposal.aborted) {
 
@@ -474,8 +499,16 @@ contract Moloch {
                 // TODO technically this doesn't have to be looped over because it could be aggregated and sent once
                 // transfer tokens to guild bank
                 require(
-                    approvedToken.transfer(address(guildBank), proposal.tokenTributes[j]),
+                    IERC20(proposal.tributeToken).transfer(address(guildBank), proposal.tokenTributes[j]),
                     "Moloch::processProposal - token transfer to guild bank failed"
+                );
+
+                // What happens if there aren't enough tokens to pay?
+                // - We should check that the total balance in the guildbank is greater than the sum of the payments
+                // - If it isn't proposal auto-fails
+                require(
+                    guildBank.withdrawToken(proposal.paymentToken, proposal.applicants[j], proposal.paymentsRequested[j]),
+                    "Moloch::processProposal - token payment to applicant failed"
                 );
             }
 
@@ -489,7 +522,7 @@ contract Moloch {
             for (var k=0; k < proposal.applicants.length; k++) {
                 // return all tokens to the applicants
                 require(
-                    approvedToken.transfer(proposal.applicants[k], proposal.tokenTributes[k]),
+                    proposal.tributeToken.transfer(proposal.applicants[k], proposal.tokenTributes[k]),
                     "Moloch::processProposal - failing vote token transfer failed"
                 );
             }
@@ -497,16 +530,17 @@ contract Moloch {
 
         // send msg.sender the processingReward
         require(
-            approvedToken.transfer(msg.sender, processingReward),
+            depositToken.transfer(msg.sender, processingReward),
             "Moloch::processProposal - failed to send processing reward to msg.sender"
         );
 
         // return deposit to proposer (subtract processing reward)
         require(
-            approvedToken.transfer(proposal.proposer, proposalDeposit.sub(processingReward)),
+            depositToken.transfer(proposal.proposer, proposalDeposit.sub(processingReward)),
             "Moloch::processProposal - failed to return proposal deposit to proposer"
         );
 
+        /* TODO
         emit ProcessProposal(
             proposalIndex,
             proposal.applicants,
@@ -514,7 +548,7 @@ contract Moloch {
             proposal.tokenTributes,
             proposal.sharesRequested,
             didPass
-        );
+        );*/
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
@@ -539,8 +573,8 @@ contract Moloch {
         emit Ragequit(msg.sender, sharesToBurn);
     }
 
+    // TODO
     function withdrawTokens(address tokenAddress, uint256 amount) public {
-        //
     }
 
 
