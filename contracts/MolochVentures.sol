@@ -60,11 +60,27 @@
 //     - loop through delegation target, either we find a circle, run out of gas, or find the terminus
 //       - if we run out of gas or find a circle, error / fail
 //       - otherwise OK
+// - use a two-way link for delegation
+//   - address[] delegates
+//   - uint[] delegateVotes
+//   - address[] constituents
+//   - uint[] constituentVotes
+//   - problem -> hard to update array of people who have delegated to you (constituents)
+//     - might be easier to use a linked mapping -> replacing a single constituent doesn't need to re-org the whole array
+// - how to track voting shares?
+// - dumb / simple -> no recursive delegation, the delegate is the final recipient
+//   - this allows delegation to only active voters, not other members that might also be delegating
 
 // Fund Safety
 // - keeper addresses that can also ragequit funds
+//   - revisit moloch pool
 // - whitelist of addresses that can be ragequit to
-// - force contract wallets?
+//   - must take some time to update
+//   - if attacker has member key and member address isn't whitelisted, they have to update the whitelist first before they can ragequit to steal funds
+//     - in this case, our best move is to ragequit the funds to a whitelisted address before the attacker adds their address to the whitelist
+// - default is member address
+// - must have at least 1 whitelist address
+//   - track w/ "whitelist length"
 
 // Guild Kick
 // - proposal to burn shares for a member address
@@ -74,6 +90,11 @@
 //     2. might be redundant with authorized addresses to ragequit
 //   3. burn shares but don’t give $
 //     1. essentially forces member to ragequit to protect their $
+// - decision -> only whitelisted addresses
+//   - possibly skip this feature?
+//   - different proposal type / function
+//   - sharesToBurn -> use first applicant address and check that length is 1?
+//   - processProposal -> if passing, call _ragequit
 
 // Spam Protection
 // - non-linearly increasing proposal deposit cost for the same member to submit multiple proposals
@@ -103,6 +124,7 @@
 //         3. if success -> send swapped tokens back to guild bank
 //         4. if failure -> send original tokens back to the guild bank
 //         - note -> failure cases need to be carefully coded to prevent error or theft
+// - extremely dangerous if the proxy contract has a suicide function because then it could be replaced
 
 // Separation of Voting Power and Capital
 // - bring back Loot Tokens
