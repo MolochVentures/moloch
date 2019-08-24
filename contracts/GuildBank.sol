@@ -19,11 +19,7 @@ contract GuildBank is Ownable {
         moloch = MolochVentures(molochAddress);
     }
 
-    function withdraw(address receiver, uint256 shares, uint256 totalShares) public onlyOwner returns (bool) {
-        // TODO make sure this works
-        // TODO instead of copying this over - pass it as an argument
-        IERC20[] approvedTokens = moloch.approvedTokens();
-
+    function withdraw(address receiver, uint256 shares, uint256 totalShares, IERC20[] approvedTokens) public onlyOwner returns (bool) {
         for (var i=0; i < approvedTokens.length; i++) {
             uint256 amount = approvedTokens[i].balanceOf(address(this)).mul(shares).div(totalShares);
             return approvedTokens[i].transfer(receiver, amount);
