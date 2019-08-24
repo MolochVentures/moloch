@@ -7,6 +7,8 @@ import "./oz/SafeMath.sol";
 contract GuildBank is Ownable {
     using SafeMath for uint256;
 
+    // TODO make this just "Token"
+    // - update share based withdraw to loop over all tokens
     IERC20 public approvedToken; // approved token contract reference
 
     event Withdrawal(address indexed receiver, uint256 amount);
@@ -20,4 +22,13 @@ contract GuildBank is Ownable {
         emit Withdrawal(receiver, amount);
         return approvedToken.transfer(receiver, amount);
     }
+
+    // TODO function to withdraw token from address / amount
+    // - onlyOwner
+    // - called when proposals require payment
+    function withdrawToken(address receiver, address token) public onlyOwner returns (bool) {
+        emit Withdrawal(receiver, amount);
+        return approvedToken.transfer(receiver, amount);
+    }
+
 }

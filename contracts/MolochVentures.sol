@@ -7,6 +7,7 @@
 // - Fund Safety
 // - Guild Kick
 // - Spam Protection
+// - Contract Interaction
 
 // Usage Patterns
 // - rDAI investing (interest rate swaps)
@@ -41,7 +42,25 @@
 //     - issue -> if we only have 1 proposal track and enforce order, we can't submit a blacklisting proposal
 // - probably the best compromise -> whitelist + safeRedeem
 //   - if a token breaks before its proposal is processed, no more proposals can be processed
-//   - everyone is forced to ragequit...
+//     - everyone is forced to ragequit...
+//   - proposal field for "isERC20Whitelisting"
+//     - check that tribute / shares are 0
+//     - check that applicant is address(0)
+//     - check that ERC20 is not already whitelisted
+//   - whitelist mapping
+//   - appovedTokens becomes array
+//     - loop over it for ragequit
+//     - add a safeRagequit
+//   - proposals can withdraw multiple ERC20 from each applicant ???
+//     - how important is this?
+//       - Scenario #1 -> Rebalance multiple ERC20s simultaneously
+//       - Scenario #2 -> Grant multiple ERC20s (to multiple addresses? just applicant?)
+//       - Scenario #3 -> Receive tribute from multiple applicants
+//     - alternative -> restrict proposals to a single ERC20 for tribute, and a single (possibly different) ERC20 for payment
+//       - this seems simpler but less flexible
+//     - V recommended just executing contracts and offloading the complexity to that
+//       - need to understand complexity of this for all three above scenarios
+//       - might be a good idea to combine this with the alternative above so we *can* do multi token nonsense if needed
 
 // ERC20 Rebalancing
 // - Proposals to send and receive individual tokens
@@ -78,6 +97,42 @@
 //  - processing fee as a % of proposal deposit
 //  - donation as a % of proposal deposit to the Guild Bank (or a Pool)
 //  - fee % and donation % can increase non-linearly as well-
+
+// Contract Interaction
+// - need a proxy function
+//   - take contract address, payload
+//   - https://github.com/uport-project/uport-identity/blob/develop/contracts/Proxy.sol
+//   - https://github.com/gnosis/safe-contracts/blob/master/contracts/GnosisSafe.sol
+//   - stefan says these functions are sufficient
+//     - how do we approve the proposal contract to call Moloch functions?
+//       - add the contract as an agent before the proxy call
+//       - remove the contract as an agent after the proxy call
+//       - keeping this atomic is important to prevent replay attacks
+//     - which functions does the proposal contract need to call?
+//       - withdraw multiple ERC20 by address from the guild bank
+//       - can it do multi-applicant x multi-token?
+//         - if the applicants escrow funds on the proposal contract directly instead of Moloch
+//         - then all that would happen is the contract would transfer all their funds to the guild bank
+//         - proposal contract would need to read from proposal pass/fail status and only send funds if passing, otherwise return
+//       - scenario -> exchange tokens on uniswap
+//         1. proxy contract calls withdraw tokens on Moloch to withdraw from guild bank -> moloch -> proxy
+//         2. proxy contract calls exchange on uniswap (params ensure minimum slippage or tx fails)
+//         3. if success -> send swapped tokens back to guild bank
+//         4. if failure -> send original tokens back to the guild bank
+//         - note -> failure cases need to be carefully coded to prevent error or theft
+
+function forward(address destination, uint value, bytes data) public onlyOwner {
+    require(executeCall(destination, value, data));
+    Forwarded(destination, value, data);
+}
+
+// copied from GnosisSafe
+// https://github.com/gnosis/gnosis-safe-contracts/blob/master/contracts/GnosisSafe.sol
+function executeCall(address to, uint256 value, bytes data) internal returns (bool success) {
+    assembly {
+        success := call(gas, to, value, add(data, 0x20), mload(data), 0, 0)
+    }
+}
 
 // Open Questions
 // - Should we keep the 1 week voting / grace periods?
@@ -136,6 +191,8 @@ contract Moloch {
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalSharesRequested = 0; // total shares that have been requested in unprocessed proposals
 
+    address authorizedProxy = address(0); // used to authorize proxy contracts to execute functions
+
     enum Vote {
         Null, // default value, counted as abstention
         Yes,
@@ -149,14 +206,14 @@ contract Moloch {
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
-    // Multi-applicant proposals
-    // - stageProposal takes address[], shares[]
-    //   - allow multi-token tribute per member?
-
     struct Proposal {
         address proposer; // the member who submitted the proposal
         address[] applicants; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256[] sharesRequested; // the # of shares the applicant is requesting
+        uint256[] tokenTributes; // amount of tokens offered as tribute
+        address tributeToken; // token being offered as tribute
+        uint256[] paymentsRequested; // the payments requested for each applicant
+        address paymentToken; // token to send payment in
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
@@ -164,7 +221,6 @@ contract Moloch {
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
-        uint256[] tokenTributes; // amount of tokens offered as tribute
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
@@ -195,6 +251,8 @@ contract Moloch {
     /********
     FUNCTIONS
     ********/
+
+    // TODO add array of approvedTokens to start with
     constructor(
         address summoner,
         address _approvedToken,
@@ -483,6 +541,10 @@ contract Moloch {
         );
 
         emit Ragequit(msg.sender, sharesToBurn);
+    }
+
+    function withdrawTokens(address tokenAddress, uint256 amount) public {
+        //
     }
 
 
