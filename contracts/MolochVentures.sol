@@ -217,11 +217,14 @@ contract MolochVentures {
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
+        address tokenToWhitelist; // the address of the token to add to the whitelist
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
     mapping (address => IERC20) public tokenWhitelist;
     IERC20[] approvedTokens;
+
+    mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
 
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
@@ -348,6 +351,37 @@ contract MolochVentures {
             didPass: false,
             aborted: false,
             details: details,
+            tokenToWhitelist: address(0),
+            maxTotalSharesAtYesVote: 0
+        });
+
+        proposals[proposalCount] = proposal; // save proposal by its id
+        proposalCount += 1; // increment proposal counter
+    }
+
+    function submitWhitelistProposal(address tokenToWhitelist) public {
+        require(tokenToWhitelist != address(0), "Moloch::submitProposal - applicant cannot be 0");
+        require(!tokenWhitelist[tokenToWhitelist]); // can't already have whitelisted the token
+
+        // create proposal ...
+        // TODO - figure out empty array default values
+        Proposal memory proposal = Proposal({
+            proposer: address(0),
+            applicants: applicants,
+            sharesRequested: sharesRequested,
+            tokenTributes: tokenTributes,
+            tributeToken: address(0),
+            paymentsRequested; paymentsRequested,
+            paymentToken: address(0),
+            startingPeriod: 0,
+            yesVotes: 0,
+            noVotes: 0,
+            sponsored: false,
+            processed: false,
+            didPass: false,
+            aborted: false,
+            details: details,
+            tokenToWhitelist: tokenToWhitelist,
             maxTotalSharesAtYesVote: 0
         });
 
@@ -368,18 +402,25 @@ contract MolochVentures {
 
         Proposal memory proposal = proposals[proposalId];
 
-        uint256 memory proposalSharesRequested = 0;
-        for (var i=0; i < proposal.sharesRequested.length; i++) {
-            proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
+        // token whitelist proposal
+        if (proposal.tokenToWhitelist != address(0)) {
+            require(!proposedToWhitelist[proposal.tokenToWhitelist]); // already an active proposal to whitelist this token
+            proposedToWhitelist[proposal.tokenToWhitelist] = true;
+
+        // standard proposal
+        } else {
+            uint256 memory proposalSharesRequested = 0;
+            for (var i=0; i < proposal.sharesRequested.length; i++) {
+                proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
+            }
+
+            // Make sure we won't run into overflows when doing calculations with shares.
+            // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
+            // on the number of shares that can exist until this proposal has been processed.
+            require(totalShares.add(totalSharesRequested).add(proposalSharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
+
+            totalSharesRequested = totalSharesRequested.add(proposalSharesRequested);
         }
-
-        // Make sure we won't run into overflows when doing calculations with shares.
-        // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
-        // on the number of shares that can exist until this proposal has been processed.
-        require(totalShares.add(totalSharesRequested).add(proposalSharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
-
-        totalSharesRequested = totalSharesRequested.add(proposalSharesRequested);
-
 
         require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
 
@@ -481,44 +522,52 @@ contract MolochVentures {
 
             proposal.didPass = true;
 
-            for (var j=0; j < proposal.applicants.length; j++) {
-                // if the applicant is already a member, add to their existing shares
-                if (members[proposal.applicants[j]].exists) {
-                    members[proposal.applicants[j]].shares = members[proposal.applicants[j]].shares.add(proposal.sharesRequested[j]);
+            // whitelist proposal passed, add token to whitelist
+            if (proposal.tokenToWhitelist != address(0)) {
+               tokenWhitelist[tokenToWhitelist] = IERC20(tokenToWhitelist);
+               approvedTokens.push(IERC20(tokenToWhitelist));
 
-                // the applicant is a new member, create a new record for them
-                } else {
-                    // if the applicant address is already taken by a member's delegateKey, reset it to their member address
-                    if (members[memberAddressByDelegateKey[proposal.applicants[j]]].exists) {
-                        address memberToOverride = memberAddressByDelegateKey[proposal.applicants[j]];
-                        memberAddressByDelegateKey[memberToOverride] = memberToOverride;
-                        members[memberToOverride].delegateKey = memberToOverride;
+            // standard proposal passed, collect tribute, send payments, mint shares
+            } else {
+
+                for (var j=0; j < proposal.applicants.length; j++) {
+                    // if the applicant is already a member, add to their existing shares
+                    if (members[proposal.applicants[j]].exists) {
+                        members[proposal.applicants[j]].shares = members[proposal.applicants[j]].shares.add(proposal.sharesRequested[j]);
+
+                    // the applicant is a new member, create a new record for them
+                    } else {
+                        // if the applicant address is already taken by a member's delegateKey, reset it to their member address
+                        if (members[memberAddressByDelegateKey[proposal.applicants[j]]].exists) {
+                            address memberToOverride = memberAddressByDelegateKey[proposal.applicants[j]];
+                            memberAddressByDelegateKey[memberToOverride] = memberToOverride;
+                            members[memberToOverride].delegateKey = memberToOverride;
+                        }
+
+                        // use applicant address as delegateKey by default
+                        members[proposal.applicants[j]] = Member(proposal.applicants[j], proposal.sharesRequested[j], true, 0);
+                        memberAddressByDelegateKey[proposal.applicants[j]] = proposal.applicants[j];
                     }
 
-                    // use applicant address as delegateKey by default
-                    members[proposal.applicants[j]] = Member(proposal.applicants[j], proposal.sharesRequested[j], true, 0);
-                    memberAddressByDelegateKey[proposal.applicants[j]] = proposal.applicants[j];
+                    // TODO technically this doesn't have to be looped over because it could be aggregated and sent once
+                    // transfer tokens to guild bank
+                    require(
+                        IERC20(proposal.tributeToken).transfer(address(guildBank), proposal.tokenTributes[j]),
+                        "Moloch::processProposal - token transfer to guild bank failed"
+                    );
+
+                    // What happens if there aren't enough tokens to pay?
+                    // - We should check that the total balance in the guildbank is greater than the sum of the payments
+                    // - If it isn't proposal auto-fails
+                    require(
+                        guildBank.withdrawToken(proposal.paymentToken, proposal.applicants[j], proposal.paymentsRequested[j]),
+                        "Moloch::processProposal - token payment to applicant failed"
+                    );
                 }
 
-                // TODO technically this doesn't have to be looped over because it could be aggregated and sent once
-                // transfer tokens to guild bank
-                require(
-                    IERC20(proposal.tributeToken).transfer(address(guildBank), proposal.tokenTributes[j]),
-                    "Moloch::processProposal - token transfer to guild bank failed"
-                );
-
-                // What happens if there aren't enough tokens to pay?
-                // - We should check that the total balance in the guildbank is greater than the sum of the payments
-                // - If it isn't proposal auto-fails
-                require(
-                    guildBank.withdrawToken(proposal.paymentToken, proposal.applicants[j], proposal.paymentsRequested[j]),
-                    "Moloch::processProposal - token payment to applicant failed"
-                );
+                // mint new shares
+                totalShares = totalShares.add(proposalSharesRequested);
             }
-
-            // mint new shares
-            totalShares = totalShares.add(proposalSharesRequested);
-
 
         // PROPOSAL FAILED OR ABORTED
         } else {
@@ -530,6 +579,11 @@ contract MolochVentures {
                     "Moloch::processProposal - failing vote token transfer failed"
                 );
             }
+        }
+
+        // if token whitelist proposal, remove token from tokens proposed to whitelist
+        if (proposal.tokenToWhitelist != address(0)) {
+            proposedToWhitelist[proposal.tokenToWhitelist] = false;
         }
 
         // send msg.sender the processingReward
