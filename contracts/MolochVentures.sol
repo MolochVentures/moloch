@@ -56,6 +56,10 @@
 //      - tricky because we need to loop over all members that have delegated to an address when it votes, might require loop
 //     3. enforce 1 week (= to voting period) cooldown period for re-assigning shares
 //      - tricky because it becomes an attack vector
+//     4. when a member votes, track all delegations to them and loop over them and record that the delegating member has voted with some of their shares
+//      - actually we're changing the model from 100% votes to X% votes because of delegation...
+//      - this means submitVote should allow partial votes?
+//        - why would this matter? signalling
 //   - How to prevent circular delegation?
 //     - loop through delegation target, either we find a circle, run out of gas, or find the terminus
 //       - if we run out of gas or find a circle, error / fail
@@ -63,13 +67,20 @@
 // - use a two-way link for delegation
 //   - address[] delegates
 //   - uint[] delegateVotes
-//   - address[] constituents
-//   - uint[] constituentVotes
+//   - mapping (address => uint) delegations; -> inside Member struct
 //   - problem -> hard to update array of people who have delegated to you (constituents)
 //     - might be easier to use a linked mapping -> replacing a single constituent doesn't need to re-org the whole array
+//     - yes, use a linked list for this
 // - how to track voting shares?
 // - dumb / simple -> no recursive delegation, the delegate is the final recipient
 //   - this allows delegation to only active voters, not other members that might also be delegating
+// - cooldown period when you updateDelegates before you can vote again
+//   - takes until your *lowest* index proposal completes the voting period
+//   - how to track for your other delegated votes?
+//   - need to reverse lookup from delegated to member (loop over linked list of delegations to the member) and skip cooldown members
+// - possible that enough members delegate to a single address that it exceeds the gas limit to loop over the delegating members and update them
+//   - this is actually kind of hilarious, both as an attack and as way of preventing too much delegation to a single member
+//   - TODO upper limit of delegations?
 
 // Fund Safety
 // - keeper addresses that can also ragequit funds
