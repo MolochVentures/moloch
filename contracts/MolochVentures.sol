@@ -112,6 +112,7 @@
 //   - revisit moloch pool
 // - whitelist of addresses that can be ragequit to
 //   - must take some time to update
+//     - use a constructor param
 //   - if attacker has member key and member address isn't whitelisted, they have to update the whitelist first before they can ragequit to steal funds
 //     - in this case, our best move is to ragequit the funds to a whitelisted address before the attacker adds their address to the whitelist
 // - default is member address
@@ -131,6 +132,24 @@
 //   - different proposal type / function
 //   - sharesToBurn -> use first applicant address and check that length is 1?
 //   - processProposal -> if passing, call _ragequit
+// - if we add array of delegates / votes to revoke during ragequit, we have to add it here too
+//   - that increases complexity -> instead just burn all shares
+//   - revoke all delegations -> does this require a loop?
+//   - no, because it's an array that can be dropped
+//     - but the votes delegated is a mapping... needs to be set to zero for each
+//     - could set a bool on member "hasRagequit"
+//       - implied by having "exists" and 0 shares
+//       - prevent overriding old members -> edge case -> member ragequits 100% before they receive new shares as an applicant
+//     - options:
+//       1. [no] prevent members from ragequitting if they are an applicant
+//       2. make the proposal fail if applicant has ragequit
+//          - prevent proposals with applicants that have ragequit
+//       3. members that have ragequit can still get more shares
+//          - this means we need to reset all delegates when they ragequit
+//          - cap the # of shares delegated per member -> possibly SQRT of shares 100 -> 10 delegates, 1000 -> 31.62
+//          - this only works if 1 eth = 1 share or else #s grow a lot
+//          - just cap it at 100? 99 -> hedge fund rules
+//          - TODO Gas calculations... -> setting all the balances to 0 might actually provide gas
 
 // Spam Protection
 // - non-linearly increasing proposal deposit cost for the same member to submit multiple proposals
