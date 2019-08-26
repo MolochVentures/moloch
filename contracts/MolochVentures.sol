@@ -75,12 +75,37 @@
 // - dumb / simple -> no recursive delegation, the delegate is the final recipient
 //   - this allows delegation to only active voters, not other members that might also be delegating
 // - cooldown period when you updateDelegates before you can vote again
-//   - takes until your *lowest* index proposal completes the voting period
+//   - takes until your *highest* index proposal completes the voting period
 //   - how to track for your other delegated votes?
 //   - need to reverse lookup from delegated to member (loop over linked list of delegations to the member) and skip cooldown members
 // - possible that enough members delegate to a single address that it exceeds the gas limit to loop over the delegating members and update them
 //   - this is actually kind of hilarious, both as an attack and as way of preventing too much delegation to a single member
 //   - TODO upper limit of delegations?
+// - TODO
+//   1. default delegate -> member for all shares
+//   2. member struct
+//    - delegate mapping
+//   3. submitVote
+//    - look up all members who have delegated to the delegate
+// - TODO
+//   - when you ragequit it is no longer enough to drop the # of shares...
+//     - you have to go remove all the delegate votes that you had...
+//   - track the # of shares per index that have votes, and that have voted yes
+//     - store yes votes in an array / linked list
+//     - loop through the yes votes to find out how many are active
+//     - can ragequit the remaining shares
+//   - ragequit takes an array of delegates and array of shares to ragequit per delegate
+//     - check that the member has actually assigned that many shares to each delegate
+//     - check total shares to ragequit doesn't exceed shares
+
+// FUCKFUCK FUCK many-to-many delegation
+// - 1. prevent voting after updating delegates until cooldown expires
+// - 2. each delegate tracks highest index yes vote
+// - 3. ragequit specifies the delegate addresses to exit and shares per address
+//      - checks the highest index yes vote to see if you can ragequit each of those delegates
+//      - what happens if I update delegate back to myself?
+//      - I could keep a tally of shares I can ragequit, and when they are free again...
+//        - how would it get reset?
 
 // Fund Safety
 // - keeper addresses that can also ragequit funds
@@ -146,6 +171,7 @@
 // TODO
 // - create an aragon DAO
 // - create a DAOStack DAO
+// - EIP 1066 for standard return format
 
 pragma solidity 0.5.3;
 
@@ -179,6 +205,11 @@ contract MolochVentures {
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES = 10**18; // maximum number of shares that can be minted
 
+    address public constant HEAD = address(0xdead);
+    address public constant TAIL = address(0xbeef);
+
+    uint256 public constant UINT_MAX = 2**256 - 1;
+
     /***************
     EVENTS
     ***************/
@@ -205,11 +236,47 @@ contract MolochVentures {
         No
     }
 
+    struct LinkedMember {
+        address prevMember;
+        address nextMember;
+    }
+
+    struct Delegate {
+        uint256 totalVotes;
+        mapping (address => LinkedMember) linkedMembers;
+    }
+
+    // TODO
+    // - when the member receives more shares, add votes to the first delegate
+    // - this means delegate order matters, so we can't use sort order to dedup for updateDelegates
+    // - proposals track votes by delegate to prevent duplicate voting
+    //   - no need to track votes by member because we prevent voting after updating delegate
+    // - members track all delegates they have assigned votes to and how many
+    //   - do we ever need to loop over the delegates for a member?
+    //   - we want a mapping of votes per delegate so we can lookup from member + delegate
+    //   - BUT when we update delegates we want to set the value for all previous values to 0
+    //     - need to keep an array of delegateAddresses to loop over to set to 0
+    // - delegates track all members that have assigned votes to them
+    //   - linked list default HEAD -> TAIL, then HEAD -> memberAddress -> TAIL
+    //   - this linked list is in place of the array of keys
+    //   - delegates should store a mapping of votes by member?
+    //     - this isnt needed because only the total votes are needed to tally when a delegate votes
+    //     - the member addresses are needed for checking "canVote" and setting "highestIndexVote"
+
+    struct LinkedVote {
+        uint256 prevProposalIndex;
+        uint256 yesVotes;
+        uint256 nextProposalIndex;
+    }
+
     struct Member {
-        address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
         uint256 shares; // the # of shares assigned to this member
         bool exists; // always true once a member has been created
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
+        uint256 highestIndexVote; // highest proposal index # on which the member voted YES or NO
+        address[] delegateKeys; // delegates responsible for submitting proposals and voting - defaults to member address unless updated
+        mapping (address => uint256) delegatedVotes; // votes assigned to each delegate
+        mapping (uint256 => LinkedVote) linkedVotes;
     }
 
     struct Proposal {
@@ -232,7 +299,7 @@ contract MolochVentures {
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         address tokenToWhitelist; // the address of the token to add to the whitelist
-        mapping (address => Vote) votesByMember; // the votes on this proposal by each member
+        mapping (address => Vote) votesByDelegate; // the votes on this proposal by each delegate
     }
 
     mapping (address => IERC20) public tokenWhitelist;
@@ -241,7 +308,7 @@ contract MolochVentures {
     mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
 
     mapping (address => Member) public members;
-    mapping (address => address) public memberAddressByDelegateKey;
+    mapping (address => Delegate) public delegates;
 
     // proposals by ID
     mapping (uint => Proposal) public proposals;
@@ -350,11 +417,6 @@ contract MolochVentures {
         require(tokenWhitelist[tributeToken]);
         require(tokenWhitelist[paymentToken]);
 
-        for (var j=0; j < applicants.length; j++) {
-            // collect tribute from applicant and store it in the Moloch until the proposal is processed
-            require(approvedToken.transferFrom(applicants[j], address(this), tokenTributes[j]), "Moloch::submitProposal - tribute token transfer failed");
-        }
-
         // create proposal ...
         Proposal memory proposal = Proposal({
             proposer: address(0),
@@ -430,6 +492,11 @@ contract MolochVentures {
 
         // standard proposal
         } else {
+            for (var j=0; j < proposal.applicants.length; j++) {
+                // collect tribute from applicant and store it in the Moloch until the proposal is processed
+                require(IERC20(proposal.tributeToken).transferFrom(proposal.applicants[j], address(this), proposal.tokenTributes[j]), "Moloch::submitProposal - tribute token transfer failed");
+            }
+
             uint256 memory proposalSharesRequested = 0;
             for (var i=0; i < proposal.sharesRequested.length; i++) {
                 proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
@@ -461,9 +528,32 @@ contract MolochVentures {
         // TODO emit SponsorProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
+    // TODO provide the members to vote on behalf of as a param
+    // - means we don't have to store delegate references to members
+    // - can lookup via param and check the member -> delegate relationship and vote amounts
+    // - still need to loop over proposals per member to update YES VOTE index for preventing ragequits
+    // - still makes sense for that to be a linked list to avoid reforming the whole array
+    // - still needs to be looped over (starting from highest index) during inserts to find the proposal index
+    // - looped over again during ragequit to calculate amount of shares that can be ragequit
+    //   - start from highest index, loop back counting up
+    //   - [prev index, yes votes, next index]
+    //   - 3:[1, 100, 7] -> 7:[3, 200, 9] -> 9:[...]
+    //   - are no votes important? only for updateDelegates?
+    //     - if updateDelegates just adds a cooldown period, then the votes dont matter because future ones are prevented regardless
+    //   - instead of [prev index, yes votes, next index], it can just be [votes, next]
+    //     - when I submitVote, I provide the array of prev indexes for each member that I lookup
+    //       - if it points to nothing (first vote), replace
+    //       - if it points to a higher index, insert before
+    //       - if it points to lower index, insert after
+    //       - if it points to the the same index, update the # of yes votes
+    //   - still need to loop during ragequits
+    //     - even if we provide prev to the highest vote there can be multiple yes votes
+    //     - could calculate running totals but that would shift looping to the delegate
+    //     - people vote more often than they ragequit, so better to keep the loop on ragequit
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
-        Member storage member = members[memberAddress];
+        Delegate delegate = delegates[msg.sender];
+        // TODO modifier onlyDelegate
+        require(delegate.totalVotes > 0);
 
         require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
@@ -471,23 +561,53 @@ contract MolochVentures {
         require(uintVote < 3, "Moloch::submitVote - uintVote must be less than 3");
         Vote vote = Vote(uintVote);
 
-        require(getCurrentPeriod() >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
-        require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
-        require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
+        require(proposal.votesByDelegate[msg.sender] == Vote.Null, "Moloch::submitVote - delegate has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
         require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
 
+        // loop over members that have delegated to this delegate:
+        // - check that they are eligible to vote
+        // - update the highestIndex proposal they have voted on if needed
+        address memberPointer = HEAD;
+        while (memberPointer != TAIL) {
+            LinkedMember linkedMember = linkedMembers[memberPointer];
+            Member storage member = members[linkedMember.memberAddress];
+
+            // TODO rethink this
+            require(canVote(member.highestIndexYesVote));
+
+            // TODO
+            // - linked list in Member for proposals and shares per proposal, and which way
+            // - update that list here
+            if (vote == Vote.Yes) {
+
+                uint256 proposalPointer = UINT_MAX
+
+                /*
+                while ()
+                    LinkedVote linkedVote = member.linkedVotes[UINT_MAX];
+                */
+
+
+                // set highest index (latest) yes vote - must be processed for member to ragequit
+                if (proposalIndex > member.highestIndexYesVote) {
+                    member.highestIndexYesVote = proposalIndex;
+                }
+            }
+
+            // set highest index (latest) vote - used to determine voting restrictions after updating delegate keys
+            if (proposalIndex > member.highestIndexVote) {
+                member.highestIndexVote = proposalIndex;
+            }
+            memberPointer = linkedMember.nextMember;
+        }
+
         // store vote
-        proposal.votesByMember[memberAddress] = vote;
+        proposal.votesByDelegate[msg.sender] = vote;
 
         // count vote
         if (vote == Vote.Yes) {
             proposal.yesVotes = proposal.yesVotes.add(member.shares);
-
-            // set highest index (latest) yes vote - must be processed for member to ragequit
-            if (proposalIndex > member.highestIndexYesVote) {
-                member.highestIndexYesVote = proposalIndex;
-            }
 
             // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
             if (totalShares > proposal.maxTotalSharesAtYesVote) {
@@ -498,7 +618,7 @@ contract MolochVentures {
             proposal.noVotes = proposal.noVotes.add(member.shares);
         }
 
-        emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
+        // emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
     // TODO
@@ -564,22 +684,61 @@ contract MolochVentures {
             } else {
 
                 for (var j=0; j < proposal.applicants.length; j++) {
+                    address applicant = proposal.applicants[j];
+                    uint256 sharesRequested = proposal.sharesRequested[j];
                     // if the applicant is already a member, add to their existing shares
-                    if (members[proposal.applicants[j]].exists) {
-                        members[proposal.applicants[j]].shares = members[proposal.applicants[j]].shares.add(proposal.sharesRequested[j]);
+                    if (members[applicant].exists) {
+                        Member storage member = members[applicant];
+                        member.shares = member.shares.add(sharesRequested);
+
+                        address primaryDelegate = member.delegateKeys[0];
+
+                        // assign new shares as voting power to the first delegate key for this member
+                        member.delegatedVotes[primaryDelegate] = member.delegatedVotes[primaryDelegate].add(sharesRequested);
+                        delegates[primaryDelegate].totalVotes = delegates[primaryDelegate].totalVotes.add(sharesRequested);
+
+                        // TODO how to add votes to the delegate for this member?
+                        // - add the votes to the member address as its own delegate
+                        // - how? update the linked list? increase total votes?
+                        // - which delegate should get the new shares? the first one?
 
                     // the applicant is a new member, create a new record for them
                     } else {
-                        // if the applicant address is already taken by a member's delegateKey, reset it to their member address
-                        if (members[memberAddressByDelegateKey[proposal.applicants[j]]].exists) {
-                            address memberToOverride = memberAddressByDelegateKey[proposal.applicants[j]];
-                            memberAddressByDelegateKey[memberToOverride] = memberToOverride;
-                            members[memberToOverride].delegateKey = memberToOverride;
+                        // scenario - delegate exists and is delegated to by others
+                        // - then that delegate also becomes a member, and by default receives all the member shares as delegated votes
+                        // - initial: { totalVotes: 100, HEAD -> member 1 -> TAIL }
+                        // - final: { totalVotes: 200, HEAD -> member 2 -> member 1 -> TAIL }
+
+                        Delegate storage delegate = delegates[applicant];
+
+                        // TODO possibly refactor to combine this if/else into 1 statement
+                        // - if/else just becomes what the applicant points to in the linked list
+                        // if the applicant address is already a delegate, update the delegate with the new shares
+                        if (delegate.totalVotes > 0) {
+                            delegate.totalVotes = delegate.totalVotes.add(sharesRequested);
+
+                            // TODO refactor to use a insertBefore function for linked lists
+                            // update the linked list of members for the delegate to include the applicant before the first linked member
+                            address firstLinkedMemberAddress = delegate.linkedMembers[HEAD].nextMember;
+                            LinkedMember firstLinkedMember = delegate.linkedMembers[firstLinkedMemberAddress];
+                            delegate.linkedMembers[HEAD].nextMember = applicant;
+                            delegate.linkedMembers[applicant] = LinkedMember(HEAD, firstLinkedMemberAddress);
+                            delegate.linkedMembers[firstLinkedMemberAddress].prevMember = applicant;
+
+                        // if the applicant address is not already being delegated to, instantiate the delegate
+                        } else {
+                            delegate.totalVotes = sharesRequested;
+                            delegate.linkedMembers[HEAD] = LinkedMember(address(0), applicant);
+                            delegate.linkedMembers[applicant] = LinkedMember(HEAD, TAIL);
+                            delegate.linkedMembers[TAIL] = LinkedMember(applicant, address(0));
                         }
 
-                        // use applicant address as delegateKey by default
-                        members[proposal.applicants[j]] = Member(proposal.applicants[j], proposal.sharesRequested[j], true, 0);
-                        memberAddressByDelegateKey[proposal.applicants[j]] = proposal.applicants[j];
+                        // create a new member record - default use member address as the only delegate
+                        members[applicant] = Member(shares, true, 0, 0);
+                        members[applicant].delegateKeys.push(applicant);
+                        members[applicant].delegatedVotes[applicant] = sharesRequested;
+                        members[applicant].linkedVotes[0] = LinkedVote(0, 0, UINT_MAX);
+                        members[applicant].linkedVotes[UINT_MAX] = LinkedVote(0, 0, 0);
                     }
 
                     // TODO technically this doesn't have to be looped over because it could be aggregated and sent once
@@ -593,7 +752,7 @@ contract MolochVentures {
                     // - We should check that the total balance in the guildbank is greater than the sum of the payments
                     // - If it isn't proposal auto-fails
                     require(
-                        guildBank.withdrawToken(proposal.paymentToken, proposal.applicants[j], proposal.paymentsRequested[j]),
+                        guildBank.withdrawToken(proposal.paymentToken, applicant, proposal.paymentsRequested[j]),
                         "Moloch::processProposal - token payment to applicant failed"
                     );
                 }
@@ -604,7 +763,6 @@ contract MolochVentures {
 
         // PROPOSAL FAILED OR ABORTED
         } else {
-
             for (var k=0; k < proposal.applicants.length; k++) {
                 // return all tokens to the applicants
                 require(
@@ -710,6 +868,36 @@ contract MolochVentures {
         emit Abort(proposalIndex, msg.sender);
     }
 
+    function updateDelegates(address[] delegateAddresses, uint256[] votes) public onlyMember {
+        require(delegateAddresses.length > 0);
+        require(delegateAddresses.length == votes.length);
+
+        Member storage member = members[msg.sender];
+
+        // remove votes for existing delegates
+        for (var i=0; i < member.delegateKeys; i++) {
+            address memory delegateKey = member.delegateKeys[i];
+            Delegate storage delegate = delegates[delegateKey];
+            delegate.totalVotes = delegate.totalVotes.sub(member.delegatedVotes[delegateKey]);
+            LinkedMember linkedMember = delegate.linkedMembers[msg.sender];
+
+        }
+
+        uint256 votesAssigned = 0;
+
+        for (var i=0; i < delegateAddresses.length; i++) {
+            if (i > 0) {
+                require(delegateAddresses[i] > delegateAddresses[i-1]); // prevent duplicate delegateAddresses by enforcing ascending sort order by address
+                Delegate delegate = delegates[delegateAddresses[i]];
+            }
+
+            votesAssigned += votes[i];
+        }
+
+        require(votesAssigned == member.shares); // must assign 100% of your votes to delegates
+
+    }
+
     function updateDelegateKey(address newDelegateKey) public onlyMember {
         require(newDelegateKey != address(0), "Moloch::updateDelegateKey - newDelegateKey cannot be 0");
 
@@ -754,6 +942,12 @@ contract MolochVentures {
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
         return proposalQueue[highestIndexYesVote].processed;
+    }
+
+    // can only vote if the latest proposal you voted YES on is at least in the grace period
+    function canVote(uint256 highestIndexYesVote) public view returns (bool) {
+        require(highestIndexYesVote < proposalQueue.length, "Moloch::canVote - proposal does not exist");
+        return hasVotingPeriodExpired(proposalQueue[highestIndexYesVote].startingPeriod);
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
