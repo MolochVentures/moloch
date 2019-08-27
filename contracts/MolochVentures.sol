@@ -1,3 +1,13 @@
+// TODO
+// - guild kick
+// - cleanup
+//   - notes
+
+// TODO LATER
+// - spam prevention
+// - member ragequit whitelists
+// - loot token discussion
+
 // Goals
 // - Safe Approvals (two-phase)
 // - Multi-applicant proposals
@@ -44,6 +54,9 @@
 //     - no shares are minted
 //   - make a special bool for this to indicate?
 //     - escaped?
+// TODO
+// - constructor param for escapeHatchTime
+// - allow skipping of process proposal logic
 
 // ERC20 Rebalancing
 // - Proposals to send and receive individual tokens
@@ -219,9 +232,12 @@ contract MolochVentures {
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
     uint256 public abortWindow; // default = 5 periods (1 day)
+    uint256 public emergencyExitWait; // default = 35 periods (7 days) - if proposal has not been processed after this time, its logic will be skipped
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
+    uint256 public maxDelegates; // default = 100 - the maximum # of delegates per member
+
     uint256 public summoningTime; // needed to determine the current period
 
     IERC20 public depositToken; // reference to the deposit token
@@ -267,6 +283,7 @@ contract MolochVentures {
     }
 
     // Linked list item for proposal votes by member
+    // NOTE - uses proposal index instead of id to enforce order without needing additional lookup by ID
     struct LinkedVote {
         uint256 proposalIndex;
         uint256 yesVotes;
@@ -274,25 +291,16 @@ contract MolochVentures {
         uint256 prevProposalIndex;
     }
 
-    // might not be necessary to track highestIndexVote for when updating delegates
-    // - if we track delegate proposal votes and prevent double voting, even if more votes are delegated to a delegate, they won't be able to vote again
-    // - in theory, this means I could have 1000 shares, allocate 500 to a delegate, have them vote, then update to allocate 500 to a different delegate, and then let them vote
-    // - if I tried to do this a third time it would fail, because I would exceed the total number of shares I have to vote on this proposal
-    //   - edge case -> what if I get new shares?
-    //     - if they are assigned to a delegate that has already voted (your primary delegate) then they can't vote on a proposal
-    //       - I can update delegate right before if I really want to
-    //     - if they are assigned to a delegate that has NOT voted then they can vote
-
     struct Member {
         uint256 shares; // the # of shares assigned to this member
         bool exists; // always true once a member has been created
-        // uint256 highestIndexVote; // highest proposal index # on which the member voted YES or NO - used to prevent double voting when updating delegates
         address[] delegateKeys; // delegates responsible for submitting proposals and voting - defaults to member address unless updated
         mapping (address => uint256) delegatedVotes; // votes assigned to each delegate
         mapping (uint256 => LinkedVote) linkedVotes; // yes and no votes per proposal, stored as a linked list
     }
 
     struct Proposal {
+        uint256 index; // the index of the proposal in the proposalQueue (used to reference the prev proposal in queue)
         address proposer; // the member who submitted the proposal
         address[] applicants; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256[] sharesRequested; // the # of shares the applicant is requesting
@@ -323,10 +331,10 @@ contract MolochVentures {
     mapping (address => Member) public members;
 
     // proposals by ID
-    mapping (uint => Proposal) public proposals;
+    mapping (uint256 => Proposal) public proposals;
 
-    // TODO have this be an array of proposalIds to prevent duplicate storage
-    Proposal[] public proposalQueue;
+    // the queue of proposals (only store a reference by the proposal id)
+    uint256[] public proposalQueue;
 
     /********
     MODIFIERS
@@ -357,9 +365,11 @@ contract MolochVentures {
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
         uint256 _abortWindow,
+        uint256 _emergencyExitWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
-        uint256 _processingReward
+        uint256 _processingReward,
+        uint256 _maxDelegates
     ) public {
         require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
         require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
@@ -368,10 +378,12 @@ contract MolochVentures {
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "Moloch::constructor - _gracePeriodLength exceeds limit");
         require(_abortWindow > 0, "Moloch::constructor - _abortWindow cannot be 0");
         require(_abortWindow <= _votingPeriodLength, "Moloch::constructor - _abortWindow must be smaller than or equal to _votingPeriodLength");
+        require(_emergencyExitWait > 0, "Moloch::constructor - _emergencyExitWait cannot be 0");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
         require(_approvedTokens.length > 0); // at least 1 approved token
+        require(_maxDelegates > 0); // at least 1 delegate per member
 
         // first approved token is the deposit token
         depositToken = IERC20(_approvedTokens[0]);
@@ -389,6 +401,7 @@ contract MolochVentures {
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
         abortWindow = _abortWindow;
+        emergencyExitWait = _emergencyExitWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
@@ -431,6 +444,7 @@ contract MolochVentures {
 
         // create proposal ...
         Proposal memory proposal = Proposal({
+            index: 0,
             proposer: address(0),
             applicants: applicants,
             sharesRequested: sharesRequested,
@@ -459,14 +473,14 @@ contract MolochVentures {
         require(!tokenWhitelist[tokenToWhitelist]); // can't already have whitelisted the token
 
         // create proposal ...
-        // TODO - figure out empty array default values
         Proposal memory proposal = Proposal({
+            index: 0,
             proposer: address(0),
-            applicants: applicants,
-            sharesRequested: sharesRequested,
-            tokenTributes: tokenTributes,
+            applicants: new address[](0),
+            sharesRequested: new uint256[](0),
+            tokenTributes: new uint256[](0),
             tributeToken: address(0),
-            paymentsRequested; paymentsRequested,
+            paymentsRequested; new uint256[](0),
             paymentToken: address(0),
             startingPeriod: 0,
             yesVotes: 0,
@@ -498,6 +512,9 @@ contract MolochVentures {
 
         Proposal memory proposal = proposals[proposalId];
 
+        require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
+        require(!proposal.aborted); // proposal has been aborted
+
         // token whitelist proposal
         if (proposal.tokenToWhitelist != address(0)) {
             require(!proposedToWhitelist[proposal.tokenToWhitelist]); // already an active proposal to whitelist this token
@@ -523,22 +540,21 @@ contract MolochVentures {
             totalSharesRequested = totalSharesRequested.add(proposalSharesRequested);
         }
 
-        require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
-
         // compute startingPeriod for proposal
         uint256 startingPeriod = max(
             getCurrentPeriod(),
-            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
+            proposalQueue.length == 0 ? 0 : proposals[proposalQueue[proposalQueue.length.sub(1)]].startingPeriod
         ).add(1);
 
         proposal.startingPeriod = startingPeriod;
         proposal.proposer = msg.sender;
+        proposal.index = proposalQueue.length;
 
-        // ... and append it to the queue
-        proposalQueue.push(proposal);
+        // ... and append it to the queue by its id
+        proposalQueue.push(proposalId);
 
         uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SponsorProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
     // TODO provide the members to vote on behalf of as a param
@@ -565,18 +581,20 @@ contract MolochVentures {
     //     - people vote more often than they ragequit, so better to keep the loop on ragequit
 
 
-    // nextProposalVotes[] is either UINT_MAX or the next highest proposal index that the member has voted on
+    // nextProposalVotesIndices[] is either UINT_MAX or the next highest proposal index that the member has voted on
     // - it will either point to the proposal currently being voted on (if the member has already voted on this proposal with a diff delegate)
     // - OR it will point to proposal index below the proposal currently being voted on (if the member has NOT already voted on this proposal)
-    function submitVote(uint256 proposalIndex, uint8 uintVote, address[] votingMembers, uint256[] nextProposalVotes) public onlyDelegate {
+    function submitVote(uint256 proposalId, uint8 uintVote, address[] votingMembers, uint256[] nextProposalVotesIndices) public onlyDelegate {
         require(votingMembers.length = nextProposalVotes.length);
 
-        require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
-        Proposal storage proposal = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
 
         require(uintVote < 3, "Moloch::submitVote - uintVote must be less than 3");
         Vote vote = Vote(uintVote);
 
+        require(proposal.sponsored); // proposal has not been sponsored
+        require(getCurrentPeriod() >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
+        require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByDelegate[msg.sender] == Vote.Null, "Moloch::submitVote - delegate has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
         require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
@@ -587,7 +605,7 @@ contract MolochVentures {
             uint256 delegatedVotes = member.delegatedVotes[msg.sender];
             require(delegatedVotes > 0); // member has not delegated any votes to this delegate
 
-            uint256 nextProposalVoteIndex = nextProposalVotes[i];
+            uint256 nextProposalVoteIndex = nextProposalVotesIndices[i];
 
             // check whether the member can vote on this proposal
             // - lookup votes by the nextProposalVotes
@@ -640,13 +658,14 @@ contract MolochVentures {
 
     // TODO
     // - proposalQueue to track ids of proposals, then lookup by mapping
-    function processProposal(uint256 proposalIndex) public {
-        require(proposalIndex < proposalQueue.length, "Moloch::processProposal - proposal does not exist");
-        Proposal storage proposal = proposalQueue[proposalIndex];
+    function processProposal(uint256 proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
-        require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
+        require(proposal.index == 0 || proposals[proposalQueue[proposal.index.sub(1)]].processed, "Moloch::processProposal - previous proposal must be processed");
+
+        proposal.processed = true; // will prevent re-entry of this function from the proxy call
 
         // TODO probably better to save total shares requested for a proposal to avoid needing to compute via loops multiple times
         uint256 memory proposalSharesRequested = 0;
@@ -654,17 +673,23 @@ contract MolochVentures {
             proposalSharesRequested = proposalSharesRequested + proposal.sharesRequested[i];
         }
 
-        proposal.processed = true; // will prevent re-entry of this function from the proxy call
         totalSharesRequested = totalSharesRequested.sub(proposal.proposalSharesRequested);
 
         bool didPass = proposal.yesVotes > proposal.noVotes;
+
+        // If emergencyExitWait has passed from when this proposal *should* have been able to be processed, skip all effects
+        bool emergencyProcessing = false;
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait) {
+            emergencyProcessing = true;
+            didPass = false;
+        }
 
         // Make the proposal fail if the dilutionBound is exceeded
         if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
             didPass = false;
         }
 
-        // Possibly compute and store at submission?
+        // TODO - Possibly compute and store at submission?
         uint256 totalPaymentRequested = 0;
         for (var x=0; x < paymentsRequested.length; x++) {
             totalPaymentsRequested = totalPaymentsRequested + paymentsRequested[x];
@@ -676,6 +701,7 @@ contract MolochVentures {
         }
 
         // Note - We execute the proxy transaction here so that if it fails we can make the proposal fail
+        // - if we are in emergency processing this will be skipped (didPass -> false)
         if (didPass && !proposal.aborted) {
             authorizedProxy = proposal.proxyAddress;
             // TODO
@@ -749,12 +775,15 @@ contract MolochVentures {
 
         // PROPOSAL FAILED OR ABORTED
         } else {
-            for (var k=0; k < proposal.applicants.length; k++) {
-                // return all tokens to the applicants
-                require(
-                    proposal.tributeToken.transfer(proposal.applicants[k], proposal.tokenTributes[k]),
-                    "Moloch::processProposal - failing vote token transfer failed"
-                );
+            // Don't return applicant tokens if we are in emergency processing - likely the tokens are broken
+            if (!emergencyProcessing) {
+                for (var k=0; k < proposal.applicants.length; k++) {
+                    // return all tokens to the applicants
+                    require(
+                        proposal.tributeToken.transfer(proposal.applicants[k], proposal.tokenTributes[k]),
+                        "Moloch::processProposal - failing vote token transfer failed"
+                    );
+                }
             }
         }
 
@@ -814,7 +843,7 @@ contract MolochVentures {
 
         uint256 encumberedShares = 0;
 
-        while(!proposalQueue[proposalIndexPointer].processed && proposalIndexPointer != UINT_MAX) {
+        while(!proposals[proposalQueue[proposalIndexPointer]].processed && proposalIndexPointer != UINT_MAX) {
             if (currentProposalVote.yesVotes > encumberedShares) {
                 encumberedShares = currentProposalVote.yesVotes;
             }
@@ -841,34 +870,35 @@ contract MolochVentures {
         require(guildBank.withdrawToken(tokenAddress, receiver, amount));
     }
 
-    // TODO
-    // - convert to use id not index
-    // - need to convert the whole damn contract...
-    // - allow aborting propsosals EITHER in queue but in abortWindow OR not-yet-sponsored proposals
-    function abort(uint256 proposalIndex) public {
-        require(proposalIndex < proposalQueue.length, "Moloch::abort - proposal does not exist");
-        Proposal storage proposal = proposalQueue[proposalIndex];
+    function abort(uint256 proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
 
         require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
-        require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
         require(!proposal.aborted, "Moloch::abort - proposal must not have already been aborted");
 
-        uint256 tokensToAbort = proposal.tokenTribute;
-        proposal.tokenTribute = 0;
         proposal.aborted = true;
 
-        for (var i=0; i < proposal.applicants.length; i++) {
-            // return all tokens to the applicant
-            require(
-                approvedToken.transfer(proposal.applicant, tokensToAbort),
-                "Moloch::processProposal - failed to return tribute to applicant"
-            );
+        // If sponsored, return all applicant funds
+        if (proposal.sponsored) {
+            require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
+
+            for (var i=0; i < proposal.applicants.length; i++) {
+                uint256 tokensToAbort = proposal.tokenTributes[i];
+                proposals.tokenTributes[i] = 0; // prevents double-paying out the applicant when this proposal is processed
+
+                // return all tokens to the applicant
+                require(
+                    IERC20(proposal.tributeToken).transfer(proposal.applicants[i], tokensToAbort),
+                    "Moloch::processProposal - failed to return tribute to applicant"
+                );
+            }
         }
 
-        emit Abort(proposalIndex, msg.sender);
+        // emit Abort(proposalIndex, msg.sender);
     }
 
     function updateDelegates(address[] newDelegateKeys, uint256[] newVotes) public onlyMember {
+        require(newDelegateKeys.length <= maxDelegates); // too many delegates
         require(newDelegateKeys.length == newVotes.length);
 
         Member storage member = members[msg.sender];
@@ -914,25 +944,14 @@ contract MolochVentures {
         return proposalQueue.length;
     }
 
-    // can only ragequit if the latest proposal you voted YES on has been processed
-    function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
-        require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
-        return proposalQueue[highestIndexYesVote].processed;
-    }
-
-    // can only vote if the latest proposal you voted YES on is at least in the grace period
-    function canVote(uint256 highestIndexYesVote) public view returns (bool) {
-        require(highestIndexYesVote < proposalQueue.length, "Moloch::canVote - proposal does not exist");
-        return hasVotingPeriodExpired(proposalQueue[highestIndexYesVote].startingPeriod);
-    }
-
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
         return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
     }
 
-    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
-        require(members[memberAddress].exists, "Moloch::getMemberProposalVote - member doesn't exist");
-        require(proposalIndex < proposalQueue.length, "Moloch::getMemberProposalVote - proposal doesn't exist");
-        return proposalQueue[proposalIndex].votesByMember[memberAddress];
+    // TODO does this require ABI Encoder v2?
+    // - does it make sense to use this elsewhere in the contract?
+    function getProposalByIndex(uint256 proposalIndex) public view returns (Proposal) {
+        return proposals[proposalQueue[proposalIndex]];
     }
+
 }
