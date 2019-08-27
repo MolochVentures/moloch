@@ -131,6 +131,8 @@
 //   - possibly skip this feature?
 //   - different proposal type / function
 //   - sharesToBurn -> use first applicant address and check that length is 1?
+//     - allow burning multiple addresses in the same proposal
+//     - allows redemptions of more liquid assets if desired
 //   - processProposal -> if passing, call _ragequit
 // - if we add array of delegates / votes to revoke during ragequit, we have to add it here too
 //   - that increases complexity -> instead just burn all shares
@@ -156,6 +158,10 @@
 //  - processing fee as a % of proposal deposit
 //  - donation as a % of proposal deposit to the Guild Bank (or a Pool)
 //  - fee % and donation % can increase non-linearly as well-
+// - accepts a param as the exponential rate (X ^ num proposals sponsored)
+//   - store sponsored proposals on member
+//   - increment on sponsor, deduct on processProposal
+//     - leave unchanged on ragequit
 
 // Contract Interaction
 // - need a proxy function
@@ -183,6 +189,11 @@
 
 // Separation of Voting Power and Capital
 // - bring back Loot Tokens
+// - TODO open for conversation
+// - proposals specify loot tokens to mint
+//   - convertSharesToLoot (shares -> loot tokens)
+//   - ragequit wraps convertSharesToLoot -> redeemLootTokens
+//   - redeemLootTokens (on guildbank or moloch?)
 
 // Open Questions
 // - Should we keep the 1 week voting / grace periods?
@@ -255,47 +266,30 @@ contract MolochVentures {
         No
     }
 
-    struct LinkedMember {
-        address prevMember;
-        address nextMember;
-    }
-
-    struct Delegate {
-        uint256 totalVotes;
-        mapping (address => LinkedMember) linkedMembers;
-    }
-
-    // TODO
-    // - when the member receives more shares, add votes to the first delegate
-    // - this means delegate order matters, so we can't use sort order to dedup for updateDelegates
-    // - proposals track votes by delegate to prevent duplicate voting
-    //   - no need to track votes by member because we prevent voting after updating delegate
-    // - members track all delegates they have assigned votes to and how many
-    //   - do we ever need to loop over the delegates for a member?
-    //   - we want a mapping of votes per delegate so we can lookup from member + delegate
-    //   - BUT when we update delegates we want to set the value for all previous values to 0
-    //     - need to keep an array of delegateAddresses to loop over to set to 0
-    // - delegates track all members that have assigned votes to them
-    //   - linked list default HEAD -> TAIL, then HEAD -> memberAddress -> TAIL
-    //   - this linked list is in place of the array of keys
-    //   - delegates should store a mapping of votes by member?
-    //     - this isnt needed because only the total votes are needed to tally when a delegate votes
-    //     - the member addresses are needed for checking "canVote" and setting "highestIndexVote"
-
+    // Linked list item for proposal votes by member
     struct LinkedVote {
-        uint256 prevProposalIndex;
+        uint256 proposalIndex;
         uint256 yesVotes;
+        uint256 noVotes;
         uint256 nextProposalIndex;
     }
+
+    // might not be necessary to track highestIndexVote for when updating delegates
+    // - if we track delegate proposal votes and prevent double voting, even if more votes are delegated to a delegate, they won't be able to vote again
+    // - in theory, this means I could have 1000 shares, allocate 500 to a delegate, have them vote, then update to allocate 500 to a different delegate, and then let them vote
+    // - if I tried to do this a third time it would fail, because I would exceed the total number of shares I have to vote on this proposal
+    //   - edge case -> what if I get new shares?
+    //     - if they are assigned to a delegate that has already voted (your primary delegate) then they can't vote on a proposal
+    //       - I can update delegate right before if I really want to
+    //     - if they are assigned to a delegate that has NOT voted then they can vote
 
     struct Member {
         uint256 shares; // the # of shares assigned to this member
         bool exists; // always true once a member has been created
-        uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
-        uint256 highestIndexVote; // highest proposal index # on which the member voted YES or NO
+        // uint256 highestIndexVote; // highest proposal index # on which the member voted YES or NO - used to prevent double voting when updating delegates
         address[] delegateKeys; // delegates responsible for submitting proposals and voting - defaults to member address unless updated
         mapping (address => uint256) delegatedVotes; // votes assigned to each delegate
-        mapping (uint256 => LinkedVote) linkedVotes;
+        mapping (uint256 => LinkedVote) linkedVotes; // yes and no votes per proposal, stored as a linked list
     }
 
     struct Proposal {
@@ -569,10 +563,14 @@ contract MolochVentures {
     //     - even if we provide prev to the highest vote there can be multiple yes votes
     //     - could calculate running totals but that would shift looping to the delegate
     //     - people vote more often than they ragequit, so better to keep the loop on ragequit
-    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
+
+
+    function submitVote(uint256 proposalIndex, uint8 uintVote, address[] votingMembers, uint256[] prevMemberVotes) public onlyDelegate {
         Delegate delegate = delegates[msg.sender];
         // TODO modifier onlyDelegate
         require(delegate.totalVotes > 0);
+
+        require(votingMembers.length = prevMemberVotes.length);
 
         require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
@@ -584,49 +582,37 @@ contract MolochVentures {
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
         require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
 
-        // loop over members that have delegated to this delegate:
-        // - check that they are eligible to vote
-        // - update the highestIndex proposal they have voted on if needed
-        address memberPointer = HEAD;
-        while (memberPointer != TAIL) {
-            LinkedMember linkedMember = linkedMembers[memberPointer];
-            Member storage member = members[linkedMember.memberAddress];
-
-            // TODO rethink this
-            require(canVote(member.highestIndexYesVote));
-
-            // TODO
-            // - linked list in Member for proposals and shares per proposal, and which way
-            // - update that list here
-            if (vote == Vote.Yes) {
-
-                uint256 proposalPointer = UINT_MAX
-
-                /*
-                while ()
-                    LinkedVote linkedVote = member.linkedVotes[UINT_MAX];
-                */
+        uint256 totalVotes = 0;
+        for (var i=0; i < votingMembers.length; i++) {
+            Member storage member = members[votingMembers[i]];
+            uint256 delegatedVotes = member.delegatedVotes[msg.sender];
+            require(delegatedVotes > 0); // member has not delegated any votes to this delegate
 
 
-                // set highest index (latest) yes vote - must be processed for member to ragequit
-                if (proposalIndex > member.highestIndexYesVote) {
-                    member.highestIndexYesVote = proposalIndex;
+            // check whether the member can vote on this proposal
+            // - lookup votes by the prevMemberVotes
+            // - needs to resolve to either the index of this proposal or one higher
+            LinkedVote storage linkedVote = member.linkedVotes[prevMemberVotes[i]];
+            require(linkedVote.proposalIndex >= proposalIndex);
+
+            // member has voted on this proposal already, add to their votes
+            if (linkedVote.proposalIndex == proposalIndex) {
+                require(linkedVote.yesVotes.add(linkedVote.noVotes).add(delegatedVotes) <= member.shares); // votes per proposal can't exceed shares
+
+                if (vote == Vote.Yes) {
+                    linkedVote.yesVotes = linkedVote.yesVotes.add(delegatedVotes);
+                } else if (vote == Vote.No) {
+                    linkedVote.noVotes = linkedVote.noVotes.add(delegatedVotes);
                 }
             }
 
-            // set highest index (latest) vote - used to determine voting restrictions after updating delegate keys
-            if (proposalIndex > member.highestIndexVote) {
-                member.highestIndexVote = proposalIndex;
-            }
-            memberPointer = linkedMember.nextMember;
+            proposal.votesByDelegate[msg.sender] = vote;
+            totalVotes = totalVotes.add(delegatedVotes);
         }
-
-        // store vote
-        proposal.votesByDelegate[msg.sender] = vote;
 
         // count vote
         if (vote == Vote.Yes) {
-            proposal.yesVotes = proposal.yesVotes.add(member.shares);
+            proposal.yesVotes = proposal.yesVotes.add(totalVotes);
 
             // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
             if (totalShares > proposal.maxTotalSharesAtYesVote) {
@@ -634,7 +620,7 @@ contract MolochVentures {
             }
 
         } else if (vote == Vote.No) {
-            proposal.noVotes = proposal.noVotes.add(member.shares);
+            proposal.noVotes = proposal.noVotes.add(totalVotes);
         }
 
         // emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
