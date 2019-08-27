@@ -271,7 +271,7 @@ contract MolochVentures {
         uint256 proposalIndex;
         uint256 yesVotes;
         uint256 noVotes;
-        uint256 nextProposalIndex;
+        uint256 prevProposalIndex;
     }
 
     // might not be necessary to track highestIndexVote for when updating delegates
@@ -565,12 +565,11 @@ contract MolochVentures {
     //     - people vote more often than they ragequit, so better to keep the loop on ragequit
 
 
-    function submitVote(uint256 proposalIndex, uint8 uintVote, address[] votingMembers, uint256[] prevMemberVotes) public onlyDelegate {
-        Delegate delegate = delegates[msg.sender];
-        // TODO modifier onlyDelegate
-        require(delegate.totalVotes > 0);
-
-        require(votingMembers.length = prevMemberVotes.length);
+    // nextProposalVotes[] is either UINT_MAX or the next highest proposal index that the member has voted on
+    // - it will either point to the proposal currently being voted on (if the member has already voted on this proposal with a diff delegate)
+    // - OR it will point to proposal index below the proposal currently being voted on (if the member has NOT already voted on this proposal)
+    function submitVote(uint256 proposalIndex, uint8 uintVote, address[] votingMembers, uint256[] nextProposalVotes) public onlyDelegate {
+        require(votingMembers.length = nextProposalVotes.length);
 
         require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
         Proposal storage proposal = proposalQueue[proposalIndex];
@@ -588,11 +587,13 @@ contract MolochVentures {
             uint256 delegatedVotes = member.delegatedVotes[msg.sender];
             require(delegatedVotes > 0); // member has not delegated any votes to this delegate
 
+            uint256 nextProposalVoteIndex = nextProposalVotes[i];
+
             // check whether the member can vote on this proposal
-            // - lookup votes by the prevMemberVotes
-            // - needs to resolve to either the index of this proposal or one higher
-            LinkedVote storage linkedVote = member.linkedVotes[prevMemberVotes[i]];
-            require(linkedVote.proposalIndex >= proposalIndex);
+            // - lookup votes by the nextProposalVotes
+            // - needs to resolve to either the index of this proposal or lower
+            LinkedVote storage linkedVote = member.linkedVotes[nextProposalVoteIndex];
+            require(linkedVote.proposalIndex <= proposalIndex);
 
             // TODO refactor the code below to combine
             // member has voted on this proposal already, add to their votes
@@ -608,10 +609,13 @@ contract MolochVentures {
             // member has not voted on this proposal yet, insert it into the linked list of proposal votes
             } else {
                 if (vote == Vote.Yes) {
-                    member.linkedVotes[prevMemberVotes[i]] = LinkedVote(proposalIndex, delegatedVotes, 0, linkedVote.proposalIndex);
+                    member.linkedVotes[nextProposalVoteIndex] = LinkedVote(proposalIndex, delegatedVotes, 0, linkedVote.proposalIndex);
                 } else if (vote == Vote.No) {
-                    member.linkedVotes[prevMemberVotes[i]] = LinkedVote(proposalIndex, 0, delegatedVotes, linkedVote.proposalIndex);
+                    member.linkedVotes[nextProposalVoteIndex] = LinkedVote(proposalIndex, 0, delegatedVotes, linkedVote.proposalIndex);
                 }
+
+                // point the current proposal index to the linkedVote (which is a lower-index proposal than the current one)
+                member.linkedVotes[proposalIndex] = linkedVote;
             }
 
             proposal.votesByDelegate[msg.sender] = vote;
@@ -712,7 +716,7 @@ contract MolochVentures {
                     // the applicant is a new member, create a new record for them
                     } else {
                         // create a new member record - default use member address as the only delegate
-                        members[applicant] = Member(shares, true, 0, 0);
+                        members[applicant] = Member(shares, true);
                         members[applicant].delegateKeys.push(applicant);
                         members[applicant].delegatedVotes[applicant] = sharesRequested;
 
@@ -782,39 +786,49 @@ contract MolochVentures {
         );*/
     }
 
-    function ragequit(address[] delegates, uint256[] sharesToBurn) public onlyMember {
-        _ragequit(deleagtes, sharesToBurn, approvedTokens);
+    function ragequit(uint256 sharesToBurn, address[] newDelegateKeys, uint256[] newVotes) public onlyMember {
+        _ragequit(sharesToBurn, newDelegateKeys, newVotes, approvedTokens);
 
         // emit Ragequit(msg.sender, sharesToBurn);
     }
 
-    function safeRagequit(address[] delegates, uint256[] sharesToBurn, address[] tokenList) public onlyMember {
+    function safeRagequit(uint256 sharesToBurn, address[] newDelegateKeys, uint256[] newVotes, address[] tokenList) public onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
         for (var i=0; i < tokenList.length; i++) {
             require(tokenWhitelist[tokenList[i]]);
         }
 
-        _ragequit(deleagtes, sharesToBurn, tokenList);
+        _ragequit(sharesToBurn, newDelegateKeys, newVotes, tokenList);
 
         // TODO emit SafeRagequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    // TODO - new plan - ragequit needs to call updateDelegates at the end
-    // - provide shares to burn
-    // - make sure new vote assignments match remaining shares
-    // - call updateDelegates
-
-    function _ragequit(uint256 sharesToBurn, address[] delegateKeys, uint256[] votes, address[] approvedTokens) internal {
+    function _ragequit(uint256 sharesToBurn, address[] newDelegateKeys, uint256[] newVotes, address[] approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
 
-        require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
+        // This will start with the highest index proposal vote and loop backwards until it finds a processed proposal or completes the loop
+        LinkedVote currentProposalVote = member.linkedVotes[UINT_MAX];
+        uint256 proposalIndexPointer = currentProposalVote.proposalIndex;
+
+        uint256 encumberedShares = 0;
+
+        while(!proposalQueue[proposalIndexPointer].processed && proposalIndexPointer != UINT_MAX) {
+            if (currentProposalVote.yesVotes > encumberedShares) {
+                encumberedShares = currentProposalVote.yesVotes;
+            }
+            currentProposalVote = member.linkedVotes[currentProposalVote.prevProposalIndex];
+            proposalIndexPointer = currentProposalVote.proposalIndex;
+        }
+
+        require(sharesToBurn <= member.shares.sub(encumberedShares)); // can only ragequit unencumbered shares
 
         member.shares = member.shares.sub(sharesToBurn);
         totalShares = totalShares.sub(sharesToBurn);
 
-        updateDelegates(delegateKeys, votes);
+        // this will make sure votes assigned to the new delegates match the new shares
+        updateDelegates(newDelegateKeys, newVotes);
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
@@ -855,7 +869,7 @@ contract MolochVentures {
     }
 
     function updateDelegates(address[] newDelegateKeys, uint256[] newVotes) public onlyMember {
-        require(delegateAddresses.length == votes.length);
+        require(newDelegateKeys.length == newVotes.length);
 
         Member storage member = members[msg.sender];
 
