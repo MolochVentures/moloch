@@ -1,5 +1,4 @@
 // TODO
-// - guild kick
 // - cleanup
 //   - notes
 
@@ -165,6 +164,11 @@
 //          - this only works if 1 eth = 1 share or else #s grow a lot
 //          - just cap it at 100? 99 -> hedge fund rules
 //          - TODO Gas calculations... -> setting all the balances to 0 might actually provide gas
+// TODO
+// - proposal param for memberToKick
+// - separate submitProposal function (refactor later)
+// - processProposal handle it in branch similar to whitelist
+// - funds sent to applicant
 
 // Spam Protection
 // - non-linearly increasing proposal deposit cost for the same member to submit multiple proposals
@@ -320,6 +324,7 @@ contract MolochVentures {
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         address tokenToWhitelist; // the address of the token to add to the whitelist
+        address memberToKick; // the address of the member to guild kick
         mapping (address => Vote) votesByDelegate; // the votes on this proposal by each delegate
     }
 
@@ -461,6 +466,7 @@ contract MolochVentures {
             aborted: false,
             details: details,
             tokenToWhitelist: address(0),
+            memberToKick: address(0),
             maxTotalSharesAtYesVote: 0
         });
 
@@ -491,6 +497,37 @@ contract MolochVentures {
             aborted: false,
             details: details,
             tokenToWhitelist: tokenToWhitelist,
+            memberToKick: address(0),
+            maxTotalSharesAtYesVote: 0
+        });
+
+        proposals[proposalCount] = proposal; // save proposal by its id
+        proposalCount += 1; // increment proposal counter
+    }
+
+    function submitGuildKickProposal(address memberToKick) public {
+        require(memberToKick != address(0), "Moloch::submitProposal - applicant cannot be 0");
+
+        // create proposal ...
+        Proposal memory proposal = Proposal({
+            index: 0,
+            proposer: address(0),
+            applicants: new address[](0),
+            sharesRequested: new uint256[](0),
+            tokenTributes: new uint256[](0),
+            tributeToken: address(0),
+            paymentsRequested; new uint256[](0),
+            paymentToken: address(0),
+            startingPeriod: 0,
+            yesVotes: 0,
+            noVotes: 0,
+            sponsored: false,
+            processed: false,
+            didPass: false,
+            aborted: false,
+            details: details,
+            tokenToWhitelist: address(0),
+            memberToKick: memberToKick,
             maxTotalSharesAtYesVote: 0
         });
 
@@ -519,6 +556,12 @@ contract MolochVentures {
         if (proposal.tokenToWhitelist != address(0)) {
             require(!proposedToWhitelist[proposal.tokenToWhitelist]); // already an active proposal to whitelist this token
             proposedToWhitelist[proposal.tokenToWhitelist] = true;
+
+        // gkick proposal
+        } else if (proposal.memberToKick != address(0)) {
+           // TODO - prevent duplicate gkick proposals like we do for token whitelist?
+           // - otherwise we don't really need to do anything here...
+        }
 
         // standard proposal
         } else {
@@ -722,6 +765,14 @@ contract MolochVentures {
             if (proposal.tokenToWhitelist != address(0)) {
                tokenWhitelist[tokenToWhitelist] = IERC20(tokenToWhitelist);
                approvedTokens.push(IERC20(tokenToWhitelist));
+
+            // ragequit 100% of the member's shares
+            else if (proposal.memberToKick != address(0)) {
+                // what happens if a token is broken?
+                // - this proposal will get stuck until emergency processing
+                // - everyone will probably be ragequitting anyways, so the gkick doesn't matter
+                _ragequit(members[proposal.memberToKick].shares, new address[](0), new uint256[](0), approvedTokens);
+            }
 
             // standard proposal passed, collect tribute, send payments, mint shares
             } else {
