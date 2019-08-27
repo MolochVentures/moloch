@@ -782,35 +782,39 @@ contract MolochVentures {
         );*/
     }
 
-    function ragequit(uint256 sharesToBurn) public onlyMember {
-        _ragequit(sharesToBurn, approvedTokens);
+    function ragequit(address[] delegates, uint256[] sharesToBurn) public onlyMember {
+        _ragequit(deleagtes, sharesToBurn, approvedTokens);
 
-        emit Ragequit(msg.sender, sharesToBurn);
+        // emit Ragequit(msg.sender, sharesToBurn);
     }
 
-    function safeRagequit(uint256 sharesToBurn, address[] tokenList) public onlyMember {
+    function safeRagequit(address[] delegates, uint256[] sharesToBurn, address[] tokenList) public onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
         for (var i=0; i < tokenList.length; i++) {
             require(tokenWhitelist[tokenList[i]]);
         }
 
-        _ragequit(sharesToBurn, tokenList);
+        _ragequit(deleagtes, sharesToBurn, tokenList);
 
         // TODO emit SafeRagequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    function _ragequit(uint256 sharesToBurn, address[] approvedTokens) internal {
+    // TODO - new plan - ragequit needs to call updateDelegates at the end
+    // - provide shares to burn
+    // - make sure new vote assignments match remaining shares
+    // - call updateDelegates
+
+    function _ragequit(uint256 sharesToBurn, address[] delegateKeys, uint256[] votes, address[] approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
 
         require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
 
-        require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - cant ragequit until highest index proposal member voted YES on is processed");
-
-        // burn shares
         member.shares = member.shares.sub(sharesToBurn);
         totalShares = totalShares.sub(sharesToBurn);
+
+        updateDelegates(delegateKeys, votes);
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
@@ -850,51 +854,27 @@ contract MolochVentures {
         emit Abort(proposalIndex, msg.sender);
     }
 
-    function updateDelegates(address[] delegateAddresses, uint256[] votes) public onlyMember {
-        require(delegateAddresses.length > 0);
+    function updateDelegates(address[] newDelegateKeys, uint256[] newVotes) public onlyMember {
         require(delegateAddresses.length == votes.length);
 
         Member storage member = members[msg.sender];
 
         // remove votes for existing delegates
         for (var i=0; i < member.delegateKeys; i++) {
-            address memory delegateKey = member.delegateKeys[i];
-            Delegate storage delegate = delegates[delegateKey];
-            delegate.totalVotes = delegate.totalVotes.sub(member.delegatedVotes[delegateKey]);
-            LinkedMember linkedMember = delegate.linkedMembers[msg.sender];
-
+            member.delegatedVotes[member.delegateKeys[i]] = 0;
         }
 
         uint256 votesAssigned = 0;
 
-        for (var i=0; i < delegateAddresses.length; i++) {
-            if (i > 0) {
-                require(delegateAddresses[i] > delegateAddresses[i-1]); // prevent duplicate delegateAddresses by enforcing ascending sort order by address
-                Delegate delegate = delegates[delegateAddresses[i]];
-            }
-
-            votesAssigned += votes[i];
+        for (var i=0; i < newDelegateKeys.length; i++) {
+            require(member.delegatedVotes[newDelegateKeys[i]] == 0); // prevent duplicate vote assignments
+            member.delegatedVotes[newDelegateKeys[i]] = newVotes[i];
+            votesAssigned = votesAssigned.add(newVotes[i]);
         }
+
+        member.delegateKeys = newDelegateKeys;
 
         require(votesAssigned == member.shares); // must assign 100% of your votes to delegates
-
-    }
-
-    function updateDelegateKey(address newDelegateKey) public onlyMember {
-        require(newDelegateKey != address(0), "Moloch::updateDelegateKey - newDelegateKey cannot be 0");
-
-        // skip checks if member is setting the delegate key to their member address
-        if (newDelegateKey != msg.sender) {
-            require(!members[newDelegateKey].exists, "Moloch::updateDelegateKey - cant overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "Moloch::updateDelegateKey - cant overwrite existing delegate keys");
-        }
-
-        Member storage member = members[msg.sender];
-        memberAddressByDelegateKey[member.delegateKey] = address(0);
-        memberAddressByDelegateKey[newDelegateKey] = msg.sender;
-        member.delegateKey = newDelegateKey;
-
-        emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
     // https://github.com/gnosis/gnosis-safe-contracts/blob/master/contracts/GnosisSafe.sol
