@@ -1,7 +1,3 @@
-// TODO
-// - cleanup
-//   - notes
-
 // TODO LATER
 // - spam prevention
 // - member ragequit whitelists
@@ -13,111 +9,16 @@
 // - ERC20 support
 // - ERC20 rebalancing
 // - Vote delegation
-// - Fund Safety
+// - [TODO] Fund Safety (member ragequit whitelists)
 // - Guild Kick
-// - Spam Protection
+// - [TODO] Spam Protection
 // - Contract Interaction
-// - Separation of Voting Power and Capital
+// - [TODO] Separation of Voting Power and Capital (bring back loot tokens)
 
 // Usage Patterns To Support
 // - rDAI investing (interest rate swaps)
 // - provide liquidity on uniswap
 // - open a CDP
-
-// Safe Approvals (two-phase)
-// - function stageProposal
-//   - can be called by anyone
-//   - escrows funds
-//   - specifies shares / proposal details
-// - function submitProposal
-//   - members only
-// - function abortProposal
-//   - any applicant of the proposal
-
-// Multi-applicant proposals
-// - stageProposal takes address[], shares[]
-//   - allow multi-token tribute per member?
-
-// ERC20 Support
-// - ERC20 whitelist + safeRedeem
-// - proposal field for "whitelistToken"
-// - whitelist mapping
-// - appovedTokens becomes array
-//   - loop over it for ragequit
-// - single token tribute / payment per proposal
-// - If for whatever reason a whitelisted ERC20 breaks and can't be transferred
-//   - add an escape hatch which triggers after 1 week of not processing the proposal
-//   - if 1 week passes, the proposal is considered processed and failed
-//     - no tribute is returned
-//     - no payments are made
-//     - no shares are minted
-//   - make a special bool for this to indicate?
-//     - escaped?
-// TODO
-// - constructor param for escapeHatchTime
-// - allow skipping of process proposal logic
-
-// ERC20 Rebalancing
-// - Proposals to send and receive individual tokens
-
-// Vote Delegation
-// - updateDelegates(address[] delegates, uint[] votes)
-//   - How to prevent double voting?
-//     1. prevent updating delegate if delegate has already voted on a proposal in the voting period, force wait until grace period
-//     2. track member whose delegated votes are being used, make sure total votes for a proposal does not exceed member shares
-//      - tricky because we need to loop over all members that have delegated to an address when it votes, might require loop
-//     3. enforce 1 week (= to voting period) cooldown period for re-assigning shares
-//      - tricky because it becomes an attack vector
-//     4. when a member votes, track all delegations to them and loop over them and record that the delegating member has voted with some of their shares
-//      - actually we're changing the model from 100% votes to X% votes because of delegation...
-//      - this means submitVote should allow partial votes?
-//        - why would this matter? signalling
-//   - How to prevent circular delegation?
-//     - loop through delegation target, either we find a circle, run out of gas, or find the terminus
-//       - if we run out of gas or find a circle, error / fail
-//       - otherwise OK
-// - use a two-way link for delegation
-//   - address[] delegates
-//   - uint[] delegateVotes
-//   - mapping (address => uint) delegations; -> inside Member struct
-//   - problem -> hard to update array of people who have delegated to you (constituents)
-//     - might be easier to use a linked mapping -> replacing a single constituent doesn't need to re-org the whole array
-//     - yes, use a linked list for this
-// - how to track voting shares?
-// - dumb / simple -> no recursive delegation, the delegate is the final recipient
-//   - this allows delegation to only active voters, not other members that might also be delegating
-// - cooldown period when you updateDelegates before you can vote again
-//   - takes until your *highest* index proposal completes the voting period
-//   - how to track for your other delegated votes?
-//   - need to reverse lookup from delegated to member (loop over linked list of delegations to the member) and skip cooldown members
-// - possible that enough members delegate to a single address that it exceeds the gas limit to loop over the delegating members and update them
-//   - this is actually kind of hilarious, both as an attack and as way of preventing too much delegation to a single member
-//   - TODO upper limit of delegations?
-// - TODO
-//   1. default delegate -> member for all shares
-//   2. member struct
-//    - delegate mapping
-//   3. submitVote
-//    - look up all members who have delegated to the delegate
-// - TODO
-//   - when you ragequit it is no longer enough to drop the # of shares...
-//     - you have to go remove all the delegate votes that you had...
-//   - track the # of shares per index that have votes, and that have voted yes
-//     - store yes votes in an array / linked list
-//     - loop through the yes votes to find out how many are active
-//     - can ragequit the remaining shares
-//   - ragequit takes an array of delegates and array of shares to ragequit per delegate
-//     - check that the member has actually assigned that many shares to each delegate
-//     - check total shares to ragequit doesn't exceed shares
-
-// FUCKFUCK FUCK many-to-many delegation
-// - 1. prevent voting after updating delegates until cooldown expires
-// - 2. each delegate tracks highest index yes vote
-// - 3. ragequit specifies the delegate addresses to exit and shares per address
-//      - checks the highest index yes vote to see if you can ragequit each of those delegates
-//      - what happens if I update delegate back to myself?
-//      - I could keep a tally of shares I can ragequit, and when they are free again...
-//        - how would it get reset?
 
 // Fund Safety
 // - keeper addresses that can also ragequit funds
@@ -130,45 +31,6 @@
 // - default is member address
 // - must have at least 1 whitelist address
 //   - track w/ "whitelist length"
-
-// Guild Kick
-// - proposal to burn shares for a member address
-//   1. member address automatically receives tokens
-//   2. to help with lost keys, we can also send the funds to an address besides the member address
-//     1. obvious attack vector
-//     2. might be redundant with authorized addresses to ragequit
-//   3. burn shares but don’t give $
-//     1. essentially forces member to ragequit to protect their $
-// - decision -> only whitelisted addresses
-//   - possibly skip this feature?
-//   - different proposal type / function
-//   - sharesToBurn -> use first applicant address and check that length is 1?
-//     - allow burning multiple addresses in the same proposal
-//     - allows redemptions of more liquid assets if desired
-//   - processProposal -> if passing, call _ragequit
-// - if we add array of delegates / votes to revoke during ragequit, we have to add it here too
-//   - that increases complexity -> instead just burn all shares
-//   - revoke all delegations -> does this require a loop?
-//   - no, because it's an array that can be dropped
-//     - but the votes delegated is a mapping... needs to be set to zero for each
-//     - could set a bool on member "hasRagequit"
-//       - implied by having "exists" and 0 shares
-//       - prevent overriding old members -> edge case -> member ragequits 100% before they receive new shares as an applicant
-//     - options:
-//       1. [no] prevent members from ragequitting if they are an applicant
-//       2. make the proposal fail if applicant has ragequit
-//          - prevent proposals with applicants that have ragequit
-//       3. members that have ragequit can still get more shares
-//          - this means we need to reset all delegates when they ragequit
-//          - cap the # of shares delegated per member -> possibly SQRT of shares 100 -> 10 delegates, 1000 -> 31.62
-//          - this only works if 1 eth = 1 share or else #s grow a lot
-//          - just cap it at 100? 99 -> hedge fund rules
-//          - TODO Gas calculations... -> setting all the balances to 0 might actually provide gas
-// TODO
-// - proposal param for memberToKick
-// - separate submitProposal function (refactor later)
-// - processProposal handle it in branch similar to whitelist
-// - funds sent to applicant
 
 // Spam Protection
 // - non-linearly increasing proposal deposit cost for the same member to submit multiple proposals
@@ -214,11 +76,16 @@
 
 // Open Questions
 // - Should we keep the 1 week voting / grace periods?
+// - Should we cap # of applicants per proposal?
+// - Prevent duplicate gkick proposals?
 
-// TODO
+// TODO Eventually
 // - create an aragon DAO
 // - create a DAOStack DAO
 // - EIP 1066 for standard return format
+// - investigate SOLTTY - compile functions on demand
+//   - https://devpost.com/software/sol-tty
+//   - https://github.com/BencicAndrej/sol.tty
 
 pragma solidity 0.5.3;
 
@@ -254,9 +121,6 @@ contract MolochVentures {
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES = 10**18; // maximum number of shares that can be minted
-
-    address public constant HEAD = address(0xdead);
-    address public constant TAIL = address(0xbeef);
 
     uint256 public constant UINT_MAX = 2**256 - 1;
 
@@ -346,11 +210,6 @@ contract MolochVentures {
     ********/
     modifier onlyMember {
         require(members[msg.sender].shares > 0, "Moloch::onlyMember - not a member");
-        _;
-    }
-
-    modifier onlyDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyDelegate - not a delegate");
         _;
     }
 
@@ -538,11 +397,12 @@ contract MolochVentures {
     // TODO include memberAddress we are sponsoring on behalf of
     // - only need 1 member for this to work
     function sponsorProposal(
-        uint256 proposalId
+        uint256 proposalId,
+        address memberAddress
     )
         public
     {
-        // TODO make sure the member has assigned at least 1 vote to this delegate
+        require(members[memberAddress].delegatedVotes[msg.sender] > 0); // some member must have delegated at least 1 vote to this address in order to sponsor
 
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
@@ -600,34 +460,11 @@ contract MolochVentures {
         // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
-    // TODO provide the members to vote on behalf of as a param
-    // - means we don't have to store delegate references to members
-    // - can lookup via param and check the member -> delegate relationship and vote amounts
-    // - still need to loop over proposals per member to update YES VOTE index for preventing ragequits
-    // - still makes sense for that to be a linked list to avoid reforming the whole array
-    // - still needs to be looped over (starting from highest index) during inserts to find the proposal index
-    // - looped over again during ragequit to calculate amount of shares that can be ragequit
-    //   - start from highest index, loop back counting up
-    //   - [prev index, yes votes, next index]
-    //   - 3:[1, 100, 7] -> 7:[3, 200, 9] -> 9:[...]
-    //   - are no votes important? only for updateDelegates?
-    //     - if updateDelegates just adds a cooldown period, then the votes dont matter because future ones are prevented regardless
-    //   - instead of [prev index, yes votes, next index], it can just be [votes, next]
-    //     - when I submitVote, I provide the array of prev indexes for each member that I lookup
-    //       - if it points to nothing (first vote), replace
-    //       - if it points to a higher index, insert before
-    //       - if it points to lower index, insert after
-    //       - if it points to the the same index, update the # of yes votes
-    //   - still need to loop during ragequits
-    //     - even if we provide prev to the highest vote there can be multiple yes votes
-    //     - could calculate running totals but that would shift looping to the delegate
-    //     - people vote more often than they ragequit, so better to keep the loop on ragequit
-
-
     // nextProposalVotesIndices[] is either UINT_MAX or the next highest proposal index that the member has voted on
     // - it will either point to the proposal currently being voted on (if the member has already voted on this proposal with a diff delegate)
     // - OR it will point to proposal index below the proposal currently being voted on (if the member has NOT already voted on this proposal)
-    function submitVote(uint256 proposalId, uint8 uintVote, address[] votingMembers, uint256[] nextProposalVotesIndices) public onlyDelegate {
+    function submitVote(uint256 proposalId, uint8 uintVote, address[] votingMembers, uint256[] nextProposalVotesIndices) public {
+        require(votingMembers.length > 0); // have to be voting for at least 1 member
         require(votingMembers.length = nextProposalVotes.length);
 
         Proposal storage proposal = proposals[proposalId];
@@ -641,6 +478,12 @@ contract MolochVentures {
         require(proposal.votesByDelegate[msg.sender] == Vote.Null, "Moloch::submitVote - delegate has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
         require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
+
+        // TODO edge case - what happens if a member updates delegates after already using 100% of their votes for a proposal, then a new delegate votes on their behalf?
+        // - need a way for delegates to filter out members whose voting power for a proposal has been exhausted before calling submitVote
+        // - this adds some offchain data processing complexity
+        // TODO edge case - I (delegate) have several members who delegate to me, and then vote on a bunch of proposals out of order
+        // - need to track offchain (and update) the nextProposalVotesIndices in between each call to submitVote
 
         uint256 totalVotes = 0;
         for (var i=0; i < votingMembers.length; i++) {
@@ -699,8 +542,6 @@ contract MolochVentures {
         // emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
-    // TODO
-    // - proposalQueue to track ids of proposals, then lookup by mapping
     function processProposal(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
 
@@ -811,9 +652,6 @@ contract MolochVentures {
                         "Moloch::processProposal - token transfer to guild bank failed"
                     );
 
-                    // What happens if there aren't enough tokens to pay?
-                    // - We should check that the total balance in the guildbank is greater than the sum of the payments
-                    // - If it isn't proposal auto-fails
                     require(
                         guildBank.withdrawToken(proposal.paymentToken, applicant, proposal.paymentsRequested[j]),
                         "Moloch::processProposal - token payment to applicant failed"
@@ -924,7 +762,15 @@ contract MolochVentures {
     function abort(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
 
-        require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
+        bool isApplicant = false;
+        for (var i=0; i < proposal.applicants.length; i++) {
+            if (msg.sender == proposal.applicants[i]) {
+                isApplicant = true;
+                break;
+            }
+        }
+
+        require(isApplicant, "Moloch::abort - msg.sender must be one of the applicants");
         require(!proposal.aborted, "Moloch::abort - proposal must not have already been aborted");
 
         proposal.aborted = true;
@@ -1004,5 +850,4 @@ contract MolochVentures {
     function getProposalByIndex(uint256 proposalIndex) public view returns (Proposal) {
         return proposals[proposalQueue[proposalIndex]];
     }
-
 }

@@ -5,11 +5,10 @@ import "./oz/IERC20.sol";
 import "./oz/SafeMath.sol";
 import "./MolochVentures.sol";
 
+// TODO - circular reference between moloch.sol <> guildbank.sol
+
 contract GuildBank is Ownable {
     using SafeMath for uint256;
-
-    // Not sure we need this either because we read approvedTokens from Moloch
-    // IERC20 public approvedToken; // approved token contract reference
 
     MolochVentures public moloch;
 
