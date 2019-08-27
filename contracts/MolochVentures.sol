@@ -321,7 +321,6 @@ contract MolochVentures {
     mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
 
     mapping (address => Member) public members;
-    mapping (address => Delegate) public delegates;
 
     // proposals by ID
     mapping (uint => Proposal) public proposals;
@@ -485,13 +484,14 @@ contract MolochVentures {
         proposalCount += 1; // increment proposal counter
     }
 
+    // TODO include memberAddress we are sponsoring on behalf of
+    // - only need 1 member for this to work
     function sponsorProposal(
         uint256 proposalId
     )
         public
-        onlyDelegate
     {
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        // TODO make sure the member has assigned at least 1 vote to this delegate
 
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
@@ -588,13 +588,13 @@ contract MolochVentures {
             uint256 delegatedVotes = member.delegatedVotes[msg.sender];
             require(delegatedVotes > 0); // member has not delegated any votes to this delegate
 
-
             // check whether the member can vote on this proposal
             // - lookup votes by the prevMemberVotes
             // - needs to resolve to either the index of this proposal or one higher
             LinkedVote storage linkedVote = member.linkedVotes[prevMemberVotes[i]];
             require(linkedVote.proposalIndex >= proposalIndex);
 
+            // TODO refactor the code below to combine
             // member has voted on this proposal already, add to their votes
             if (linkedVote.proposalIndex == proposalIndex) {
                 require(linkedVote.yesVotes.add(linkedVote.noVotes).add(delegatedVotes) <= member.shares); // votes per proposal can't exceed shares
@@ -603,6 +603,14 @@ contract MolochVentures {
                     linkedVote.yesVotes = linkedVote.yesVotes.add(delegatedVotes);
                 } else if (vote == Vote.No) {
                     linkedVote.noVotes = linkedVote.noVotes.add(delegatedVotes);
+                }
+
+            // member has not voted on this proposal yet, insert it into the linked list of proposal votes
+            } else {
+                if (vote == Vote.Yes) {
+                    member.linkedVotes[prevMemberVotes[i]] = LinkedVote(proposalIndex, delegatedVotes, 0, linkedVote.proposalIndex);
+                } else if (vote == Vote.No) {
+                    member.linkedVotes[prevMemberVotes[i]] = LinkedVote(proposalIndex, 0, delegatedVotes, linkedVote.proposalIndex);
                 }
             }
 
@@ -700,50 +708,19 @@ contract MolochVentures {
 
                         // assign new shares as voting power to the first delegate key for this member
                         member.delegatedVotes[primaryDelegate] = member.delegatedVotes[primaryDelegate].add(sharesRequested);
-                        delegates[primaryDelegate].totalVotes = delegates[primaryDelegate].totalVotes.add(sharesRequested);
-
-                        // TODO how to add votes to the delegate for this member?
-                        // - add the votes to the member address as its own delegate
-                        // - how? update the linked list? increase total votes?
-                        // - which delegate should get the new shares? the first one?
 
                     // the applicant is a new member, create a new record for them
                     } else {
-                        // scenario - delegate exists and is delegated to by others
-                        // - then that delegate also becomes a member, and by default receives all the member shares as delegated votes
-                        // - initial: { totalVotes: 100, HEAD -> member 1 -> TAIL }
-                        // - final: { totalVotes: 200, HEAD -> member 2 -> member 1 -> TAIL }
-
-                        Delegate storage delegate = delegates[applicant];
-
-                        // TODO possibly refactor to combine this if/else into 1 statement
-                        // - if/else just becomes what the applicant points to in the linked list
-                        // if the applicant address is already a delegate, update the delegate with the new shares
-                        if (delegate.totalVotes > 0) {
-                            delegate.totalVotes = delegate.totalVotes.add(sharesRequested);
-
-                            // TODO refactor to use a insertBefore function for linked lists
-                            // update the linked list of members for the delegate to include the applicant before the first linked member
-                            address firstLinkedMemberAddress = delegate.linkedMembers[HEAD].nextMember;
-                            LinkedMember firstLinkedMember = delegate.linkedMembers[firstLinkedMemberAddress];
-                            delegate.linkedMembers[HEAD].nextMember = applicant;
-                            delegate.linkedMembers[applicant] = LinkedMember(HEAD, firstLinkedMemberAddress);
-                            delegate.linkedMembers[firstLinkedMemberAddress].prevMember = applicant;
-
-                        // if the applicant address is not already being delegated to, instantiate the delegate
-                        } else {
-                            delegate.totalVotes = sharesRequested;
-                            delegate.linkedMembers[HEAD] = LinkedMember(address(0), applicant);
-                            delegate.linkedMembers[applicant] = LinkedMember(HEAD, TAIL);
-                            delegate.linkedMembers[TAIL] = LinkedMember(applicant, address(0));
-                        }
-
                         // create a new member record - default use member address as the only delegate
                         members[applicant] = Member(shares, true, 0, 0);
                         members[applicant].delegateKeys.push(applicant);
                         members[applicant].delegatedVotes[applicant] = sharesRequested;
-                        members[applicant].linkedVotes[0] = LinkedVote(0, 0, UINT_MAX);
-                        members[applicant].linkedVotes[UINT_MAX] = LinkedVote(0, 0, 0);
+
+                        // Create a circular 2-item linked list for proposals votes for this member
+                        // 0 (HEAD) -> UINT_MAX
+                        // UINT_MAX (TAIL) -> 0
+                        members[applicant].linkedVotes[0] = LinkedVote(UINT_MAX, 0, 0, 0);
+                        members[applicant].linkedVotes[UINT_MAX] = LinkedVote(0, 0, 0, UINT_MAX);
                     }
 
                     // TODO technically this doesn't have to be looped over because it could be aggregated and sent once
