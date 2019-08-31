@@ -296,8 +296,6 @@ contract MolochVentures {
     )
         public
     {
-        require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
-
         require(applicants.length == sharesRequested.length);
         require(applicants.length == tokenTributes.length);
         require(applicants.length == paymentsRequested.length);
@@ -394,8 +392,6 @@ contract MolochVentures {
         proposalCount += 1; // increment proposal counter
     }
 
-    // TODO include memberAddress we are sponsoring on behalf of
-    // - only need 1 member for this to work
     function sponsorProposal(
         uint256 proposalId,
         address memberAddress
@@ -479,6 +475,8 @@ contract MolochVentures {
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
         require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
 
+        proposal.votesByDelegate[msg.sender] = vote;
+
         // TODO edge case - what happens if a member updates delegates after already using 100% of their votes for a proposal, then a new delegate votes on their behalf?
         // - need a way for delegates to filter out members whose voting power for a proposal has been exhausted before calling submitVote
         // - this adds some offchain data processing complexity
@@ -522,7 +520,6 @@ contract MolochVentures {
                 member.linkedVotes[proposalIndex] = linkedVote;
             }
 
-            proposal.votesByDelegate[msg.sender] = vote;
             totalVotes = totalVotes.add(delegatedVotes);
         }
 
@@ -587,6 +584,10 @@ contract MolochVentures {
         // Note - We execute the proxy transaction here so that if it fails we can make the proposal fail
         // - if we are in emergency processing this will be skipped (didPass -> false)
         if (didPass && !proposal.aborted) {
+
+            // TODO skip if proxyAddress == address(0)
+
+
             authorizedProxy = proposal.proxyAddress;
             // TODO
             // - very important that the proxy contract is audited to ensure that it returns true if it succeeds
@@ -721,6 +722,8 @@ contract MolochVentures {
         // TODO emit SafeRagequit(msg.sender, sharesToBurn, tokenList);
     }
 
+    // TODO
+    // - if this is coming from guild kick, skip the check for encumbered shares
     function _ragequit(uint256 sharesToBurn, address[] newDelegateKeys, uint256[] newVotes, address[] approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
@@ -759,6 +762,9 @@ contract MolochVentures {
         require(guildBank.withdrawToken(tokenAddress, receiver, amount));
     }
 
+
+    // TODO
+    // - provide index of applicant in applicants array as param to skip loop
     function abort(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
 
