@@ -560,7 +560,7 @@ contract MolochVentures {
 
         // If emergencyExitWait has passed from when this proposal *should* have been able to be processed, skip all effects
         bool emergencyProcessing = false;
-        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait) {
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
             emergencyProcessing = true;
             didPass = false;
         }
