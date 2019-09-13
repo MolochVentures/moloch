@@ -3,6 +3,11 @@
 // - member ragequit whitelists
 // - loot token discussion
 
+// Problem - approve is still not safe
+// - As soon as you approve, someone else can call submit / sponsor to pull your funds into the DAO
+//   - could solve by having each applicant deposit, but that's an additional transaction per applicant
+//   - still need applicants to approve the correct amount, or risk losing funds...
+
 // Goals
 // - Safe Approvals (two-phase)
 // - Multi-applicant proposals
