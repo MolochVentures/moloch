@@ -1,13 +1,30 @@
-// Goals
-// - Defensibility -> Kick out malicious members via forceRagequit
-// - Separation of Wealth and Power -> voting / loot tokens - grant pool can't be claimed (controlled by separate contract?)
-// - batch proposals -> 1 month between proposal batches, 2 week voting period, 2 week grace period
-// - better spam protection -> exponential increase in deposit for same member / option to claim deposit
-// - replacing members?
-//   - hasn't been discussed
-// - accountability to stakeholders
-//   - some kind of siganlling
-
+// Goals - Transcribe minimal features from Ventures
+// 1. Token support
+//  - whitelist proposal
+//  - emergency exit
+//  - tribute/payment token
+//  - approved -> whitelisted
+//  - deposit token
+//  - safeRagequit
+// 2. Multi-applicant proposals
+//  - applicants[] in proposal
+//  - loop over applicants in processProposal
+// 3. GuildKick
+//  - proposal type
+//  - processProposal to check for kick
+// 4. Approve Safety
+//  4.1 applicants
+//    - approve once for unlimited amount
+//    - each applicant calls "confirmProposal" to transfer tokens
+//    - must be done before any member can call "submitProposal"
+//    - no need for "abort" function
+//    - token balance is recorded on per-proposal basis
+//    - if token balance doesn't match tribute, auto-reject
+//    - need a way to withdraw token balance (in case no member sponsors)
+//  4.2 proposal deposits
+//    - come from member address instead of delegate
+//    - sent back to member address after processing
+//    - approve once, and then always use delegate without fear
 
 pragma solidity 0.5.3;
 
