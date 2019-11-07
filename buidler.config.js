@@ -8,8 +8,9 @@ const MAINNET_PRIVATE_KEY = ''
 const ROPSTEN_PRIVATE_KEY = ''
 
 module.exports = {
+  defaultNetwork: "localhost",
   networks: {
-    develop: {
+    localhost: {
       deployedContracts: {
         moloch: '',
         pool: ''

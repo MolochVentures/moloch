@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "devDependencies": {
-    "@nomiclabs/buidler": "^1.0.0-beta.7",
-    "@nomiclabs/buidler-truffle5": "^1.0.0-beta.7",
-    "@nomiclabs/buidler-web3": "^1.0.0-beta.7",
+    "@nomiclabs/buidler": "^1.0.1",
+    "@nomiclabs/buidler-truffle5": "^1.0.1",
+    "@nomiclabs/buidler-web3": "^1.0.1",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "chai-bignumber": "^2.0.2",
@@ -21,7 +21,7 @@
     "prompt-confirm": "^2.0.4",
     "solidity-coverage": "github:rotcivegaf/solidity-coverage#5875f5b7bc74d447f3312c9c0e9fc7814b482477",
     "standard": "^11.0.0",
-    "web3": "1.0.0-beta.37"
+    "web3": "^1.2.0"
   },
   "scripts": {
     "compile": "buidler compile",
