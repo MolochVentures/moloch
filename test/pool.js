@@ -280,7 +280,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         await sendTokensTo(depositor, 125)
         await giveAllowanceToMolochPool(depositor)
         const tx = await pool.deposit(120, { from: depositor })
-        assertEvent(tx, 'Deposit', 120, depositor)
+        assertEvent(tx, 'Deposit', depositor, 120000000, 120)
       })
 
       it('Should emit the SharesMinted event', async () => {
@@ -366,7 +366,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         await pool.deposit(initialTokens * 2, { from: depositor })
 
         const tx = await pool.withdraw(2, { from: depositor })
-        assertEvent(tx, 'Withdraw', 2, depositor)
+        assertEvent(tx, 'Withdraw', depositor, 2)
       })
 
       it('Should emit the SharesBurned event', async () => {
@@ -446,7 +446,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
         await giveAllowanceToMolochPool(depositor)
         await pool.deposit(initialTokens * 2, { from: depositor })
         const tx = await pool.keeperWithdraw(15, depositor, { from: depositorKeeper })
-        assertEvent(tx, 'KeeperWithdraw', 15, depositor, depositorKeeper)
+        assertEvent(tx, 'KeeperWithdraw', depositor, 15, depositorKeeper)
       })
 
       it('Should emit the SharesBurned event', async () => {
@@ -493,7 +493,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
       it('Should emit the AddKeepers event', async () => {
         const keepers = [depositorKeeper, otherAccounts[0]]
         const tx = await pool.addKeepers(keepers, { from: depositor })
-        assertEvent(tx, 'AddKeepers', keepers)
+        assertEvent(tx, 'AddKeepers', depositor, keepers)
       })
     })
 
@@ -532,7 +532,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
       it('Should emit the RemoveKeepers event', async () => {
         const keepers = [depositorKeeper, otherAccounts[0]]
         const tx = await pool.removeKeepers(keepers, { from: depositor })
-        assertEvent(tx, 'RemoveKeepers', keepers)
+        assertEvent(tx, 'RemoveKeepers', depositor, keepers)
       })
     })
 
