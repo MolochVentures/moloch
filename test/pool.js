@@ -100,7 +100,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
     return token.approve(pool.address, MAX_UINT256, { from: approver })
   }
 
-  async function submitProposal (applicant, proposer, tribute, shares, description) {
+  async function submitProposal (applicant, proposer, tribute, shares, description, txParams = {}) {
     await sendTokensTo(proposer, PROPOSAL_DEPOSIT)
     await giveAllowanceToMoloch(proposer)
 
@@ -114,7 +114,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
       tribute,
       shares,
       description,
-      { from: proposer }
+      { from: proposer, ...txParams }
     )
   }
 
@@ -1083,7 +1083,7 @@ contract('Pool', ([deployer, summoner, firstPoolMember, depositor, firstMemberKe
       }
 
       const applicant = '0x0000000000000000000000000000000000000021'
-      const proposalResult = await submitProposal(applicant, summoner, 0, 1, description)
+      const proposalResult = await submitProposal(applicant, summoner, 0, 1, description, {gas: 8000000})
 
       // We assert here that the tx consumed almost the entire gas of the block
       assert.isAbove(proposalResult.receipt.gasUsed, Math.ceil(block.gasLimit * 0.95))
