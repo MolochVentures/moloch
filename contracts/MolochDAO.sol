@@ -8,7 +8,7 @@
 //  - [x] approved -> whitelisted
 //  - [ ] deposit token
 //  - [x] ragequit all tokens
-//  - [ ] safeRagequit
+//  - [x] safeRagequit
 //    - https://github.com/MolochVentures/moloch/commit/6f908f7b075848e96b19ad2b25b59ee4b4aa82b1
 // 2. GuildKick
 //  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
@@ -424,6 +424,19 @@ contract Moloch {
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
+        _ragequit(sharesToBurn, approvedTokens);
+    }
+
+    function safeRagequit(uint256 sharesToBurn, address[] tokenList) public onlyMember {
+        // all tokens in tokenList must be in the tokenWhitelist
+        for (var i=0; i < tokenList.length; i++) {
+            require(tokenWhitelist[tokenList[i]]);
+        }
+
+        _ragequit(sharesToBurn, tokenList);
+    }
+
+    function _ragequit(uint256 sharesToBurn, address[] approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
