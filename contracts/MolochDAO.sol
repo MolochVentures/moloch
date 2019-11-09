@@ -21,7 +21,7 @@
 //    - approve once for unlimited amount
 //    - [x] submit & sponsor proposal
 //    - [ ] need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
-//    - [ ] for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
+//    - [x] for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
 //    - [ ] can remove abort (no longer possible to mess up proposal because submitter is applicant)
 // 4. Equity / Off-Chain investments follow Claims & Restricted Tokens Standards
 //   4.1 Claims Tokens (ERC1843)
@@ -219,6 +219,12 @@ contract Moloch {
         public
         onlyDelegate
     {
+        require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
+        require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
+
+        // collect tribute from applicant and store it in the Moloch until the proposal is processed
+        require(tributeToken.transferFrom(msg.sender, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
+
         // create proposal...
         Proposal memory proposal = Proposal({
             proposer: msg.sender,
@@ -266,6 +272,7 @@ contract Moloch {
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
+            sponsored: false,
             processed: false,
             didPass: false,
             aborted: false,
@@ -297,6 +304,7 @@ contract Moloch {
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
+            sponsored: false,
             processed: false,
             didPass: false,
             aborted: false,
@@ -336,9 +344,6 @@ contract Moloch {
         } else {
             require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
-            require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
-            require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
-
             // Make sure we won't run into overflows when doing calculations with shares.
             // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
             // on the number of shares that can exist until this proposal has been processed.
@@ -346,11 +351,8 @@ contract Moloch {
 
             totalSharesRequested = totalSharesRequested.add(sharesRequested);
 
-            // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
+            // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
             require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
-
-            // collect tribute from applicant and store it in the Moloch until the proposal is processed
-            require(tributeToken.transferFrom(applicant, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
         }
 
         // compute startingPeriod for proposal
