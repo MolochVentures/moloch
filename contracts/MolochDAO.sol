@@ -3,7 +3,7 @@
 //  - https://github.com/MolochVentures/moloch/commit/97a6b3a57118236d8b9f3ffeab534b60c4cfb45f
 //  - [x] whitelist proposal
 //    - https://github.com/MolochVentures/moloch/commit/f2abe0679da0bad1bd56b8083437e2183e7aedef
-//  - [ ] emergency exit
+//  - [x] emergency exit
 //  - [x] tribute/payment token
 //  - [x] approved -> whitelisted
 //  - [x] deposit token
@@ -43,6 +43,7 @@ contract Moloch {
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
     uint256 public abortWindow; // default = 5 periods (1 day)
+    uint256 public emergencyExitWait; // default = 35 periods (7 days) - if proposal has not been processed after this time, its logic will be skipped
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
@@ -142,6 +143,7 @@ contract Moloch {
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
         uint256 _abortWindow,
+        uint256 _emergencyExitWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
@@ -153,6 +155,7 @@ contract Moloch {
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "Moloch::constructor - _gracePeriodLength exceeds limit");
         require(_abortWindow > 0, "Moloch::constructor - _abortWindow cannot be 0");
         require(_abortWindow <= _votingPeriodLength, "Moloch::constructor - _abortWindow must be smaller than or equal to _votingPeriodLength");
+        require(_emergencyExitWait > 0, "Moloch::constructor - _emergencyExitWait cannot be 0");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
         require(_approvedTokens.length > 0); // at least 1 approved token
@@ -174,6 +177,7 @@ contract Moloch {
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
         abortWindow = _abortWindow;
+        emergencyExitWait = _emergencyExitWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
@@ -348,6 +352,13 @@ contract Moloch {
 
         bool didPass = proposal.yesVotes > proposal.noVotes;
 
+        // If emergencyExitWait has passed from when this proposal *should* have been able to be processed, skip all effects
+        bool emergencyProcessing = false;
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait) {
+            emergencyProcessing = true;
+            didPass = false;
+        }
+
         // Make the proposal fail if the dilutionBound is exceeded
         if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
             didPass = false;
@@ -395,11 +406,14 @@ contract Moloch {
 
         // PROPOSAL FAILED OR ABORTED
         } else {
-            // return all tokens to the applicant
-            require(
-                approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
-                "Moloch::processProposal - failing vote token transfer failed"
-            );
+            // Don't return applicant tokens if we are in emergency processing - likely the tokens are broken
+            if (!emergencyProcessing) {
+                // return all tokens to the applicant
+                require(
+                    approvedToken.transfer(proposal.applicant, proposal.tokenTribute),
+                    "Moloch::processProposal - failing vote token transfer failed"
+                );
+            }
         }
 
         // send msg.sender the processingReward
