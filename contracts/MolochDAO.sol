@@ -15,7 +15,7 @@
 //  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
 //  - [x] proposal type
 //  - [x] processProposal to check for kick
-//  - [ ] prevent duplicate guild kick proposals
+//  - [x] prevent duplicate guild kick proposals
 // 3. Approve Safety
 //    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
 //    - approve once for unlimited amount
@@ -120,8 +120,8 @@ contract Moloch {
     mapping (address => IERC20) public tokenWhitelist;
     IERC20[] approvedTokens;
 
-    // TODO when adding submit & sponsor proposal
-    // mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
+    mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
+    mapping (address => bool) public proposedToKick; // true if a member has been proposed to be kicked (to avoid duplicate guild kick proposals)
 
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
@@ -329,8 +329,8 @@ contract Moloch {
 
         // gkick proposal
         } else if (proposal.memberToKick != address(0)) {
-           // TODO - prevent duplicate gkick proposals like we do for token whitelist?
-           // - otherwise we don't really need to do anything here...
+            require(!proposedToKick[proposal.memberToKick]); // already an active proposal to kick this member
+            proposedToKick[proposal.memberToKick] = true;
 
         // standard proposal
         } else {
@@ -497,6 +497,16 @@ contract Moloch {
                     "Moloch::processProposal - failing vote token transfer failed"
                 );
             }
+        }
+
+        // if token whitelist proposal, remove token from tokens proposed to whitelist
+        if (proposal.tokenToWhitelist != address(0)) {
+            proposedToWhitelist[proposal.tokenToWhitelist] = false;
+        }
+
+        // if guild kick proposal, remove member from list of members proposed to be kicked
+        if (proposal.memberToKick != address(0)) {
+            proposedToKick[proposal.memberToKick] = false;
         }
 
         // send msg.sender the processingReward
