@@ -117,7 +117,7 @@ contract Moloch {
     }
 
     mapping (address => IERC20) public tokenWhitelist;
-    IERC20[] approvedTokens;
+    IERC20[] public approvedTokens;
 
     mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
     mapping (address => bool) public proposedToKick; // true if a member has been proposed to be kicked (to avoid duplicate guild kick proposals)
@@ -166,7 +166,7 @@ contract Moloch {
         require(_emergencyExitWait > 0, "Moloch::constructor - _emergencyExitWait cannot be 0");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
-        require(_approvedTokens.length > 0); // at least 1 approved token
+        require(_approvedTokens.length > 0, "Moloch::constructor - need at least one approved token");
         require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
 
         // first approved token is the deposit token
@@ -212,10 +212,10 @@ contract Moloch {
         string memory details
     )
         public
-        onlyDelegate
     {
         require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
+        require(proposal.applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(tributeToken.transferFrom(msg.sender, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
@@ -338,17 +338,11 @@ contract Moloch {
 
         // standard proposal
         } else {
-            require(proposal.applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
-
             // Make sure we won't run into overflows when doing calculations with shares.
             // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
             // on the number of shares that can exist until this proposal has been processed.
             require(totalShares.add(totalSharesRequested).add(proposal.sharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
-
             totalSharesRequested = totalSharesRequested.add(proposal.sharesRequested);
-
-            // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
-            require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
         }
 
         // compute startingPeriod for proposal
@@ -477,10 +471,16 @@ contract Moloch {
                 // mint new shares
                 totalShares = totalShares.add(proposal.sharesRequested);
 
-                // transfer tokens to guild bank
+                // transfer tribute tokens to guild bank
                 require(
                     proposal.tributeToken.transfer(address(guildBank), proposal.tokenTribute),
                     "Moloch::processProposal - token transfer to guild bank failed"
+                );
+
+                // transfer payment tokens to applicant
+                require(
+                    guildBank.withdrawToken(proposal.paymentToken, applicant, proposal.paymentRequested),
+                    "Moloch::processProposal - token payment to applicant failed"
                 );
             }
 
@@ -488,9 +488,9 @@ contract Moloch {
         } else {
             // Don't return applicant tokens if we are in emergency processing - likely the tokens are broken
             if (!emergencyProcessing) {
-                // return all tokens to the applicant
+                // return all tokens to the proposer
                 require(
-                    proposal.tributeToken.transfer(proposal.applicant, proposal.tokenTribute),
+                    proposal.tributeToken.transfer(proposal.propoer, proposal.tokenTribute),
                     "Moloch::processProposal - failing vote token transfer failed"
                 );
             }
@@ -512,10 +512,10 @@ contract Moloch {
             "Moloch::processProposal - failed to send processing reward to msg.sender"
         );
 
-        // return deposit to proposer (subtract processing reward)
+        // return deposit to sponsor (subtract processing reward)
         require(
-            depositToken.transfer(proposal.proposer, proposalDeposit.sub(processingReward)),
-            "Moloch::processProposal - failed to return proposal deposit to proposer"
+            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
+            "Moloch::processProposal - failed to return proposal deposit to sponsor"
         );
 
         /* TODO
@@ -573,6 +573,8 @@ contract Moloch {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.sponsored, "Moloch::cancelProposal - proposal has already been sponsored");
         require(msg.sender == proposal.proposer, "Moloch::cancelProposal - only the proposer can cancel");
+
+        proposal.cancelled = true;
 
         require(
             proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
