@@ -1,24 +1,25 @@
 // Goals - Transcribe minimal features from Ventures
 // 1. Token support
 //  - https://github.com/MolochVentures/moloch/commit/97a6b3a57118236d8b9f3ffeab534b60c4cfb45f
-//  - whitelist proposal
+//  - [x] whitelist proposal
 //    - https://github.com/MolochVentures/moloch/commit/f2abe0679da0bad1bd56b8083437e2183e7aedef
-//  - emergency exit
-//  - tribute/payment token
-//  - approved -> whitelisted
-//  - deposit token
-//  - safeRagequit
+//  - [ ] emergency exit
+//  - [x] tribute/payment token
+//  - [x] approved -> whitelisted
+//  - [ ] deposit token
+//  - [x] ragequit all tokens
+//  - [ ] safeRagequit
 //    - https://github.com/MolochVentures/moloch/commit/6f908f7b075848e96b19ad2b25b59ee4b4aa82b1
 // 2. GuildKick
 //  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
-//  - proposal type
-//  - processProposal to check for kick
+//  - [ ] proposal type
+//  - [ ] processProposal to check for kick
 // 3. Approve Safety
 //    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
 //    - approve once for unlimited amount
-//    - need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
-//    - for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
-//    - can remove abort (no longer possible to mess up proposal because submitter is applicant)
+//    - [ ] need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
+//    - [ ] for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
+//    - [ ] can remove abort (no longer possible to mess up proposal because submitter is applicant)
 // 4. Equity / Off-Chain investments follow Claims & Restricted Tokens Standards
 //   4.1 Claims Tokens (ERC1843)
 //     - https://github.com/ethereum/EIPs/issues/1843
@@ -437,7 +438,7 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares),
+            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, approvedTokens),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
 
