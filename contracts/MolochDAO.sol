@@ -12,8 +12,8 @@
 //    - https://github.com/MolochVentures/moloch/commit/6f908f7b075848e96b19ad2b25b59ee4b4aa82b1
 // 2. GuildKick
 //  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
-//  - [ ] proposal type
-//  - [ ] processProposal to check for kick
+//  - [x] proposal type
+//  - [x] processProposal to check for kick
 // 3. Approve Safety
 //    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
 //    - approve once for unlimited amount
@@ -107,6 +107,7 @@ contract Moloch {
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         address tokenToWhitelist; // the address of the token to add to the whitelist
+        address memberToKick; // the address of the member to guild kick
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
@@ -250,6 +251,7 @@ contract Moloch {
             aborted: false,
             details: details,
             tokenToWhitelist: address(0),
+            memberToKick: address(0),
             maxTotalSharesAtYesVote: 0
         });
 
@@ -289,6 +291,46 @@ contract Moloch {
             aborted: false,
             details: details,
             tokenToWhitelist: tokenToWhitelist,
+            memberToKick: address(0),
+            maxTotalSharesAtYesVote: 0
+        });
+
+        // ... and append it to the queue
+        proposalQueue.push(proposal);
+
+        // uint256 proposalIndex = proposalQueue.length.sub(1);
+        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+    }
+
+    function submitGuildKickProposal(address memberToKick) public {
+        require(members[memberToKick].shares > 0, "Moloch::submitGuildKickProposal - member must have at least one share")
+
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+
+        // compute startingPeriod for proposal
+        uint256 startingPeriod = max(
+            getCurrentPeriod(),
+            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
+        ).add(1);
+
+        // create proposal ...
+        Proposal memory proposal = Proposal({
+            proposer: memberAddress,
+            applicant: address(0),
+            sharesRequested: 0,
+            tributeOffered: 0,
+            tributeToken: address(0),
+            paymentRequested: 0,
+            paymentToken: address(0),
+            startingPeriod: startingPeriod,
+            yesVotes: 0,
+            noVotes: 0,
+            processed: false,
+            didPass: false,
+            aborted: false,
+            details: details,
+            tokenToWhitelist: address(0),
+            memberToKick: memberToKick,
             maxTotalSharesAtYesVote: 0
         });
 
@@ -373,6 +415,11 @@ contract Moloch {
             if (proposal.tokenToWhitelist != address(0)) {
                tokenWhitelist[tokenToWhitelist] = IERC20(tokenToWhitelist);
                approvedTokens.push(IERC20(tokenToWhitelist));
+
+            // guild kick proposal passed, ragequit 100% of the member's shares
+            // NOTE - if any approvedToken is broken gkicks will fail and get stuck here (until emergency processing)
+            } else if (proposal.memberToKick != address(0)) {
+                _ragequit(members[proposal.memberToKick].shares, new address[](0), new uint256[](0), approvedTokens);
 
             // standard proposal passed, collect tribute, send payment, mint shares
             } else {
