@@ -1,30 +1,30 @@
 // Goals - Transcribe minimal features from Ventures
 // 1. Token support
+//  - https://github.com/MolochVentures/moloch/commit/97a6b3a57118236d8b9f3ffeab534b60c4cfb45f
 //  - whitelist proposal
+//    - https://github.com/MolochVentures/moloch/commit/f2abe0679da0bad1bd56b8083437e2183e7aedef
 //  - emergency exit
 //  - tribute/payment token
 //  - approved -> whitelisted
 //  - deposit token
 //  - safeRagequit
-// 2. Multi-applicant proposals
-//  - applicants[] in proposal
-//  - loop over applicants in processProposal
-// 3. GuildKick
+//    - https://github.com/MolochVentures/moloch/commit/6f908f7b075848e96b19ad2b25b59ee4b4aa82b1
+// 2. GuildKick
+//  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
 //  - proposal type
 //  - processProposal to check for kick
-// 4. Approve Safety
-//  4.1 applicants
+// 3. Approve Safety
+//    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
 //    - approve once for unlimited amount
-//    - each applicant calls "confirmProposal" to transfer tokens
-//    - must be done before any member can call "submitProposal"
-//    - no need for "abort" function
-//    - token balance is recorded on per-proposal basis
-//    - if token balance doesn't match tribute, auto-reject
-//    - need a way to withdraw token balance (in case no member sponsors)
-//  4.2 proposal deposits
-//    - come from member address instead of delegate
-//    - sent back to member address after processing
-//    - approve once, and then always use delegate without fear
+//    - need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
+//    - for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
+//    - can remove abort (no longer possible to mess up proposal because submitter is applicant)
+// 4. Equity / Off-Chain investments follow Claims & Restricted Tokens Standards
+//   4.1 Claims Tokens (ERC1843)
+//      - https://github.com/ethereum/EIPs/issues/1843
+//   4.2 Restricted Tokens (ERC1404)
+//      - https://github.com/ethereum/EIPs/issues/1404
+//      - transfer restriction -> only DAO members
 
 pragma solidity 0.5.3;
 

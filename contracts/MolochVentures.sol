@@ -229,7 +229,7 @@ contract MolochVentures {
 
     constructor(
         address summoner,
-        address _approvedTokens,
+        address[] _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
@@ -612,6 +612,7 @@ contract MolochVentures {
             if (proposal.tokenToWhitelist != address(0)) {
                tokenWhitelist[tokenToWhitelist] = IERC20(tokenToWhitelist);
                approvedTokens.push(IERC20(tokenToWhitelist));
+            }
 
             // ragequit 100% of the member's shares
             else if (proposal.memberToKick != address(0)) {
