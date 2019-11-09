@@ -94,9 +94,9 @@ contract Moloch {
     }
 
     struct Proposal {
+        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         address proposer; // whoever submitted the proposal (can be non-member)
         address sponsor; // the member who sponsored the proposal
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 sharesRequested; // the # of shares the applicant is requesting
         uint256 tributeOffered; // amount of tokens offered as tribute
         IERC20 tributeToken; // token being offered as tribute
@@ -222,9 +222,9 @@ contract Moloch {
 
         // create proposal...
         Proposal memory proposal = Proposal({
+            applicant: applicant,
             proposer: msg.sender,
             sponsor: address(0),
-            applicant: applicant,
             sharesRequested: sharesRequested,
             tributeOffered: tributeOffered,
             tributeToken: IERC20(tributeToken),
@@ -256,9 +256,9 @@ contract Moloch {
 
         // create proposal ...
         Proposal memory proposal = Proposal({
+            applicant: address(0),
             proposer: msg.sender,
             sponsor: address(0),
-            applicant: address(0),
             sharesRequested: 0,
             tributeOffered: 0,
             tributeToken: address(0),
@@ -289,8 +289,9 @@ contract Moloch {
 
         // create proposal ...
         Proposal memory proposal = Proposal({
-            proposer: memberAddress,
             applicant: address(0)
+            proposer: msg.sender,
+            sponsor: address(0),
             sharesRequested: 0,
             tributeOffered: 0,
             tributeToken: address(0),
