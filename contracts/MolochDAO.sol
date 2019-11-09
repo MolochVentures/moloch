@@ -535,7 +535,12 @@ contract Moloch {
     function safeRagequit(uint256 sharesToBurn, address[] tokenList) public onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
         for (var i=0; i < tokenList.length; i++) {
-            require(tokenWhitelist[tokenList[i]]);
+            require(tokenWhitelist[tokenList[i]], "Moloch::safeRequit - token must be whitelisted");
+
+            // check token uniqueness - for every token address after the first, enforce ascending lexical order
+            if (i > 0) {
+                require(tokenList[i] > tokenList[i-1], "Moloch::safeRagequit - tokenList must be unique and in ascending order");
+            }
         }
 
         _ragequit(sharesToBurn, tokenList);
