@@ -9,14 +9,17 @@
 //  - [x] deposit token
 //  - [x] ragequit all tokens
 //  - [x] safeRagequit
+//  - [x] prevent duplicate whitelist proposals
 //    - https://github.com/MolochVentures/moloch/commit/6f908f7b075848e96b19ad2b25b59ee4b4aa82b1
 // 2. GuildKick
 //  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
 //  - [x] proposal type
 //  - [x] processProposal to check for kick
+//  - [ ] prevent duplicate guild kick proposals
 // 3. Approve Safety
 //    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
 //    - approve once for unlimited amount
+//    - [x] submit & sponsor proposal
 //    - [ ] need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
 //    - [ ] for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
 //    - [ ] can remove abort (no longer possible to mess up proposal because submitter is applicant)
@@ -74,6 +77,7 @@ contract Moloch {
     /******************
     INTERNAL ACCOUNTING
     ******************/
+    uint256 public proposalCount = 0; // total proposals submitted
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalSharesRequested = 0; // total shares that have been requested in unprocessed proposals
 
@@ -91,16 +95,18 @@ contract Moloch {
     }
 
     struct Proposal {
-        address proposer; // the member who submitted the proposal
+        address proposer; // whoever submitted the proposal (can be non-member)
+        address sponsor; // the member who sponsored the proposal
         address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
         uint256 sharesRequested; // the # of shares the applicant is requesting
         uint256 tributeOffered; // amount of tokens offered as tribute
-        address tributeToken; // token being offered as tribute
+        IERC20 tributeToken; // token being offered as tribute
         uint256 paymentRequested; // the payments requested for each applicant
-        address paymentToken; // token to send payment in
+        IERC20 paymentToken; // token to send payment in
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
+        bool sponsored; // true only if the proposal has been submitted by a member
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
         bool aborted; // true only if applicant calls "abort" fn before end of voting period
@@ -119,7 +125,12 @@ contract Moloch {
 
     mapping (address => Member) public members;
     mapping (address => address) public memberAddressByDelegateKey;
-    Proposal[] public proposalQueue;
+
+    // proposals by ID
+    mapping (uint256 => Proposal) public proposals;
+
+    // the queue of proposals (only store a reference by the proposal id)
+    uint256[] public proposalQueue;
 
     /********
     MODIFIERS
@@ -208,44 +219,20 @@ contract Moloch {
         public
         onlyDelegate
     {
-        require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
-
-        require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
-        require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
-
-        // Make sure we won't run into overflows when doing calculations with shares.
-        // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
-        // on the number of shares that can exist until this proposal has been processed.
-        require(totalShares.add(totalSharesRequested).add(sharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
-
-        totalSharesRequested = totalSharesRequested.add(sharesRequested);
-
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
-
-        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
-
-        // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(approvedToken.transferFrom(applicant, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
-
-        // compute startingPeriod for proposal
-        uint256 startingPeriod = max(
-            getCurrentPeriod(),
-            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
-        ).add(1);
-
-        // create proposal ...
+        // create proposal...
         Proposal memory proposal = Proposal({
-            proposer: memberAddress,
+            proposer: msg.sender,
+            sponsor: address(0),
             applicant: applicant,
             sharesRequested: sharesRequested,
             tributeOffered: tributeOffered,
-            tributeToken: tributeToken,
+            tributeToken: IERC20(tributeToken),
             paymentRequested: paymentRequested,
-            paymentToken: paymentToken,
-            startingPeriod: startingPeriod,
+            paymentToken: IERC20(paymentToken),
+            startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
+            sponsored: false,
             processed: false,
             didPass: false,
             aborted: false,
@@ -255,35 +242,28 @@ contract Moloch {
             maxTotalSharesAtYesVote: 0
         });
 
-        // ... and append it to the queue
-        proposalQueue.push(proposal);
+        proposals[proposalCount] = proposal; // save proposal by its id
+        proposalCount += 1; // increment proposal counter
 
-        uint256 proposalIndex = proposalQueue.length.sub(1);
-        emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // uint256 proposalIndex = proposalQueue.length.sub(1);
+        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
-    function submitWhitelistProposal(address tokenToWhitelist) public {
+    function submitWhitelistProposal(address tokenToWhitelist, string details) public {
         require(tokenToWhitelist != address(0), "Moloch::submitWhitelistProposal - must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "Moloch::submitWhitelistProposal - can't already have whitelisted the token");
 
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
-
-        // compute startingPeriod for proposal
-        uint256 startingPeriod = max(
-            getCurrentPeriod(),
-            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
-        ).add(1);
-
         // create proposal ...
         Proposal memory proposal = Proposal({
-            proposer: memberAddress,
+            proposer: msg.sender,
+            sponsor: address(0),
             applicant: address(0),
             sharesRequested: 0,
             tributeOffered: 0,
             tributeToken: address(0),
             paymentRequested: 0,
             paymentToken: address(0),
-            startingPeriod: startingPeriod,
+            startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
             processed: false,
@@ -295,8 +275,8 @@ contract Moloch {
             maxTotalSharesAtYesVote: 0
         });
 
-        // ... and append it to the queue
-        proposalQueue.push(proposal);
+        proposals[proposalCount] = proposal; // save proposal by its id
+        proposalCount += 1; // increment proposal counter
 
         // uint256 proposalIndex = proposalQueue.length.sub(1);
         // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
@@ -305,24 +285,16 @@ contract Moloch {
     function submitGuildKickProposal(address memberToKick) public {
         require(members[memberToKick].shares > 0, "Moloch::submitGuildKickProposal - member must have at least one share")
 
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
-
-        // compute startingPeriod for proposal
-        uint256 startingPeriod = max(
-            getCurrentPeriod(),
-            proposalQueue.length == 0 ? 0 : proposalQueue[proposalQueue.length.sub(1)].startingPeriod
-        ).add(1);
-
         // create proposal ...
         Proposal memory proposal = Proposal({
             proposer: memberAddress,
-            applicant: address(0),
+            applicant: address(0)
             sharesRequested: 0,
             tributeOffered: 0,
             tributeToken: address(0),
             paymentRequested: 0,
             paymentToken: address(0),
-            startingPeriod: startingPeriod,
+            startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
             processed: false,
@@ -334,11 +306,69 @@ contract Moloch {
             maxTotalSharesAtYesVote: 0
         });
 
-        // ... and append it to the queue
-        proposalQueue.push(proposal);
+        proposals[proposalCount] = proposal; // save proposal by its id
+        proposalCount += 1; // increment proposal counter
 
         // uint256 proposalIndex = proposalQueue.length.sub(1);
         // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+    }
+
+    function sponsorProposal(uint256 proposalId) onlyDelegate {
+        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
+        require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+
+        Proposal memory proposal = proposals[proposalId];
+
+        require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
+        require(!proposal.aborted); // proposal has been aborted
+
+        // token whitelist proposal
+        if (proposal.tokenToWhitelist != address(0)) {
+            require(!proposedToWhitelist[proposal.tokenToWhitelist]); // already an active proposal to whitelist this token
+            proposedToWhitelist[proposal.tokenToWhitelist] = true;
+
+        // gkick proposal
+        } else if (proposal.memberToKick != address(0)) {
+           // TODO - prevent duplicate gkick proposals like we do for token whitelist?
+           // - otherwise we don't really need to do anything here...
+
+        // standard proposal
+        } else {
+            require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
+
+            require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
+            require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
+
+            // Make sure we won't run into overflows when doing calculations with shares.
+            // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
+            // on the number of shares that can exist until this proposal has been processed.
+            require(totalShares.add(totalSharesRequested).add(sharesRequested) <= MAX_NUMBER_OF_SHARES, "Moloch::submitProposal - too many shares requested");
+
+            totalSharesRequested = totalSharesRequested.add(sharesRequested);
+
+            // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
+            require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+
+            // collect tribute from applicant and store it in the Moloch until the proposal is processed
+            require(tributeToken.transferFrom(applicant, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
+        }
+
+        // compute startingPeriod for proposal
+        uint256 startingPeriod = max(
+            getCurrentPeriod(),
+            proposalQueue.length == 0 ? 0 : proposals[proposalQueue[proposalQueue.length.sub(1)]].startingPeriod
+        ).add(1);
+
+        proposal.startingPeriod = startingPeriod;
+
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        proposal.sponsor = memberAddress;
+
+        // ... and append it to the queue by its id
+        proposalQueue.push(proposalId);
+
+        // uint256 proposalIndex = proposalQueue.length.sub(1);
+        // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -346,11 +376,12 @@ contract Moloch {
         Member storage member = members[memberAddress];
 
         require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
-        Proposal storage proposal = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
 
         require(uintVote < 3, "Moloch::submitVote - uintVote must be less than 3");
         Vote vote = Vote(uintVote);
 
+        require(proposal.sponsored, "Moloch::submitVote - proposal has not been sponsored");
         require(getCurrentPeriod() >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
@@ -383,11 +414,11 @@ contract Moloch {
 
     function processProposal(uint256 proposalIndex) public {
         require(proposalIndex < proposalQueue.length, "Moloch::processProposal - proposal does not exist");
-        Proposal storage proposal = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
-        require(proposalIndex == 0 || proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
+        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)].processed, "Moloch::processProposal - previous proposal must be processed");
 
         proposal.processed = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
@@ -403,6 +434,11 @@ contract Moloch {
 
         // Make the proposal fail if the dilutionBound is exceeded
         if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
+            didPass = false;
+        }
+
+        // Make sure there is enough tokens for payments, or auto-fail
+        if (proposal.paymentRequested >= proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
 

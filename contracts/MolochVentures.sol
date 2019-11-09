@@ -3,11 +3,6 @@
 // - member ragequit whitelists
 // - loot token discussion
 
-// Problem - approve is still not safe
-// - As soon as you approve, someone else can call submit / sponsor to pull your funds into the DAO
-//   - could solve by having each applicant deposit, but that's an additional transaction per applicant
-//   - still need applicants to approve the correct amount, or risk losing funds...
-
 // Goals
 // - Safe Approvals (two-phase)
 // - Multi-applicant proposals
@@ -229,7 +224,7 @@ contract MolochVentures {
 
     constructor(
         address summoner,
-        address[] _approvedTokens,
+        address _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
@@ -612,7 +607,6 @@ contract MolochVentures {
             if (proposal.tokenToWhitelist != address(0)) {
                tokenWhitelist[tokenToWhitelist] = IERC20(tokenToWhitelist);
                approvedTokens.push(IERC20(tokenToWhitelist));
-            }
 
             // ragequit 100% of the member's shares
             else if (proposal.memberToKick != address(0)) {
@@ -728,8 +722,6 @@ contract MolochVentures {
         // TODO emit SafeRagequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    // TODO
-    // - if this is coming from guild kick, skip the check for encumbered shares
     function _ragequit(uint256 sharesToBurn, address[] newDelegateKeys, uint256[] newVotes, address[] approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
@@ -768,9 +760,6 @@ contract MolochVentures {
         require(guildBank.withdrawToken(tokenAddress, receiver, amount));
     }
 
-
-    // TODO
-    // - provide index of applicant in applicants array as param to skip loop
     function abort(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
 
