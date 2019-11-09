@@ -20,9 +20,9 @@
 //    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
 //    - approve once for unlimited amount
 //    - [x] submit & sponsor proposal
-//    - [ ] need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
+//    - [x] need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
 //    - [x] for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
-//    - [ ] can remove abort (no longer possible to mess up proposal because submitter is applicant)
+//    - [x] can remove abort (no longer possible to mess up proposal because submitter is applicant)
 // 4. Equity / Off-Chain investments follow Claims & Restricted Tokens Standards
 //   4.1 Claims Tokens (ERC1843)
 //     - https://github.com/ethereum/EIPs/issues/1843
@@ -45,7 +45,6 @@ contract Moloch {
   uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
-    uint256 public abortWindow; // default = 5 periods (1 day)
     uint256 public emergencyExitWait; // default = 35 periods (7 days) - if proposal has not been processed after this time, its logic will be skipped
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
@@ -70,7 +69,7 @@ contract Moloch {
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
     event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tokenTribute, uint256 sharesRequested, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
-    event Abort(uint256 indexed proposalIndex, address applicantAddress);
+    event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
 
@@ -109,7 +108,7 @@ contract Moloch {
         bool sponsored; // true only if the proposal has been submitted by a member
         bool processed; // true only if the proposal has been processed
         bool didPass; // true only if the proposal passed
-        bool aborted; // true only if applicant calls "abort" fn before end of voting period
+        bool cancelled; // true only if the proposer called cancelProposal before a member sponsored the proposal
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         address tokenToWhitelist; // the address of the token to add to the whitelist
@@ -154,7 +153,6 @@ contract Moloch {
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
-        uint256 _abortWindow,
         uint256 _emergencyExitWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
@@ -165,8 +163,6 @@ contract Moloch {
         require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "Moloch::constructor - _votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "Moloch::constructor - _gracePeriodLength exceeds limit");
-        require(_abortWindow > 0, "Moloch::constructor - _abortWindow cannot be 0");
-        require(_abortWindow <= _votingPeriodLength, "Moloch::constructor - _abortWindow must be smaller than or equal to _votingPeriodLength");
         require(_emergencyExitWait > 0, "Moloch::constructor - _emergencyExitWait cannot be 0");
         require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
@@ -188,7 +184,6 @@ contract Moloch {
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
-        abortWindow = _abortWindow;
         emergencyExitWait = _emergencyExitWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
@@ -241,7 +236,7 @@ contract Moloch {
             sponsored: false,
             processed: false,
             didPass: false,
-            aborted: false,
+            cancelled: false,
             details: details,
             tokenToWhitelist: address(0),
             memberToKick: address(0),
@@ -275,7 +270,7 @@ contract Moloch {
             sponsored: false,
             processed: false,
             didPass: false,
-            aborted: false,
+            cancelled: false,
             details: details,
             tokenToWhitelist: tokenToWhitelist,
             memberToKick: address(0),
@@ -307,7 +302,7 @@ contract Moloch {
             sponsored: false,
             processed: false,
             didPass: false,
-            aborted: false,
+            cancelled: false,
             details: details,
             tokenToWhitelist: address(0),
             memberToKick: memberToKick,
@@ -328,7 +323,7 @@ contract Moloch {
         Proposal memory proposal = proposals[proposalId];
 
         require(!proposal.sponsored, "Moloch::sponsorProposal - proposal has already been sponsored");
-        require(!proposal.aborted); // proposal has been aborted
+        require(!proposal.cancelled, "Moloch::sponsorProposal - proposal has been cancelled");
 
         // token whitelist proposal
         if (proposal.tokenToWhitelist != address(0)) {
@@ -388,7 +383,6 @@ contract Moloch {
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
         require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
-        require(!proposal.aborted, "Moloch::submitVote - proposal has been aborted");
 
         // store vote
         proposal.votesByMember[memberAddress] = vote;
@@ -445,7 +439,7 @@ contract Moloch {
         }
 
         // PROPOSAL PASSED
-        if (didPass && !proposal.aborted) {
+        if (didPass) {
 
             proposal.didPass = true;
 
@@ -489,7 +483,7 @@ contract Moloch {
                 );
             }
 
-        // PROPOSAL FAILED OR ABORTED
+        // PROPOSAL FAILED OR CANCELLED
         } else {
             // Don't return applicant tokens if we are in emergency processing - likely the tokens are broken
             if (!emergencyProcessing) {
@@ -569,25 +563,17 @@ contract Moloch {
         emit Ragequit(msg.sender, sharesToBurn);
     }
 
-    function abort(uint256 proposalIndex) public {
-        require(proposalIndex < proposalQueue.length, "Moloch::abort - proposal does not exist");
-        Proposal storage proposal = proposalQueue[proposalIndex];
+    function cancelProposal(uint256 proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
+        require(!proposal.sponsored, "Moloch::cancelProposal - proposal has already been sponsored");
+        require(msg.sender == proposal.proposer, "Moloch::cancelProposal - only the proposer can cancel");
 
-        require(msg.sender == proposal.applicant, "Moloch::abort - msg.sender must be applicant");
-        require(getCurrentPeriod() < proposal.startingPeriod.add(abortWindow), "Moloch::abort - abort window must not have passed");
-        require(!proposal.aborted, "Moloch::abort - proposal must not have already been aborted");
-
-        uint256 tokensToAbort = proposal.tokenTribute;
-        proposal.tokenTribute = 0;
-        proposal.aborted = true;
-
-        // return all tokens to the applicant
         require(
-            approvedToken.transfer(proposal.applicant, tokensToAbort),
-            "Moloch::processProposal - failed to return tribute to applicant"
+            proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
+            "Moloch::processProposal - failed to return tribute to proposer"
         );
 
-        emit Abort(proposalIndex, msg.sender);
+        emit CancelProposal(proposalId, msg.sender);
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
