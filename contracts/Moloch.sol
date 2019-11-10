@@ -1,35 +1,3 @@
-// Goals - Transcribe minimal features from Ventures
-// 1. Token support
-//  - https://github.com/MolochVentures/moloch/commit/97a6b3a57118236d8b9f3ffeab534b60c4cfb45f
-//  - [x] whitelist proposal
-//    - https://github.com/MolochVentures/moloch/commit/f2abe0679da0bad1bd56b8083437e2183e7aedef
-//  - [x] emergency exit
-//  - [x] tribute/payment token
-//  - [x] approved -> whitelisted
-//  - [x] deposit token
-//  - [x] ragequit all tokens
-//  - [x] safeRagequit
-//  - [x] prevent duplicate whitelist proposals
-//    - https://github.com/MolochVentures/moloch/commit/6f908f7b075848e96b19ad2b25b59ee4b4aa82b1
-// 2. GuildKick
-//  - https://github.com/MolochVentures/moloch/commit/09956e67683ea6bcaa173bd5160769337d0750d5
-//  - [x] proposal type
-//  - [x] processProposal to check for kick
-//  - [x] prevent duplicate guild kick proposals
-// 3. Approve Safety
-//    - current -> https://github.com/MolochVentures/moloch/commit/2773127a5956b2658e110d2973a0c2ccc68c1e7b
-//    - approve once for unlimited amount
-//    - [x] submit & sponsor proposal
-//    - [x] need a way to withdraw token balance (in case no member sponsors) -> "cancelProposal"
-//    - [x] for proposal submissions with tribute, the proposal must be submitted by the applicant (applicant = msg.sender)
-//    - [x] can remove abort (no longer possible to mess up proposal because submitter is applicant)
-// 4. Equity / Off-Chain investments follow Claims & Restricted Tokens Standards
-//   4.1 Claims Tokens (ERC1843)
-//     - https://github.com/ethereum/EIPs/issues/1843
-//   4.2 Restricted Tokens (ERC1404)
-//     - https://github.com/ethereum/EIPs/issues/1404
-//     - transfer restriction -> only DAO members
-
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
