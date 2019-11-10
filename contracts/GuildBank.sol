@@ -17,8 +17,8 @@ contract GuildBank is Ownable {
         }
     }
 
-    function withdrawToken(address tokenAddress, address receiver, uint256 amount) public onlyOwner returns (bool) {
-        emit Withdrawal(receiver, tokenAddress, amount);
-        return IERC20(tokenAddress).transfer(receiver, amount);
+    function withdrawToken(IERC20 token, address receiver, uint256 amount) public onlyOwner returns (bool) {
+        emit Withdrawal(receiver, address(token), amount);
+        return token.transfer(receiver, amount);
     }
 }

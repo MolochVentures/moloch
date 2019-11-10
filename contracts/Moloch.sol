@@ -33,9 +33,9 @@ contract Moloch {
     /***************
     EVENTS
     ***************/
-    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tokenTribute, uint256 sharesRequested);
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, uint256 sharesRequested);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tokenTribute, uint256 sharesRequested, bool didPass);
+    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -84,7 +84,7 @@ contract Moloch {
         mapping (address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-    mapping (address => IERC20) public tokenWhitelist;
+    mapping (address => bool) public tokenWhitelist;
     IERC20[] public approvedTokens;
 
     mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
@@ -143,7 +143,7 @@ contract Moloch {
         for (uint256 i=0; i < _approvedTokens.length; i++) {
             require(_approvedTokens[i] != address(0), "Moloch::constructor - _approvedToken cannot be 0");
             require(!tokenWhitelist[_approvedTokens[i]], "Moloch::constructor - duplicate approved token");
-            tokenWhitelist[_approvedTokens[i]] = IERC20(_approvedTokens[i]);
+            tokenWhitelist[_approvedTokens[i]] = true;
             approvedTokens.push(IERC20(_approvedTokens[i]));
         }
 
@@ -183,10 +183,10 @@ contract Moloch {
     {
         require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
-        require(proposal.applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
+        require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(tributeToken.transferFrom(msg.sender, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
+        require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
 
         // create proposal...
         Proposal memory proposal = Proposal({
@@ -215,7 +215,7 @@ contract Moloch {
         proposalCount += 1; // increment proposal counter
 
         // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
     }
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
@@ -229,9 +229,9 @@ contract Moloch {
             sponsor: address(0),
             sharesRequested: 0,
             tributeOffered: 0,
-            tributeToken: address(0),
+            tributeToken: IERC20(address(0)),
             paymentRequested: 0,
-            paymentToken: address(0),
+            paymentToken: IERC20(address(0)),
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
@@ -249,7 +249,7 @@ contract Moloch {
         proposalCount += 1; // increment proposal counter
 
         // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
     }
 
     function submitGuildKickProposal(address memberToKick, string memory details) public {
@@ -262,9 +262,9 @@ contract Moloch {
             sponsor: address(0),
             sharesRequested: 0,
             tributeOffered: 0,
-            tributeToken: address(0),
+            tributeToken: IERC20(address(0)),
             paymentRequested: 0,
-            paymentToken: address(0),
+            paymentToken: IERC20(address(0)),
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
@@ -282,7 +282,7 @@ contract Moloch {
         proposalCount += 1; // increment proposal counter
 
         // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
     }
 
     function sponsorProposal(uint256 proposalId) public onlyDelegate {
@@ -328,7 +328,7 @@ contract Moloch {
         proposalQueue.push(proposalId);
 
         // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tokenTribute, sharesRequested);
+        // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -377,7 +377,7 @@ contract Moloch {
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
         require(proposal.processed == false, "Moloch::processProposal - proposal has already been processed");
-        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)].processed], "Moloch::processProposal - previous proposal must be processed");
+        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].processed, "Moloch::processProposal - previous proposal must be processed");
 
         proposal.processed = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
@@ -408,13 +408,13 @@ contract Moloch {
 
             // whitelist proposal passed, add token to whitelist
             if (proposal.tokenToWhitelist != address(0)) {
-               tokenWhitelist[proposal.tokenToWhitelist] = IERC20(proposal.tokenToWhitelist);
+               tokenWhitelist[proposal.tokenToWhitelist] = true;
                approvedTokens.push(IERC20(proposal.tokenToWhitelist));
 
             // guild kick proposal passed, ragequit 100% of the member's shares
             // NOTE - if any approvedToken is broken gkicks will fail and get stuck here (until emergency processing)
             } else if (proposal.memberToKick != address(0)) {
-                _ragequit(members[proposal.memberToKick].shares, new address[](0), new uint256[](0), approvedTokens);
+                _ragequit(members[proposal.memberToKick].shares, approvedTokens);
 
             // standard proposal passed, collect tribute, send payment, mint shares
             } else {
@@ -441,13 +441,13 @@ contract Moloch {
 
                 // transfer tribute tokens to guild bank
                 require(
-                    proposal.tributeToken.transfer(address(guildBank), proposal.tokenTribute),
+                    proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
                     "Moloch::processProposal - token transfer to guild bank failed"
                 );
 
                 // transfer payment tokens to applicant
                 require(
-                    guildBank.withdrawToken(proposal.paymentToken, applicant, proposal.paymentRequested),
+                    guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
                     "Moloch::processProposal - token payment to applicant failed"
                 );
             }
@@ -458,7 +458,7 @@ contract Moloch {
             if (!emergencyProcessing) {
                 // return all tokens to the proposer
                 require(
-                    proposal.tributeToken.transfer(proposal.propoer, proposal.tokenTribute),
+                    proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
                     "Moloch::processProposal - failing vote token transfer failed"
                 );
             }
@@ -491,7 +491,7 @@ contract Moloch {
             proposalIndex,
             proposal.applicant,
             proposal.proposer,
-            proposal.tokenTribute,
+            proposal.tributeOffered,
             proposal.sharesRequested,
             didPass
         ); */
@@ -501,10 +501,10 @@ contract Moloch {
         _ragequit(sharesToBurn, approvedTokens);
     }
 
-    function safeRagequit(uint256 sharesToBurn, address[] memory tokenList) public onlyMember {
+    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
-        for (var i=0; i < tokenList.length; i++) {
-            require(tokenWhitelist[tokenList[i]], "Moloch::safeRequit - token must be whitelisted");
+        for (uint256 i=0; i < tokenList.length; i++) {
+            require(tokenWhitelist[address(tokenList[i])], "Moloch::safeRequit - token must be whitelisted");
 
             // check token uniqueness - for every token address after the first, enforce ascending lexical order
             if (i > 0) {
@@ -515,7 +515,7 @@ contract Moloch {
         _ragequit(sharesToBurn, tokenList);
     }
 
-    function _ragequit(uint256 sharesToBurn, address[] memory approvedTokens) internal {
+    function _ragequit(uint256 sharesToBurn, IERC20[] memory approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
