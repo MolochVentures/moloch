@@ -486,15 +486,7 @@ contract Moloch {
             "Moloch::processProposal - failed to return proposal deposit to sponsor"
         );
 
-        /* TODO
-        emit ProcessProposal(
-            proposalIndex,
-            proposal.applicant,
-            proposal.proposer,
-            proposal.tributeOffered,
-            proposal.sharesRequested,
-            didPass
-        ); */
+        // TODO emit ProcessProposal()
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
