@@ -35,9 +35,13 @@ Members that ragequit and receive their fraction of a LAO-held security claims t
 Transfer restrictions will be enforced such that the security claims tokens can only be transferred to other DAO members, or other addresses whitelisted by the LAO admins.
 
 > To expect God to care about you or your personal values or the values of your civilization, that’s hubris.
+
 > To expect God to bargain with you, to allow you to survive and prosper as long as you submit to Him, that’s hubris.
+
 > To expect to wall off a garden where God can’t get to you and hurt you, that’s hubris.
+
 > To expect to be able to remove God from the picture entirely…well, at least it’s an actionable strategy.
+
 > I am a transhumanist because I do not have enough hubris not to try to kill God.
 
 ~ Scott Alexander, [Meditations on Moloch](http://slatestarcodex.com/2014/07/30/meditations-on-moloch/)
