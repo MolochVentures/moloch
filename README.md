@@ -20,7 +20,7 @@ In developing Moloch v2, we stuck with our ruthless minimalism, deviating as lit
 
 Moloch v2 is designed to extend MolochDAO's operations from purely single-token public goods grants-making to acquiring and spending (or investing in) an unlimited portfolio of assets.
 
-Proposals in Moloch v2 now specify a tribute token and a payment token, which can be any whitelisted ERC20. Membership proposals offering tribute in exchange for shares can now offer any token, possibly helping balance the DAO portfolio. Grant proposals can now be in both shares and a stablecoin payment token to smooth out volatility risk, or even skip shares entirely to pay external contractors without awarding membership. Members can also propose *trades* to swap tokens OTC with the guild bank, which could be used for making investments, active portfolio management, selloffs, or just to top off a stablecoin reserve to pay for planned expenses.
+Proposals in Moloch v2 now specify a tribute token and a payment token, which can be any whitelisted ERC20. Membership proposals offering tribute in exchange for shares can now offer any token, possibly helping balance the DAO portfolio. Grant proposals can now be in both shares and a stablecoin payment token to smooth out volatility risk, or even skip shares entirely to pay external contractors without awarding membership. Members can also propose *trades* to swap tokens OTC with the guild bank, which could be used for making investments, active portfolio management, selloffs, or just to top off a stablecoin reserve used to pay for planned expenses.
 
 ### MolochLAO
 
@@ -33,18 +33,6 @@ To interface with offchain securities like SAFTs, the MolochLAO will issue secur
 Members that ragequit and receive their fraction of a LAO-held security claims token will still be able to use their claims token to withdraw their dividends from the claims token contract.
 
 Transfer restrictions will be enforced such that the security claims tokens can only be transferred to other DAO members, or other addresses whitelisted by the LAO admins.
-
-> To expect God to care about you or your personal values or the values of your civilization, that’s hubris.
-
-> To expect God to bargain with you, to allow you to survive and prosper as long as you submit to Him, that’s hubris.
-
-> To expect to wall off a garden where God can’t get to you and hurt you, that’s hubris.
-
-> To expect to be able to remove God from the picture entirely…well, at least it’s an actionable strategy.
-
-> I am a transhumanist because I do not have enough hubris not to try to kill God.
-
-~ Scott Alexander, [Meditations on Moloch](http://slatestarcodex.com/2014/07/30/meditations-on-moloch/)
 
 ## Installation
 
@@ -138,6 +126,22 @@ For global options help run: buidler help
 ```
 
 # Changelog v2
+
+![Many
+Molochs](https://cdn.discordapp.com/attachments/583914506389028865/643303589254529025/molochs.jpeg)
+
+> To expect God to care about you or your personal values or the values of your civilization, that’s hubris.
+
+> To expect God to bargain with you, to allow you to survive and prosper as long as you submit to Him, that’s hubris.
+
+> To expect to wall off a garden where God can’t get to you and hurt you, that’s hubris.
+
+> To expect to be able to remove God from the picture entirely…well, at least it’s an actionable strategy.
+
+> I am a transhumanist because I do not have enough hubris not to try to kill God.
+
+~ Scott Alexander, [Meditations on Moloch](http://slatestarcodex.com/2014/07/30/meditations-on-moloch/)
+
 Moloch v2 is minimally different from Moloch v1, please read the [original documentation](https://github.com/MolochVentures/moloch/tree/minimal-revenue/v1_contracts/README.md) first, and then the changelog below.
 
 ## GuildBank.sol
