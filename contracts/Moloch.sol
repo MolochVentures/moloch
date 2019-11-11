@@ -73,7 +73,7 @@ contract Moloch {
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
-        bool[6] flags; // [sponsored, processed, didPass, cancelled]
+        bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         // 0. sponsored - true only if the proposal has been submitted by a member
         // 1. processed - true only if the proposal has been processed
         // 2. didPass - true only if the proposal passed
