@@ -9,16 +9,20 @@
 
 ### General Changes
 In order to circumvent Solidity's 16 parameter "stack too deep" error we
-combined several proposal flags into the *flags* array.
+combined several proposal flags in the Proposal struct into the *flags* array.
 
 ```
-// bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-// 0. sponsored - true only if the proposal has been submitted by a member
-// 1. processed - true only if the proposal has been processed
-// 2. didPass - true only if the proposal passed
-// 3. cancelled - true only if the proposer called cancelProposal before a member sponsored the proposal
-// 4. whitelist - true only if this is a whitelist proposal, NOTE - tributeToken is target of whitelist
-// 5. guildkick - true only if this is a guild kick proposal, NOTE - applicant is target of guild kick
+struct Proposal {
+  // ...
+  bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+  // 0. sponsored - true only if the proposal has been submitted by a member
+  // 1. processed - true only if the proposal has been processed
+  // 2. didPass - true only if the proposal passed
+  // 3. cancelled - true only if the proposer called cancelProposal before a member sponsored the proposal
+  // 4. whitelist - true only if this is a whitelist proposal, NOTE - tributeToken is target of whitelist
+  // 5. guildkick - true only if this is a guild kick proposal, NOTE - applicant is target of guild kick
+  // ...
+}
 ```
 
 ### Multi-Token Support
