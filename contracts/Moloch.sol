@@ -189,6 +189,8 @@ contract Moloch {
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
 
+        bool[6] memory flags;
+
         // create proposal...
         Proposal memory proposal = Proposal({
             applicant: applicant,
@@ -202,7 +204,8 @@ contract Moloch {
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
-            flags: [false, false, false, false, false, false],
+            flags: flags,
+            details: details,
             maxTotalSharesAtYesVote: 0
         });
 
@@ -217,6 +220,9 @@ contract Moloch {
         require(tokenToWhitelist != address(0), "Moloch::submitWhitelistProposal - must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "Moloch::submitWhitelistProposal - can't already have whitelisted the token");
 
+        bool[6] memory flags;
+        flags[4] = true; // whitelist proposal = true
+
         // create proposal ...
         Proposal memory proposal = Proposal({
             applicant: address(0),
@@ -230,10 +236,11 @@ contract Moloch {
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
-            flags: [false, false, false, false, true, false], // whitelist proposal = true
+            flags: flags,
             details: details,
             maxTotalSharesAtYesVote: 0
         });
+
 
         proposals[proposalCount] = proposal; // save proposal by its id
         proposalCount += 1; // increment proposal counter
@@ -244,6 +251,9 @@ contract Moloch {
 
     function submitGuildKickProposal(address memberToKick, string memory details) public {
         require(members[memberToKick].shares > 0, "Moloch::submitGuildKickProposal - member must have at least one share");
+
+        bool[6] memory flags;
+        flags[5] = true; // guild kick proposal = true
 
         // create proposal ...
         Proposal memory proposal = Proposal({
@@ -258,7 +268,7 @@ contract Moloch {
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,
-            flags: [false, false, false, false, false, true], // guild kick proposal = true
+            flags: flags,
             details: details,
             maxTotalSharesAtYesVote: 0
         });
@@ -281,8 +291,8 @@ contract Moloch {
 
         // token whitelist proposal
         if (proposal.flags[4]) {
-            require(!proposedToWhitelist[proposal.tributeToken); // already an active proposal to whitelist this token
-            proposedToWhitelist[proposal.flags[4]] = true;
+            require(!proposedToWhitelist[address(proposal.tributeToken)]); // already an active proposal to whitelist this token
+            proposedToWhitelist[address(proposal.tributeToken)] = true;
 
         // gkick proposal
         } else if (proposal.flags[5]) {
@@ -389,12 +399,12 @@ contract Moloch {
         // PROPOSAL PASSED
         if (didPass) {
 
-            proposal.flags[2] = true;
+            proposal.flags[2] = true; // didPass = true
 
             // whitelist proposal passed, add token to whitelist
-            if (proposal.flags[4] != address(0)) {
-               tokenWhitelist[proposal.flags[4]] = true;
-               approvedTokens.push(IERC20(proposal.flags[4]));
+            if (proposal.flags[4]) {
+               tokenWhitelist[address(proposal.tributeToken)] = true;
+               approvedTokens.push(proposal.tributeToken);
 
             // guild kick proposal passed, ragequit 100% of the member's shares
             // NOTE - if any approvedToken is broken gkicks will fail and get stuck here (until emergency processing)
@@ -451,7 +461,7 @@ contract Moloch {
 
         // if token whitelist proposal, remove token from tokens proposed to whitelist
         if (proposal.flags[4]) {
-            proposedToWhitelist[proposal.tributeToken = false;
+            proposedToWhitelist[address(proposal.tributeToken)] = false;
         }
 
         // if guild kick proposal, remove member from list of members proposed to be kicked
