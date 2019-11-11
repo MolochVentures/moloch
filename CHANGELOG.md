@@ -7,6 +7,20 @@
 
 ## Moloch.sol -> MolochVentures.sol
 
+### General Changes
+In order to circumvent Solidity's 16 parameter "stack too deep" error we
+combined several proposal flags into the *flags* array.
+
+```
+// bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+// 0. sponsored - true only if the proposal has been submitted by a member
+// 1. processed - true only if the proposal has been processed
+// 2. didPass - true only if the proposal passed
+// 3. cancelled - true only if the proposer called cancelProposal before a member sponsored the proposal
+// 4. whitelist - true only if this is a whitelist proposal, NOTE - tributeToken is target of whitelist
+// 5. guildkick - true only if this is a guild kick proposal, NOTE - applicant is target of guild kick
+```
+
 ### Multi-Token Support
 
 ##### Proposal Struct
@@ -43,7 +57,8 @@ Track the whitelisted tokens in a mapping (to check if that token is on the whit
 ### Adding Tokens to Whitelist
 
 ##### Proposal Struct
-- add `address tokenToWhitelist`
+- tributeToken -> token to whitelist
+- proposal.flags[4] -> whitelist flag
 
 ##### Globals
 - add `mapping (address => bool) public proposedToWhitelist` to prevent duplicate active token whitelist proposals
@@ -51,7 +66,8 @@ Track the whitelisted tokens in a mapping (to check if that token is on the whit
 ##### `submitWhitelistProposal`
 - new function to propose adding a token to the whitelist
 - enforces that the token address isn't null or already whitelisted
-- saves a proposal with all other params set to null except the `tokenToWhitelist` address
+- saves a proposal with all other params set to null except the whitelist flag
+  and `tributeToken` address (tributeToken acts as token to whitelist)
 
 ##### `processProposal`
 - on a passing whitelist proposal, add the token to whitelist
@@ -128,7 +144,8 @@ The abort functionality existed primarily to address the unsafe approval vulnera
 To allow the members to take risks on new members, we add the guild kick proposal type. The guild kick proposal, if it passes, has the same effect as if a member ragequit 100% of their shares—they have their proportional share of all guild bank assets transferred to them.
 
 ##### Proposal Struct
-- add `address memberToKick`
+- applicant -> member to kick
+- proposal.flags[5] -> guild kick flag
 
 ##### Globals
 - add `mapping (address => bool) public proposedToKick` to prevent duplicate active guild kick proposals
@@ -136,7 +153,8 @@ To allow the members to take risks on new members, we add the guild kick proposa
 ##### `submitGuildKickProposal`
 - new function to propose kicking a member
 - enforces that the member exists (has shares)
-- saves a proposal with all other params set to null except the `memberToKick` address
+- saves a proposal with all other params set to null except the guild kick flag
+  and the `applicant` address (applicant acts as member to kick)
 
 ##### `processProposal`
 - on a passing guild kick proposal, ragequit 100% of the member's shares
