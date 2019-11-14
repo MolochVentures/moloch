@@ -2,6 +2,10 @@
 
 ![tshirt](https://slatestarcodex.com/blog_images/moloch-tshirt.png)
 
+> "Interesting," said Professor Quirrell. "That does sound similar. Is there a moral?"
+
+> "That your strength as a rationalist is your ability to be more confused by fiction than by reality," said Harry. "If you're equally good at explaining any outcome, you have zero knowledge.
+
 This document is intended to help those interested in learning about testing solidity in general, and also to act as a guide for testing future iterations of the Moloch smart contracts. It is organized as a set of principles and, where possible, examples demonstrating their practical application.
 
 ### Test Code Quality
