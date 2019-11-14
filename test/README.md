@@ -13,7 +13,7 @@ The first pass of unit tests will inevitably proceed faster by copy-pasting the 
 
 After the first pass of unit tests, it is important to refactor the common setup and verification into their own functions. Not only does this save time for a reviewer who only has to review those functions once, but it also **emphasizes the differences** between unit test scenarios and make them easier to reason about.
 
-##### Verification Functions
+#### Verification Functions
 
 For each Moloch.sol function, the Moloch tests have a *verification function* that checks each state transition expected from the successful execution of the function.
 
@@ -21,7 +21,7 @@ For example, `verifySubmitVote` checks that the `proposal.yesVotes` or `proposal
 
 The `member.highestIndexYesVote` field is also conditionally updated by `submitVote`, but the conditional was complex enough to omit from the main verification function and check it separately.
 
-##### Snapshot & Revert
+#### Snapshot & Revert
 
 The Moloch tests make heavy use of EVM snapshot & revert both to speed up the tests and to allow for less repetitive setup code.
 
