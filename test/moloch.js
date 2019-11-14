@@ -1,5 +1,70 @@
-// TODO
-// - events
+// v2 test spec
+//
+// Process
+// 0. Read the Guide
+//  - https://github.com/MolochVentures/moloch/blob/master/test/README.md
+// 1. Remove obviated code
+// 2. Update tests in logical order (constructor, submitProposal, etc..)
+//  - update test code based on changelog to get each test passing
+// 3. Add tests for new functions
+// 4. Add tests for new edge cases
+//
+// Cleanup
+// - remove abort tests
+// - update to new proposal mapping data structure
+// - update to new proposal.flags data structure
+// - update to using a base token instead of default moloch.approvedToken
+// - udpate to deposit token for proposal deposits instead of approvedToken
+//
+// New Functions
+// - sponsorProposal
+// - submitWhitelistProposal
+// - submitGuildKickProposal
+// - safeRagequit
+// - cancelProposal
+//
+// submitProposal
+// - update verifySubmitProposal to simply check that proposal is saved
+// - test all requires, modifiers, and code paths (whitelist, guild kick)
+//
+// sponsorProposal
+// - copy verifySubmitProposal code to verifySponsorProposal to do the rest
+// - test all requires, modifiers, and code paths (whitelist, guild kick)
+//
+// submitWhitelistProposal
+// - check that proposal data are saved properly
+//
+// submitGuildKickProposal
+// - check that proposal data are saved properly
+//
+// processProposal
+// - passing proposal auto-fails if guildbank doesn't have $$ for a payment
+//   - proposal sends payment otherwise
+// - return funds to proposer, not applicant
+// - guild kick ragequits on behalf of a user
+//   - updates proposedToKick (for both successs & failure)
+// - token whitelist adds token to whitelist
+//   - updates proposedToWhitelist (for both successs & failure)
+//
+// safeRagequit
+// - works only for approved tokens, ragequits the correct amounts
+//   - e.g. airdrop a non-whitelisted token on to guildbank, then try
+//
+// cancelProposal
+// - returns the tribute tokens to the proposer
+//
+// New Edge Cases
+// - ragequit with multiple tokens in guildbank
+// - ragequit too many tokens (loop should run out of gas)
+// - ragequit one less than too many tokens
+// - safeRagequit even when there are too many tokens to ragequit
+//   - might not work with simply 1 less b/c gas cost of providing token array
+// - processProposal after emergencyExitWait expires
+//   - [setup] -> break a whitelisted token in the guildbank on purpose
+//   - proposal after it in queue should be able to be processed immediately
+//   - broken tribute tokens must not be returned (check balance)
+// - processProposal guildkick auto-fails b/c of token transfer restriction
+//   - proposal can still be processed after emergencyExitWait expires
 
 const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
 const chai = require('chai')
