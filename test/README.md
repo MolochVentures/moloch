@@ -12,12 +12,12 @@ This document is intended to help those interested in learning about testing sol
 
 Tests should be written, not only to verify correctness of the target code, but to be comprehensively reviewed by other programmers. Therefore, for mission critical solidity code, the quality of the tests are just as important (if not more so) than the code itself, and should be written with the highest standards of clarity and elegance.
 
-### Test code should follow DRY (Don't Repeat Yourself)
+### Tests Should Follow DRY (Don't Repeat Yourself)
 The first pass of unit tests will inevitably proceed faster by copy-pasting the setup and verification code from one test to the next, but these duplicated lines of code get in the way of careful indedepent review. A reviewer must read *every* line of test code and must thus constantly fight the urge to gloss over certain lines that look the same as in the previous test, in case there is a slight but meaningful deviation that requires their evaluation.
 
 After the first pass of unit tests, it is important to refactor the common setup and verification into their own functions. Not only does this save time for a reviewer who only has to review those functions once, but it also **emphasizes the differences** between unit test scenarios and make them easier to reason about.
 
-##### Verification Functions
+#### Verification Functions
 
 For each Moloch.sol function, the Moloch tests have a *verification function* that checks each state transition expected from the successful execution of the function.
 
@@ -25,7 +25,7 @@ For example, `verifySubmitVote` checks that the `proposal.yesVotes` or `proposal
 
 The `member.highestIndexYesVote` field is also conditionally updated by `submitVote`, but the conditional was complex enough to omit from the main verification function and check it separately.
 
-##### Snapshot & Revert
+#### Snapshot & Revert
 
 The Moloch tests make heavy use of EVM snapshot & revert both to speed up the tests and to allow for less repetitive setup code.
 
