@@ -2,9 +2,11 @@
 
 ![tshirt](https://slatestarcodex.com/blog_images/moloch-tshirt.png)
 
-> "Interesting," said Professor Quirrell. "That does sound similar. Is there a moral?"
+> "I have a feeling," Harry said finally, "that we're coming at this from the wrong angle. There's a tale I once heard about some students who came into a physics class, and the teacher showed them a large metal plate near a fire. She ordered them to feel the metal plate, and they felt that the metal nearer the fire was cooler, and the metal further away was warmer. And she said, write down your guess for why this happens. So some students wrote down 'because of how the metal conducts heat', and some students wrote down 'because of how the air moves', and no one said 'this just seems impossible', and the real answer was that before the students came into the room, the teacher turned the plate around."
 
-> "That your strength as a rationalist is your ability to be more confused by fiction than by reality," said Harry. "If you're equally good at explaining any outcome, you have zero knowledge.
+"Interesting," said Professor Quirrell. "That does sound similar. Is there a moral?"
+
+"That your strength as a rationalist is your ability to be more confused by fiction than by reality," said Harry. "If you're equally good at explaining any outcome, you have zero knowledge. The students thought they could use words like 'because of heat conduction' to explain anything, even a metal plate being cooler on the side nearer the fire. So they didn't notice how confused they were, and that meant they couldn't be more confused by falsehood than by truth.
 
 ~ [Harry Potter and the Methods of Rationality](https://www.hpmor.com/chapter/26)
 
