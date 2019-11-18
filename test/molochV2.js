@@ -2,19 +2,19 @@
 //
 // Process
 // 0. Read the Guide
-//  - https://github.com/MolochVentures/moloch/blob/master/test/README.md
-// 1. Remove obviated code
+//  - https://github.com/MolochVentures/moloch/blob/master/test/README.md DONE
+// 1. Remove obviated code - WIP
 // 2. Update tests in logical order (constructor, submitProposal, etc..)
 //  - update test code based on changelog to get each test passing
 // 3. Add tests for new functions
 // 4. Add tests for new edge cases
 //
 // Cleanup
-// - remove abort tests
-// - update to new proposal mapping data structure
-// - update to new proposal.flags data structure
-// - update to using a base token instead of default moloch.approvedToken
-// - udpate to deposit token for proposal deposits instead of approvedToken
+// - remove abort tests DONE
+// - update to new proposal mapping data structure WIP - needs testing
+// - update to new proposal.flags data structure WIP - needs testing
+// - update to using a base token instead of default moloch.approvedToken - WIP - using TokenAlpha
+// - update to deposit token for proposal deposits instead of approvedToken
 //
 // New Functions
 // - sponsorProposal
@@ -89,7 +89,7 @@ const deploymentConfig = {
   'PERIOD_DURATION_IN_SECONDS': 17280,
   'VOTING_DURATON_IN_PERIODS': 35,
   'GRACE_DURATON_IN_PERIODS': 35,
-  'ABORT_WINDOW_IN_PERIODS': 5,
+  'EMERGENCY_EXIT_WAIT_IN_PERIODS': 35,
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
@@ -128,7 +128,7 @@ async function moveForwardPeriods (periods) {
   return true
 }
 
-let moloch, guildBank, token, proxyFactory, gnosisSafeMasterCopy, gnosisSafe
+let moloch, guildBank, tokenAlpha, tokenBeta, proxyFactory, gnosisSafeMasterCopy, gnosisSafe
 let proposal1, proposal2
 
 // used by gnosis safe
@@ -170,21 +170,41 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       : 1
 
     const proposalData = await moloch.proposalQueue.call(proposalIndex)
-    assert.equal(proposalData.proposer, proposer)
+
     assert.equal(proposalData.applicant, proposal.applicant)
+    assert.equal(proposalData.proposer, proposer)
+    assert.equal(proposalData.sponsor, proposal.sponsor)
+
     if (typeof proposal.sharesRequested === 'number') {
       assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
     } else {
       // for testing overflow boundary with BNs
       assert(proposalData.sharesRequested.eq(proposal.sharesRequested))
     }
+    assert.equal(proposalData.tributeOffered, proposal.tributeOffered)
+    assert.equal(proposalData.tributeToken, proposal.tributeToken)
+
+    assert.equal(proposalData.paymentRequested, proposal.paymentRequested)
+    assert.equal(proposalData.paymentToken, proposal.paymentToken)
+
     assert.equal(proposalData.startingPeriod, expectedStartingPeriod)
     assert.equal(proposalData.yesVotes, 0)
     assert.equal(proposalData.noVotes, 0)
-    assert.equal(proposalData.processed, false)
-    assert.equal(proposalData.didPass, false)
-    assert.equal(proposalData.aborted, false)
-    assert.equal(proposalData.tokenTribute, proposal.tokenTribute)
+
+    // 0. sponsored - true only if the proposal has been submitted by a member
+    // 1. processed - true only if the proposal has been processed
+    // 2. didPass - true only if the proposal passed
+    // 3. cancelled - true only if the proposer called cancelProposal before a member sponsored the proposal
+    // 4. whitelist - true only if this is a whitelist proposal, NOTE - tributeToken is target of whitelist
+    // 5. guildkick - true only if this is a guild kick proposal, NOTE - applicant is target of guild kick
+
+    assert.equal(proposalData.flags[0], proposal.flags[0])
+    assert.equal(proposalData.flags[1], proposal.flags[1])
+    assert.equal(proposalData.flags[2], proposal.flags[2])
+    assert.equal(proposalData.flags[3], proposal.flags[3])
+    assert.equal(proposalData.flags[4], proposal.flags[4])
+    assert.equal(proposalData.flags[5], proposal.flags[5])
+
     assert.equal(proposalData.details, proposal.details)
     assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
 
@@ -209,19 +229,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const proposalQueueLength = await moloch.getProposalQueueLength()
     assert.equal(proposalQueueLength, initialProposalLength + 1)
 
-    const molochBalance = await token.balanceOf(moloch.address)
+    const molochBalance = await tokenAlpha.balanceOf(moloch.address)
     assert.equal(
       molochBalance,
       initialMolochBalance + proposal.tokenTribute + deploymentConfig.PROPOSAL_DEPOSIT
     )
 
-    const applicantBalance = await token.balanceOf(proposal.applicant)
+    const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
     assert.equal(
       applicantBalance,
       initialApplicantBalance - proposal.tokenTribute
     )
 
-    const proposerBalance = await token.balanceOf(proposer)
+    const proposerBalance = await tokenAlpha.balanceOf(proposer)
     assert.equal(
       proposerBalance,
       initialProposerBalance - deploymentConfig.PROPOSAL_DEPOSIT
@@ -337,13 +357,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         : initialTotalShares
     )
 
-    const molochBalance = await token.balanceOf(moloch.address)
+    const molochBalance = await tokenAlpha.balanceOf(moloch.address)
     assert.equal(
       molochBalance,
       initialMolochBalance - proposal.tokenTribute - deploymentConfig.PROPOSAL_DEPOSIT
     )
 
-    const guildBankBalance = await token.balanceOf(guildBank.address)
+    const guildBankBalance = await tokenAlpha.balanceOf(guildBank.address)
     assert.equal(
       guildBankBalance,
       didPass && !aborted
@@ -353,7 +373,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     // proposer and applicant are different
     if (proposer !== proposal.applicant) {
-      const applicantBalance = await token.balanceOf(proposal.applicant)
+      const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
       assert.equal(
         applicantBalance,
         didPass && !aborted
@@ -361,30 +381,30 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           : initialApplicantBalance + proposal.tokenTribute
       )
 
-      const proposerBalance = await token.balanceOf(proposer)
+      const proposerBalance = await tokenAlpha.balanceOf(proposer)
       assert.equal(
         proposerBalance,
         initialProposerBalance +
-          deploymentConfig.PROPOSAL_DEPOSIT -
-          deploymentConfig.PROCESSING_REWARD
+        deploymentConfig.PROPOSAL_DEPOSIT -
+        deploymentConfig.PROCESSING_REWARD
       )
 
       // proposer is applicant
     } else {
-      const proposerBalance = await token.balanceOf(proposer)
+      const proposerBalance = await tokenAlpha.balanceOf(proposer)
       const expectedBalance =
         didPass && !aborted
           ? initialProposerBalance +
-            deploymentConfig.PROPOSAL_DEPOSIT -
-            deploymentConfig.PROCESSING_REWARD
+          deploymentConfig.PROPOSAL_DEPOSIT -
+          deploymentConfig.PROCESSING_REWARD
           : initialProposerBalance +
-            deploymentConfig.PROPOSAL_DEPOSIT -
-            deploymentConfig.PROCESSING_REWARD +
-            proposal.tokenTribute
+          deploymentConfig.PROPOSAL_DEPOSIT -
+          deploymentConfig.PROCESSING_REWARD +
+          proposal.tokenTribute
       assert.equal(proposerBalance, expectedBalance)
     }
 
-    const processorBalance = await token.balanceOf(processor)
+    const processorBalance = await tokenAlpha.balanceOf(processor)
     assert.equal(
       processorBalance,
       initialProcessorBalance + deploymentConfig.PROCESSING_REWARD
@@ -434,14 +454,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   }
 
   before('deploy contracts', async () => {
-    token = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+    tokenAlpha = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+    tokenBeta = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
     moloch = await Moloch.new(
       deploymentConfig.SUMMONER,
-      token.address,
+      [tokenAlpha.address, tokenBeta.address],
       deploymentConfig.PERIOD_DURATION_IN_SECONDS,
       deploymentConfig.VOTING_DURATON_IN_PERIODS,
       deploymentConfig.GRACE_DURATON_IN_PERIODS,
-      deploymentConfig.ABORT_WINDOW_IN_PERIODS,
+      deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
       deploymentConfig.PROPOSAL_DEPOSIT,
       deploymentConfig.DILUTION_BOUND,
       deploymentConfig.PROCESSING_REWARD
@@ -461,12 +483,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     proposal1 = {
       applicant: applicant1,
-      tokenTribute: 100,
       sharesRequested: 1,
+      tributeOffered: 100,
+      tributeToken: tokenAlpha.address,
+      paymentRequested: 0,
+      paymentToken: tokenAlpha.address,
       details: 'all hail moloch'
     }
 
-    token.transfer(summoner, initSummonerBalance, { from: creator })
+    tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
   })
 
   afterEach(async () => {
@@ -477,17 +502,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     // eslint-disable-next-line no-unused-vars
     const now = await blockTime()
 
-    const approvedTokenAddress = await moloch.approvedToken()
-    assert.equal(approvedTokenAddress, token.address)
+    const depositTokenAddress = await moloch.depositTokenAddress()
+    assert.equal(depositTokenAddress, tokenAlpha.address)
 
     const guildBankAddress = await moloch.guildBank()
     assert.equal(guildBankAddress, guildBank.address)
 
     const guildBankOwner = await guildBank.owner()
     assert.equal(guildBankOwner, moloch.address)
-
-    const guildBankToken = await guildBank.approvedToken()
-    assert.equal(guildBankToken, token.address)
 
     const periodDuration = await moloch.periodDuration()
     assert.equal(+periodDuration, deploymentConfig.PERIOD_DURATION_IN_SECONDS)
@@ -497,6 +519,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     const gracePeriodLength = await moloch.gracePeriodLength()
     assert.equal(+gracePeriodLength, deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+    const emergencyExitWaitLength = await moloch.emergencyExitWait()
+    assert.equal(+emergencyExitWaitLength, deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
 
     const abortWindow = await moloch.abortWindow()
     assert.equal(+abortWindow, deploymentConfig.ABORT_WINDOW_IN_PERIODS)
@@ -527,22 +552,22 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const totalShares = await moloch.totalShares()
     assert.equal(+totalShares, 1)
 
-    // confirm initial token supply and summoner balance
-    const tokenSupply = await token.totalSupply()
+    // confirm initial deposit token supply and summoner balance
+    const tokenSupply = await tokenAlpha.totalSupply()
     assert.equal(+tokenSupply.toString(), deploymentConfig.TOKEN_SUPPLY)
-    const summonerBalance = await token.balanceOf(summoner)
+    const summonerBalance = await tokenAlpha.balanceOf(summoner)
     assert.equal(+summonerBalance.toString(), initSummonerBalance)
-    const creatorBalance = await token.balanceOf(creator)
+    const creatorBalance = await tokenAlpha.balanceOf(creator)
     assert.equal(creatorBalance, deploymentConfig.TOKEN_SUPPLY - initSummonerBalance)
   })
 
   describe('submitProposal', () => {
     beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tokenTribute, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tokenTribute, {
         from: proposal1.applicant
       })
     })
@@ -550,14 +575,17 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('happy case', async () => {
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
       await verifySubmitProposal(proposal1, 0, summoner, {
         initialTotalShares: 1,
-        initialApplicantBalance: proposal1.tokenTribute,
+        initialApplicantBalance: proposal1.tributeOffered,
         initialProposerBalance: initSummonerBalance
       })
     })
@@ -568,8 +596,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch
           .submitProposal(
             proposal1.applicant,
-            proposal1.tokenTribute,
             proposal1.sharesRequested,
+            proposal1.tributeOffered,
+            proposal1.tributeToken,
+            proposal1.paymentRequested,
+            proposal1.paymentToken,
             proposal1.details,
             { from: summoner }
           )
@@ -580,35 +611,41 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.sharesRequested = _1e18.sub(new BN(1)) // 1 less
         await moloch.submitProposal(
           proposal1.applicant,
-          proposal1.tokenTribute,
           proposal1.sharesRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
           proposal1.details,
           { from: summoner }
         )
         await verifySubmitProposal(proposal1, 0, summoner, {
           initialTotalShares: 1,
-          initialApplicantBalance: proposal1.tokenTribute,
+          initialApplicantBalance: proposal1.tributeOffered,
           initialProposerBalance: initSummonerBalance
         })
       })
     })
 
     it('require fail - insufficient proposal deposit', async () => {
-      await token.decreaseAllowance(moloch.address, 1, { from: summoner })
+      await tokenAlpha.decreaseAllowance(moloch.address, 1, { from: summoner })
 
       // SafeMath reverts in ERC20.transferFrom
       await moloch
         .submitProposal(
           proposal1.applicant,
-          proposal1.tokenTribute,
           proposal1.sharesRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
           proposal1.details
         )
         .should.be.rejectedWith(SolRevert)
     })
 
     it('require fail - insufficient applicant tokens', async () => {
-      await token.decreaseAllowance(moloch.address, 1, {
+      await tokenAlpha.decreaseAllowance(moloch.address, 1, {
         from: proposal1.applicant
       })
 
@@ -616,8 +653,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch
         .submitProposal(
           proposal1.applicant,
-          proposal1.tokenTribute,
           proposal1.sharesRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
           proposal1.details
         )
         .should.be.rejectedWith(SolRevert)
@@ -627,8 +667,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch
         .submitProposal(
           proposal1.applicant,
-          proposal1.tokenTribute,
           proposal1.sharesRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
           proposal1.details,
           { from: creator }
         )
@@ -637,11 +680,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('edge case - proposal tribute is 0', async () => {
       const unspentTribute = proposal1.tokenTribute
-      proposal1.tokenTribute = 0
+      proposal1.tributeOffered = 0
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -656,8 +702,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       proposal1.sharesRequested = 0
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -671,18 +720,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('submitVote', () => {
     beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -753,14 +805,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith('uintVote must be less than 3')
     })
 
-    it('require fail - proposal has been aborted', async () => {
-      await moloch.abort(0, { from: proposal1.applicant })
-      await moveForwardPeriods(1)
-      await moloch
-        .submitVote(0, 1, { from: summoner })
-        .should.be.rejectedWith('proposal has been aborted')
-    })
-
     it('modifier - delegate', async () => {
       await moveForwardPeriods(1)
       await moloch
@@ -771,18 +815,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('processProposal', () => {
     beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -831,18 +878,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('processProposal - edge cases', () => {
     beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -898,13 +948,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     beforeEach(async () => {
       proposal1.applicant = summoner
 
-      await token.transfer(summoner, 10, { from: creator }) // summoner has 100 init, add 10 for deposit + tribute
-      await token.approve(moloch.address, 110, { from: summoner }) // approve enough for deposit + tribute
+      await tokenAlpha.transfer(summoner, 10, { from: creator }) // summoner has 100 init, add 10 for deposit + tribute
+      await tokenAlpha.approve(moloch.address, 110, { from: summoner }) // approve enough for deposit + tribute
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -930,18 +983,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('processProposal + abort', () => {
     beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -985,18 +1041,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('ragequit', () => {
     beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tokenTribute, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tokenTribute, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -1021,18 +1080,18 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(summonerData.highestIndexYesVote, 0)
 
       // can divide tokenTribute by 2 because 2 shares
-      const summonerBalance = await token.balanceOf(summoner)
+      const summonerBalance = await tokenAlpha.balanceOf(summoner)
       const expectedBalance =
         initSummonerBalance -
         deploymentConfig.PROCESSING_REWARD +
         proposal1.tokenTribute / 2
       assert.equal(+summonerBalance.toString(), expectedBalance)
 
-      const molochBalance = await token.balanceOf(moloch.address)
+      const molochBalance = await tokenAlpha.balanceOf(moloch.address)
       assert.equal(molochBalance, 0)
 
       // guild bank has the other half of the funds
-      const guildBankBalance = await token.balanceOf(guildBank.address)
+      const guildBankBalance = await tokenAlpha.balanceOf(guildBank.address)
       assert.equal(guildBankBalance, proposal1.tokenTribute / 2)
     })
 
@@ -1070,18 +1129,18 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('edge case - weth sent to guild bank can be withdrawn via ragequit', async () => {
       await moloch.processProposal(0)
 
-      await token.transfer(guildBank.address, 100, { from: creator })
-      const guildBankBalance1 = await token.balanceOf(guildBank.address)
+      await tokenAlpha.transfer(guildBank.address, 100, { from: creator })
+      const guildBankBalance1 = await tokenAlpha.balanceOf(guildBank.address)
       assert.equal(guildBankBalance1, proposal1.tokenTribute + 100)
 
       await moloch.ragequit(1, { from: summoner })
 
-      const summonerBalance = await token.balanceOf(summoner)
+      const summonerBalance = await tokenAlpha.balanceOf(summoner)
       const expectedBalance =
         initSummonerBalance - deploymentConfig.PROCESSING_REWARD + guildBankBalance1 / 2
       assert.equal(+summonerBalance.toString(), expectedBalance)
 
-      const guildBankBalance2 = await token.balanceOf(guildBank.address)
+      const guildBankBalance2 = await tokenAlpha.balanceOf(guildBank.address)
       assert.equal(guildBankBalance2, guildBankBalance1 / 2)
     })
 
@@ -1089,113 +1148,24 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     // - it could uint256 overflow
   })
 
-  describe('abort', () => {
-    beforeEach(async () => {
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
-        from: creator
-      })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
-        from: proposal1.applicant
-      })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        proposal1.tokenTribute,
-        proposal1.sharesRequested,
-        proposal1.details,
-        { from: summoner }
-      )
-    })
-
-    it('happy case', async () => {
-      await moloch.abort(0, { from: proposal1.applicant })
-
-      const proposal = await moloch.proposalQueue.call(0)
-      assert.equal(proposal.tokenTribute, 0)
-      assert.equal(proposal.sharesRequested, 1)
-      assert.equal(proposal.yesVotes, 0)
-      assert.equal(proposal.noVotes, 0)
-      assert.equal(proposal.maxTotalSharesAtYesVote, 0)
-      assert.equal(proposal.processed, false)
-      assert.equal(proposal.didPass, false)
-      assert.equal(proposal.aborted, true)
-
-      const totalSharesRequested = await moloch.totalSharesRequested()
-      assert.equal(totalSharesRequested, 1)
-
-      const totalShares = await moloch.totalShares()
-      assert.equal(totalShares, 1)
-
-      const molochBalance = await token.balanceOf(moloch.address)
-      assert.equal(molochBalance, deploymentConfig.PROPOSAL_DEPOSIT)
-
-      const summonerBalance = await token.balanceOf(summoner)
-      assert.equal(
-        summonerBalance,
-        initSummonerBalance - deploymentConfig.PROPOSAL_DEPOSIT
-      )
-
-      const applicantBalance = await token.balanceOf(proposal1.applicant)
-      assert.equal(applicantBalance, proposal1.tokenTribute)
-    })
-
-    it('require fail - proposal does not exist', async () => {
-      await moloch
-        .abort(1, { from: proposal1.applicant })
-        .should.be.rejectedWith('proposal does not exist')
-    })
-
-    it('require fail - msg.sender must be applicant', async () => {
-      await moloch
-        .abort(0, { from: summoner })
-        .should.be.rejectedWith('msg.sender must be applicant')
-    })
-
-    it('require fail - proposal must not have already been aborted', async () => {
-      await moloch.abort(0, { from: proposal1.applicant })
-      await moloch
-        .abort(0, { from: proposal1.applicant })
-        .should.be.rejectedWith('proposal must not have already been aborted')
-    })
-
-    describe('abort window boundary', () => {
-      it('require fail - abort window must not have passed', async () => {
-        await moveForwardPeriods(deploymentConfig.ABORT_WINDOW_IN_PERIODS + 1)
-        await moloch
-          .abort(0, { from: proposal1.applicant })
-          .should.be.rejectedWith('abort window must not have passed')
-      })
-
-      it('success - abort 1 period before abort window expires', async () => {
-        await moveForwardPeriods(deploymentConfig.ABORT_WINDOW_IN_PERIODS)
-        await moloch.abort(0, { from: proposal1.applicant })
-
-        const proposal = await moloch.proposalQueue.call(0)
-        assert.equal(proposal.tokenTribute, 0)
-        assert.equal(proposal.aborted, true)
-
-        const applicantBalance = await token.balanceOf(proposal1.applicant)
-        assert.equal(applicantBalance, proposal1.tokenTribute)
-      })
-    })
-  })
-
   describe('updateDelegateKey', () => {
     beforeEach(async () => {
       // vote in a new member to test failing requires
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -1262,31 +1232,37 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     beforeEach(async () => {
       proposal2 = {
         applicant: applicant2,
-        tokenTribute: 200,
         sharesRequested: 2,
+        tributeOffered: 200,
+        tributeToken: tokenAlpha.address,
+        paymentRequested: 0,
+        paymentToken: tokenAlpha.address,
         details: ''
       }
 
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
-      await token.transfer(proposal2.applicant, proposal2.tokenTribute, {
+      await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, proposal2.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, {
         from: proposal2.applicant
       })
 
-      await token.approve(moloch.address, 20, { from: summoner })
+      await tokenAlpha.approve(moloch.address, 20, { from: summoner })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -1295,8 +1271,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('processProposal require fail - previous proposal must be processed', async () => {
       await moloch.submitProposal(
         proposal2.applicant,
-        proposal2.tokenTribute,
         proposal2.sharesRequested,
+        proposal2.tributeOffered,
+        proposal2.tributeToken,
+        proposal2.paymentRequested,
+        proposal2.paymentToken,
         proposal2.details,
         { from: summoner }
       )
@@ -1318,8 +1297,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(4) // 0 -> 4
       await moloch.submitProposal(
         proposal2.applicant,
-        proposal2.tokenTribute,
         proposal2.sharesRequested,
+        proposal2.tributeOffered,
+        proposal2.tributeToken,
+        proposal2.paymentRequested,
+        proposal2.paymentToken,
         proposal2.details,
         { from: summoner }
       )
@@ -1331,8 +1313,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(1) // 0 -> 1
       await moloch.submitProposal(
         proposal2.applicant,
-        proposal2.tokenTribute,
         proposal2.sharesRequested,
+        proposal2.tributeOffered,
+        proposal2.tributeToken,
+        proposal2.paymentRequested,
+        proposal2.paymentToken,
         proposal2.details,
         { from: summoner }
       )
@@ -1343,8 +1328,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('submitVote - yes - dont update highestIndexYesVote', async () => {
       await moloch.submitProposal(
         proposal2.applicant,
-        proposal2.tokenTribute,
         proposal2.sharesRequested,
+        proposal2.tributeOffered,
+        proposal2.tributeToken,
+        proposal2.paymentRequested,
+        proposal2.paymentToken,
         proposal2.details,
         { from: summoner }
       )
@@ -1375,18 +1363,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // 3 so total shares is 4 and we can test ragequit + dilution boundary
       proposal1.sharesRequested = 3
 
-      await token.transfer(proposal1.applicant, proposal1.tokenTribute, {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, 10, { from: summoner })
-      await token.approve(moloch.address, proposal1.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, {
         from: proposal1.applicant
       })
 
       await moloch.submitProposal(
         proposal1.applicant,
-        proposal1.tokenTribute,
         proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
         proposal1.details,
         { from: summoner }
       )
@@ -1405,19 +1396,22 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         details: ''
       }
 
-      await token.transfer(proposal2.applicant, proposal2.tokenTribute, {
+      await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, {
         from: creator
       })
-      await token.approve(moloch.address, proposal2.tokenTribute, {
+      await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, {
         from: proposal2.applicant
       })
 
-      await token.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
 
       await moloch.submitProposal(
         proposal2.applicant,
-        proposal2.tokenTribute,
         proposal2.sharesRequested,
+        proposal2.tributeOffered,
+        proposal2.tributeToken,
+        proposal2.paymentRequested,
+        proposal2.paymentToken,
         proposal2.details,
         { from: summoner }
       )
@@ -1505,7 +1499,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       // Transfer Tokens to Gnosis Safe
-      await token.transfer(gnosisSafe.address, 100, { from: creator })
+      await tokenAlpha.transfer(gnosisSafe.address, 100, { from: creator })
 
       // Transfer ETH to Gnosis Safe (because safe pays executor for gas)
       await web3.eth.sendTransaction({
@@ -1526,19 +1520,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('token approval', async () => {
-      let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
+      let data = await tokenAlpha.contract.methods.approve(moloch.address, 100).encodeABI()
       await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
-      const approvedAmount = await token.allowance(gnosisSafe.address, moloch.address)
+      const approvedAmount = await tokenAlpha.allowance(gnosisSafe.address, moloch.address)
       assert.equal(approvedAmount, 100)
     })
 
     it('abort', async () => {
       // approve 100 eth from safe to moloch
-      let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
+      let data = await tokenAlpha.contract.methods.approve(moloch.address, 100).encodeABI()
       await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
 
       // summoner approve for proposal deposit
-      await token.approve(moloch.address, 10, { from: summoner })
+      await tokenAlpha.approve(moloch.address, 10, { from: summoner })
       // summoner submits proposal for safe
       await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
 
@@ -1552,11 +1546,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     describe('as a member, can execute all functions', async () => {
       beforeEach(async () => {
         // approve 100 eth from safe to moloch
-        let data = await token.contract.methods.approve(moloch.address, 100).encodeABI()
+        let data = await tokenAlpha.contract.methods.approve(moloch.address, 100).encodeABI()
         await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
 
         // summoner approves tokens and submits proposal for safe
-        await token.approve(moloch.address, 10, { from: summoner })
+        await tokenAlpha.approve(moloch.address, 10, { from: summoner })
         await moloch.submitProposal(proposal1.applicant, proposal1.tokenTribute, proposal1.sharesRequested, proposal1.details, { from: summoner })
 
         // summoner votes yes for safe
@@ -1577,19 +1571,22 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         // create a new proposal
         proposal2 = {
           applicant: applicant1,
-          tokenTribute: 100,
           sharesRequested: 2,
+          tributeOffered: 100,
+          tributeToken: tokenAlpha.address,
+          paymentRequested: 0,
+          paymentToken: tokenAlpha.address,
           details: ''
         }
 
         // send the applicant 100 tokens and have them do the approval
-        await token.transfer(proposal2.applicant, proposal2.tokenTribute, { from: creator })
-        await token.approve(moloch.address, proposal2.tokenTribute, { from: proposal2.applicant })
+        await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, { from: creator })
+        await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, { from: proposal2.applicant })
 
         // safe needs to approve 10 for the deposit (get 10 more from creator)
-        await token.transfer(gnosisSafe.address, 10, { from: creator })
-        let data = await token.contract.methods.approve(moloch.address, 10).encodeABI()
-        await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], token.address, 0, data, CALL, executor)
+        await tokenAlpha.transfer(gnosisSafe.address, 10, { from: creator })
+        let data = await tokenAlpha.contract.methods.approve(moloch.address, 10).encodeABI()
+        await safeUtils.executeTransaction(lw, gnosisSafe, 'approve token transfer to moloch', [lw.accounts[0], lw.accounts[1]], tokenAlpha.address, 0, data, CALL, executor)
 
         // safe submits proposal
         let submitProposalData = await moloch.contract.methods.submitProposal(proposal2.applicant, proposal2.tokenTribute, proposal2.sharesRequested, proposal2.details).encodeABI()
@@ -1599,7 +1596,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await verifySubmitProposal(proposal2, 1, gnosisSafe.address, {
           initialTotalShares: 2,
           initialProposalLength: 1,
-          initialApplicantBalance: proposal2.tokenTribute,
+          initialApplicantBalance: proposal2.tributeOffered,
           initialProposerBalance: 10,
           expectedStartingPeriod: expectedStartingPeriod
         })
@@ -1624,7 +1621,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         assert.equal(safeMemberDataAfterRagequit.exists, true)
         assert.equal(safeMemberDataAfterRagequit.shares, 0)
 
-        const safeBalanceAfterRagequit = await token.balanceOf(gnosisSafe.address)
+        const safeBalanceAfterRagequit = await tokenAlpha.balanceOf(gnosisSafe.address)
         assert.equal(safeBalanceAfterRagequit, 50) // 100 eth & 2 shares at time of ragequit
       })
     })
