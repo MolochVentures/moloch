@@ -28,7 +28,7 @@ start_ganache() {
     export RUNNING_COVERAGE=true
     node_modules/.bin/ganache-cli-coverage --emitFreeLogs true --allowUnlimitedContractSize true --gasLimit 0xfffffffffff --port "$ganache_port" -m "fetch local valve black attend double eye excite planet primary install allow" > /dev/null &
   else
-    node_modules/.bin/ganache-cli -l 8000000 --port "$ganache_port" -m "fetch local valve black attend double eye excite planet primary install allow" > /dev/null &
+    node_modules/.bin/ganache-cli -l 9500000 --port "$ganache_port" -m "fetch local valve black attend double eye excite planet primary install allow" > /dev/null &
   fi
 
   ganache_pid=$!
@@ -54,5 +54,5 @@ echo "Buidler version $(npx buidler --version)"
 if [ "$SOLIDITY_COVERAGE" = true ]; then
   node_modules/.bin/solidity-coverage
 else
-  node_modules/.bin/buidler test "$@"
+  node_modules/.bin/buidler test --network develop "$@"
 fi
