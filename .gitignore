@@ -10,3 +10,4 @@ allFiredEvents
 coverageEnv/
 scTopics
 .DS_Store
+moloch.iml
