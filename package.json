@@ -21,7 +21,8 @@
     "prompt-confirm": "^2.0.4",
     "solidity-coverage": "github:rotcivegaf/solidity-coverage#5875f5b7bc74d447f3312c9c0e9fc7814b482477",
     "standard": "^11.0.0",
-    "web3": "1.2.4"
+    "web3": "1.2.4",
+    "truffle-flattener": "^1.4.2"
   },
   "scripts": {
     "compile": "buidler compile",

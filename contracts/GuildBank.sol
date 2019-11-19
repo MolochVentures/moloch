@@ -1,11 +1,21 @@
 pragma solidity 0.5.3;
 
-import "./oz/Ownable.sol";
-import "./oz/IERC20.sol";
 import "./oz/SafeMath.sol";
+import "./oz/IERC20.sol";
 
-contract GuildBank is Ownable {
+contract GuildBank  {
     using SafeMath for uint256;
+
+    address public owner;
+
+    constructor () public {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner);
+        _;
+    }
 
     event Withdrawal(address indexed receiver, address indexed tokenAddress, uint256 amount);
 
