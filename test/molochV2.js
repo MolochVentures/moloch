@@ -677,40 +677,29 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('happy path - sponsor add token to whitelist', async () => {
-
       const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
       const proposer = proposal1.applicant
-      const whitelistProposal = {
-        applicant: zeroAddress,
-        proposer: proposal1.applicant,
-        sharesRequested: 0,
-        tributeOffered: 0,
-        tributeToken: newToken.address,
-        paymentRequested: 0,
-        paymentToken: zeroAddress,
-        details: 'whitelist me!',
-        flags: [false, false, false, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-      }
 
       // whitelist newToken
       await moloch.submitWhitelistProposal(
-        whitelistProposal.tributeToken,
-        whitelistProposal.details,
+        newToken.address,
+        'whitelist me!',
         { from: proposer }
       )
 
-      let proposedToWhitelist = await moloch.proposedToWhitelist(whitelistProposal.tributeToken)
+      let proposedToWhitelist = await moloch.proposedToWhitelist(newToken.address)
       assert.equal(proposedToWhitelist, false)
 
       // sponsor send by a delegate
       await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
 
-      proposedToWhitelist = await moloch.proposedToWhitelist(whitelistProposal.tributeToken)
+      proposedToWhitelist = await moloch.proposedToWhitelist(newToken.address)
       assert.equal(proposedToWhitelist, true)
 
       let proposal = await moloch.proposals(0)
       assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+      assert.equal(proposal.startingPeriod, 1) // should be 1 plus the current period that is 0
 
       let queue = await moloch.proposalQueue(0)
       assert.equal(+queue, 0)
