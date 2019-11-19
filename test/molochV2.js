@@ -110,6 +110,8 @@ const revertMesages = {
   submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
   submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
   submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
+  submitWhitelistProposalMustProvideTokenAddress: 'must provide token address',
+  submitWhitelistProposalAlreadyHaveWhitelistedToken: 'can\'t already have whitelisted the token',
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -189,7 +191,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
       paymentToken: tokenAlpha.address,
-      details: 'all hail moloch'
+      details: 'all hail moloch',
+      flags: [false, false, false, false, false, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
     }
 
     tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
@@ -572,6 +575,57 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
+  describe('submitWhitelistProposal', () => {
+    let newToken
+    beforeEach(async () => {
+      newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+    })
+
+    it('happy case', async () => {
+      const countBefore = await moloch.proposalCount()
+
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        details: 'whitelist me!',
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        flags: [false, false, false, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      const countAfter = await moloch.proposalCount()
+      assert.equal(+countAfter, +countBefore.add(_1))
+
+      await verifySubmitProposal(whitelistProposal, 0, proposer, {})
+    })
+
+    it('require fail - applicant can not be zero', async () => {
+      await moloch.submitWhitelistProposal(
+        zeroAddress,
+        'whitelist me!',
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMesages.submitWhitelistProposalMustProvideTokenAddress)
+    })
+
+    it('require fail - cannot add already have whitelisted the token', async () => {
+      await moloch.submitWhitelistProposal(
+        tokenAlpha.address,
+        'whitelist me!',
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMesages.submitWhitelistProposalAlreadyHaveWhitelistedToken)
+    })
+  })
+
   // VERIFY SUBMIT PROPOSAL
   const verifySubmitProposal = async (
     proposal,
@@ -579,12 +633,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     proposer,
     options
   ) => {
-    // const initialTotalSharesRequested = valueOr0(options.initialTotalSharesRequested)
-    // const initialTotalShares = valueOr0(options.initialTotalShares)
-    // const initialProposalLength = valueOr0(options.initialProposalLength)
-    // const initialMolochBalance = valueOr0(options.initialMolochBalance)
     const initialApplicantBalance = valueOr0(options.initialApplicantBalance)
-    // const initialProposerBalance = valueOr0(options.initialProposerBalance)
     const expectedStartingPeriod = valueOr0(options.expectedStartingPeriod)
 
     const proposalData = await moloch.proposals(proposalIndex)
@@ -612,12 +661,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const proposalFlags = await moloch.getProposalFlags(proposalIndex)
 
     // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-    assert.equal(proposalFlags[0], false)
-    assert.equal(proposalFlags[1], false)
-    assert.equal(proposalFlags[2], false)
-    assert.equal(proposalFlags[3], false)
-    assert.equal(proposalFlags[4], false)
-    assert.equal(proposalFlags[5], false)
+    assert.equal(proposalFlags[0], proposal.flags[0])
+    assert.equal(proposalFlags[1], proposal.flags[1])
+    assert.equal(proposalFlags[2], proposal.flags[2])
+    assert.equal(proposalFlags[3], proposal.flags[3])
+    assert.equal(proposalFlags[4], proposal.flags[4])
+    assert.equal(proposalFlags[5], proposal.flags[5])
 
     assert.equal(proposalData.details, proposal.details)
     assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
