@@ -669,7 +669,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.only('sponsorProposal', () => {
+  describe('sponsorProposal', () => {
     beforeEach(async () => {
       const proposalDeposit = await moloch.proposalDeposit()
       await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })

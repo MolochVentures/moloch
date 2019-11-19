@@ -11,6 +11,10 @@ chai
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
 
+const deploymentConfig = {
+  'TOKEN_SUPPLY': 10000
+}
+
 const revertMessages = {
 
 }
@@ -27,12 +31,23 @@ async function restore (snapshotId) {
   return ethereum.send('evm_revert', [snapshotId])
 }
 
-contract('GuildBank', ([creator, ...otherAccounts]) => {
-  let guildBank, tokenAlpha, tokenBeta
+contract('GuildBank', ([creator, shareHolder, ...otherAccounts]) => {
+  let guildBank, tokens
   let snapshotId
 
+  const fromCreator = {from: creator};
+
   before('deploy contracts', async () => {
+    tokens = [
+      await Token.new(deploymentConfig.TOKEN_SUPPLY),
+      await Token.new(deploymentConfig.TOKEN_SUPPLY),
+      await Token.new(deploymentConfig.TOKEN_SUPPLY),
+    ];
+
     guildBank = await GuildBank.new();
+
+    await tokens[0].transfer(guildBank.address, 1000, fromCreator);
+    await tokens[1].transfer(guildBank.address, 450, fromCreator);
   });
 
   beforeEach(async () => {
@@ -48,5 +63,39 @@ contract('GuildBank', ([creator, ...otherAccounts]) => {
       const owner = await guildBank.owner();
       assert.equal(owner, creator);
     });
-  })
+  });
+
+  describe('withdraw', () => {
+    it('happy case', async () => {
+      const contractTokenBalancesBefore = {};
+      for(let i = 0; i < tokens.length; i++) {
+        contractTokenBalancesBefore[tokens[i].address] = await tokens[i].balanceOf(guildBank.address);
+      }
+
+      // Withdrawal scenario
+      const sharesToWithdraw = 10;
+      const totalDAOShares = 100;
+
+      await guildBank.withdraw(
+        shareHolder,
+        sharesToWithdraw,
+        totalDAOShares,
+        tokens.map(token => token.address)
+      );
+
+      await verifyWithdraw(shareHolder, sharesToWithdraw, totalDAOShares, tokens, contractTokenBalancesBefore);
+    });
+  });
+
+  const verifyWithdraw = async (receiver, shares, totalShares, tokens, contractTokenBalancesBefore) => {
+    for(let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      const contractTokenBalanceBefore = contractTokenBalancesBefore[token.address];
+      const amountReceiverShouldHaveReceived = contractTokenBalanceBefore.mul(new BN(shares.toString())).div(new BN(totalShares.toString()));
+      const actualReceiverBalance = await token.balanceOf(receiver);
+      assert.equal(actualReceiverBalance.toString(), amountReceiverShouldHaveReceived.toString());
+    }
+
+    //todo: check for event emitted
+  };
 });
