@@ -1,316 +1,210 @@
-// VERIFY SUBMIT PROPOSAL
-const verifySubmitProposal = async (
-  proposal,
-  proposalIndex,
-  proposer,
-  options
-) => {
-  const initialTotalSharesRequested = options.initialTotalSharesRequested
-    ? options.initialTotalSharesRequested
-    : 0
-  const initialTotalShares = options.initialTotalShares
-    ? options.initialTotalShares
-    : 0
-  const initialProposalLength = options.initialProposalLength
-    ? options.initialProposalLength
-    : 0
-  const initialMolochBalance = options.initialMolochBalance
-    ? options.initialMolochBalance
-    : 0
-  const initialApplicantBalance = options.initialApplicantBalance
-    ? options.initialApplicantBalance
-    : 0
-  const initialProposerBalance = options.initialProposerBalance
-    ? options.initialProposerBalance
-    : 0
 
-  const expectedStartingPeriod = options.expectedStartingPeriod
-    ? options.expectedStartingPeriod
-    : 1
 
-  const proposalData = await moloch.proposalQueue.call(proposalIndex)
 
-  assert.equal(proposalData.applicant, proposal.applicant)
-  assert.equal(proposalData.proposer, proposer)
-  assert.equal(proposalData.sponsor, proposal.sponsor)
-
-  if (typeof proposal.sharesRequested === 'number') {
-    assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
-  } else {
-    // for testing overflow boundary with BNs
-    assert(proposalData.sharesRequested.eq(proposal.sharesRequested))
-  }
-  assert.equal(proposalData.tributeOffered, proposal.tributeOffered)
-  assert.equal(proposalData.tributeToken, proposal.tributeToken)
-
-  assert.equal(proposalData.paymentRequested, proposal.paymentRequested)
-  assert.equal(proposalData.paymentToken, proposal.paymentToken)
-
-  assert.equal(proposalData.startingPeriod, expectedStartingPeriod)
-  assert.equal(proposalData.yesVotes, 0)
-  assert.equal(proposalData.noVotes, 0)
-
-  // 0. sponsored - true only if the proposal has been submitted by a member
-  // 1. processed - true only if the proposal has been processed
-  // 2. didPass - true only if the proposal passed
-  // 3. cancelled - true only if the proposer called cancelProposal before a member sponsored the proposal
-  // 4. whitelist - true only if this is a whitelist proposal, NOTE - tributeToken is target of whitelist
-  // 5. guildkick - true only if this is a guild kick proposal, NOTE - applicant is target of guild kick
-
-  assert.equal(proposalData.flags[0], proposal.flags[0])
-  assert.equal(proposalData.flags[1], proposal.flags[1])
-  assert.equal(proposalData.flags[2], proposal.flags[2])
-  assert.equal(proposalData.flags[3], proposal.flags[3])
-  assert.equal(proposalData.flags[4], proposal.flags[4])
-  assert.equal(proposalData.flags[5], proposal.flags[5])
-
-  assert.equal(proposalData.details, proposal.details)
-  assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
-
-  const totalSharesRequested = await moloch.totalSharesRequested()
-  if (typeof proposal.sharesRequested === 'number') {
-    assert.equal(
-      totalSharesRequested,
-      proposal.sharesRequested + initialTotalSharesRequested
-    )
-  } else {
-    // for testing overflow boundary with BNs
-    assert(
-      totalSharesRequested.eq(
-        proposal.sharesRequested.add(new BN(initialTotalSharesRequested))
-      )
-    )
-  }
-
-  const totalShares = await moloch.totalShares()
-  assert.equal(totalShares, initialTotalShares)
-
-  const proposalQueueLength = await moloch.getProposalQueueLength()
-  assert.equal(proposalQueueLength, initialProposalLength + 1)
-
-  const molochBalance = await tokenAlpha.balanceOf(moloch.address)
-  assert.equal(
-    molochBalance,
-    initialMolochBalance + proposal.tokenTribute + deploymentConfig.PROPOSAL_DEPOSIT
-  )
-
-  const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
-  assert.equal(
-    applicantBalance,
-    initialApplicantBalance - proposal.tokenTribute
-  )
-
-  const proposerBalance = await tokenAlpha.balanceOf(proposer)
-  assert.equal(
-    proposerBalance,
-    initialProposerBalance - deploymentConfig.PROPOSAL_DEPOSIT
-  )
-}
-
-// VERIFY SUBMIT VOTE
-const verifySubmitVote = async (
-  proposal,
-  proposalIndex,
-  memberAddress,
-  expectedVote,
-  options
-) => {
-  const initialYesVotes = options.initialYesVotes
-    ? options.initialYesVotes
-    : 0
-  const initialNoVotes = options.initialNoVotes ? options.initialNoVotes : 0
-  const expectedMaxSharesAtYesVote = options.expectedMaxSharesAtYesVote
-    ? options.expectedMaxSharesAtYesVote
-    : 0
-
-  const proposalData = await moloch.proposalQueue.call(proposalIndex)
-  assert.equal(
-    proposalData.yesVotes,
-    initialYesVotes + (expectedVote === 1 ? 1 : 0)
-  )
-  assert.equal(
-    proposalData.noVotes,
-    initialNoVotes + (expectedVote === 1 ? 0 : 1)
-  )
-  assert.equal(
-    proposalData.maxTotalSharesAtYesVote,
-    expectedMaxSharesAtYesVote
-  )
-
-  const memberVote = await moloch.getMemberProposalVote(
-    memberAddress,
-    proposalIndex
-  )
-  assert.equal(memberVote, expectedVote)
-}
-
-// VERIFY PROCESS PROPOSAL - note: doesnt check forced reset of delegate key
-const verifyProcessProposal = async (
-  proposal,
-  proposalIndex,
-  proposer,
-  processor,
-  options
-) => {
-  // eslint-disable-next-line no-unused-vars
-  const initialTotalSharesRequested = options.initialTotalSharesRequested
-    ? options.initialTotalSharesRequested
-    : 0
-  const initialTotalShares = options.initialTotalShares
-    ? options.initialTotalShares
-    : 0
-  const initialApplicantShares = options.initialApplicantShares
-    ? options.initialApplicantShares
-    : 0 // 0 means new member, > 0 means existing member
-  const initialMolochBalance = options.initialMolochBalance
-    ? options.initialMolochBalance
-    : 0
-  const initialGuildBankBalance = options.initialGuildBankBalance
-    ? options.initialGuildBankBalance
-    : 0
-  const initialApplicantBalance = options.initialApplicantBalance
-    ? options.initialApplicantBalance
-    : 0
-  const initialProposerBalance = options.initialProposerBalance
-    ? options.initialProposerBalance
-    : 0
-  const initialProcessorBalance = options.initialProcessorBalance
-    ? options.initialProcessorBalance
-    : 0
-  const expectedYesVotes = options.expectedYesVotes
-    ? options.expectedYesVotes
-    : 0
-  const expectedNoVotes = options.expectedNoVotes
-    ? options.expectedNoVotes
-    : 0
-  const expectedMaxSharesAtYesVote = options.expectedMaxSharesAtYesVote
-    ? options.expectedMaxSharesAtYesVote
-    : 0
-  const expectedFinalTotalSharesRequested = options.expectedFinalTotalSharesRequested
-    ? options.expectedFinalTotalSharesRequested
-    : 0
-  const didPass =
-    typeof options.didPass === 'boolean' ? options.didPass : true
-  const aborted =
-    typeof options.aborted === 'boolean' ? options.aborted : false
-
-  const proposalData = await moloch.proposalQueue.call(proposalIndex)
-  assert.equal(proposalData.yesVotes, expectedYesVotes)
-  assert.equal(proposalData.noVotes, expectedNoVotes)
-  assert.equal(
-    proposalData.maxTotalSharesAtYesVote,
-    expectedMaxSharesAtYesVote
-  )
-  assert.equal(proposalData.processed, true)
-  assert.equal(proposalData.didPass, didPass)
-  assert.equal(proposalData.aborted, aborted)
-
-  const totalSharesRequested = await moloch.totalSharesRequested()
-  assert.equal(totalSharesRequested, expectedFinalTotalSharesRequested)
-
-  const totalShares = await moloch.totalShares()
-  assert.equal(
-    totalShares,
-    didPass && !aborted
-      ? initialTotalShares + proposal.sharesRequested
-      : initialTotalShares
-  )
-
-  const molochBalance = await tokenAlpha.balanceOf(moloch.address)
-  assert.equal(
-    molochBalance,
-    initialMolochBalance - proposal.tokenTribute - deploymentConfig.PROPOSAL_DEPOSIT
-  )
-
-  const guildBankBalance = await tokenAlpha.balanceOf(guildBank.address)
-  assert.equal(
-    guildBankBalance,
-    didPass && !aborted
-      ? initialGuildBankBalance + proposal.tokenTribute
-      : initialGuildBankBalance
-  )
-
-  // proposer and applicant are different
-  if (proposer !== proposal.applicant) {
-    const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
-    assert.equal(
-      applicantBalance,
-      didPass && !aborted
-        ? initialApplicantBalance
-        : initialApplicantBalance + proposal.tokenTribute
-    )
-
-    const proposerBalance = await tokenAlpha.balanceOf(proposer)
-    assert.equal(
-      proposerBalance,
-      initialProposerBalance +
-      deploymentConfig.PROPOSAL_DEPOSIT -
-      deploymentConfig.PROCESSING_REWARD
-    )
-
-    // proposer is applicant
-  } else {
-    const proposerBalance = await tokenAlpha.balanceOf(proposer)
-    const expectedBalance =
-      didPass && !aborted
-        ? initialProposerBalance +
-        deploymentConfig.PROPOSAL_DEPOSIT -
-        deploymentConfig.PROCESSING_REWARD
-        : initialProposerBalance +
-        deploymentConfig.PROPOSAL_DEPOSIT -
-        deploymentConfig.PROCESSING_REWARD +
-        proposal.tokenTribute
-    assert.equal(proposerBalance, expectedBalance)
-  }
-
-  const processorBalance = await tokenAlpha.balanceOf(processor)
-  assert.equal(
-    processorBalance,
-    initialProcessorBalance + deploymentConfig.PROCESSING_REWARD
-  )
-
-  if (didPass && !aborted) {
-    // existing member
-    if (initialApplicantShares > 0) {
-      const memberData = await moloch.members(proposal.applicant)
-      assert.equal(
-        memberData.shares,
-        proposal.sharesRequested + initialApplicantShares
-      )
-
-      // new member
-    } else {
-      const newMemberData = await moloch.members(proposal.applicant)
-      assert.equal(newMemberData.delegateKey, proposal.applicant)
-      assert.equal(newMemberData.shares, proposal.sharesRequested)
-      assert.equal(newMemberData.exists, true)
-      assert.equal(newMemberData.highestIndexYesVote, 0)
-
-      const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(
-        proposal.applicant
-      )
-      assert.equal(newMemberAddressByDelegateKey, proposal.applicant)
-    }
-  }
-}
-
-// VERIFY UPDATE DELEGATE KEY
-const verifyUpdateDelegateKey = async (
-  memberAddress,
-  oldDelegateKey,
-  newDelegateKey
-) => {
-  const member = await moloch.members(memberAddress)
-  assert.equal(member.delegateKey, newDelegateKey)
-  const memberByOldDelegateKey = await moloch.memberAddressByDelegateKey(
-    oldDelegateKey
-  )
-  assert.equal(memberByOldDelegateKey, zeroAddress)
-  const memberByNewDelegateKey = await moloch.memberAddressByDelegateKey(
-    newDelegateKey
-  )
-  assert.equal(memberByNewDelegateKey, memberAddress)
-}
+// // VERIFY SUBMIT VOTE
+// const verifySubmitVote = async (
+//   proposal,
+//   proposalIndex,
+//   memberAddress,
+//   expectedVote,
+//   options
+// ) => {
+//   const initialYesVotes = options.initialYesVotes
+//     ? options.initialYesVotes
+//     : 0
+//   const initialNoVotes = options.initialNoVotes ? options.initialNoVotes : 0
+//   const expectedMaxSharesAtYesVote = options.expectedMaxSharesAtYesVote
+//     ? options.expectedMaxSharesAtYesVote
+//     : 0
+//
+//   const proposalData = await moloch.proposalQueue.call(proposalIndex)
+//   assert.equal(
+//     proposalData.yesVotes,
+//     initialYesVotes + (expectedVote === 1 ? 1 : 0)
+//   )
+//   assert.equal(
+//     proposalData.noVotes,
+//     initialNoVotes + (expectedVote === 1 ? 0 : 1)
+//   )
+//   assert.equal(
+//     proposalData.maxTotalSharesAtYesVote,
+//     expectedMaxSharesAtYesVote
+//   )
+//
+//   const memberVote = await moloch.getMemberProposalVote(
+//     memberAddress,
+//     proposalIndex
+//   )
+//   assert.equal(memberVote, expectedVote)
+// }
+//
+// // VERIFY PROCESS PROPOSAL - note: doesnt check forced reset of delegate key
+// const verifyProcessProposal = async (
+//   proposal,
+//   proposalIndex,
+//   proposer,
+//   processor,
+//   options
+// ) => {
+//   // eslint-disable-next-line no-unused-vars
+//   const initialTotalSharesRequested = options.initialTotalSharesRequested
+//     ? options.initialTotalSharesRequested
+//     : 0
+//   const initialTotalShares = options.initialTotalShares
+//     ? options.initialTotalShares
+//     : 0
+//   const initialApplicantShares = options.initialApplicantShares
+//     ? options.initialApplicantShares
+//     : 0 // 0 means new member, > 0 means existing member
+//   const initialMolochBalance = options.initialMolochBalance
+//     ? options.initialMolochBalance
+//     : 0
+//   const initialGuildBankBalance = options.initialGuildBankBalance
+//     ? options.initialGuildBankBalance
+//     : 0
+//   const initialApplicantBalance = options.initialApplicantBalance
+//     ? options.initialApplicantBalance
+//     : 0
+//   const initialProposerBalance = options.initialProposerBalance
+//     ? options.initialProposerBalance
+//     : 0
+//   const initialProcessorBalance = options.initialProcessorBalance
+//     ? options.initialProcessorBalance
+//     : 0
+//   const expectedYesVotes = options.expectedYesVotes
+//     ? options.expectedYesVotes
+//     : 0
+//   const expectedNoVotes = options.expectedNoVotes
+//     ? options.expectedNoVotes
+//     : 0
+//   const expectedMaxSharesAtYesVote = options.expectedMaxSharesAtYesVote
+//     ? options.expectedMaxSharesAtYesVote
+//     : 0
+//   const expectedFinalTotalSharesRequested = options.expectedFinalTotalSharesRequested
+//     ? options.expectedFinalTotalSharesRequested
+//     : 0
+//   const didPass =
+//     typeof options.didPass === 'boolean' ? options.didPass : true
+//   const aborted =
+//     typeof options.aborted === 'boolean' ? options.aborted : false
+//
+//   const proposalData = await moloch.proposalQueue.call(proposalIndex)
+//   assert.equal(proposalData.yesVotes, expectedYesVotes)
+//   assert.equal(proposalData.noVotes, expectedNoVotes)
+//   assert.equal(
+//     proposalData.maxTotalSharesAtYesVote,
+//     expectedMaxSharesAtYesVote
+//   )
+//   assert.equal(proposalData.processed, true)
+//   assert.equal(proposalData.didPass, didPass)
+//   assert.equal(proposalData.aborted, aborted)
+//
+//   const totalSharesRequested = await moloch.totalSharesRequested()
+//   assert.equal(totalSharesRequested, expectedFinalTotalSharesRequested)
+//
+//   const totalShares = await moloch.totalShares()
+//   assert.equal(
+//     totalShares,
+//     didPass && !aborted
+//       ? initialTotalShares + proposal.sharesRequested
+//       : initialTotalShares
+//   )
+//
+//   const molochBalance = await tokenAlpha.balanceOf(moloch.address)
+//   assert.equal(
+//     molochBalance,
+//     initialMolochBalance - proposal.tokenTribute - deploymentConfig.PROPOSAL_DEPOSIT
+//   )
+//
+//   const guildBankBalance = await tokenAlpha.balanceOf(guildBank.address)
+//   assert.equal(
+//     guildBankBalance,
+//     didPass && !aborted
+//       ? initialGuildBankBalance + proposal.tokenTribute
+//       : initialGuildBankBalance
+//   )
+//
+//   // proposer and applicant are different
+//   if (proposer !== proposal.applicant) {
+//     const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
+//     assert.equal(
+//       applicantBalance,
+//       didPass && !aborted
+//         ? initialApplicantBalance
+//         : initialApplicantBalance + proposal.tokenTribute
+//     )
+//
+//     const proposerBalance = await tokenAlpha.balanceOf(proposer)
+//     assert.equal(
+//       proposerBalance,
+//       initialProposerBalance +
+//       deploymentConfig.PROPOSAL_DEPOSIT -
+//       deploymentConfig.PROCESSING_REWARD
+//     )
+//
+//     // proposer is applicant
+//   } else {
+//     const proposerBalance = await tokenAlpha.balanceOf(proposer)
+//     const expectedBalance =
+//       didPass && !aborted
+//         ? initialProposerBalance +
+//         deploymentConfig.PROPOSAL_DEPOSIT -
+//         deploymentConfig.PROCESSING_REWARD
+//         : initialProposerBalance +
+//         deploymentConfig.PROPOSAL_DEPOSIT -
+//         deploymentConfig.PROCESSING_REWARD +
+//         proposal.tokenTribute
+//     assert.equal(proposerBalance, expectedBalance)
+//   }
+//
+//   const processorBalance = await tokenAlpha.balanceOf(processor)
+//   assert.equal(
+//     processorBalance,
+//     initialProcessorBalance + deploymentConfig.PROCESSING_REWARD
+//   )
+//
+//   if (didPass && !aborted) {
+//     // existing member
+//     if (initialApplicantShares > 0) {
+//       const memberData = await moloch.members(proposal.applicant)
+//       assert.equal(
+//         memberData.shares,
+//         proposal.sharesRequested + initialApplicantShares
+//       )
+//
+//       // new member
+//     } else {
+//       const newMemberData = await moloch.members(proposal.applicant)
+//       assert.equal(newMemberData.delegateKey, proposal.applicant)
+//       assert.equal(newMemberData.shares, proposal.sharesRequested)
+//       assert.equal(newMemberData.exists, true)
+//       assert.equal(newMemberData.highestIndexYesVote, 0)
+//
+//       const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(
+//         proposal.applicant
+//       )
+//       assert.equal(newMemberAddressByDelegateKey, proposal.applicant)
+//     }
+//   }
+// }
+//
+// // VERIFY UPDATE DELEGATE KEY
+// const verifyUpdateDelegateKey = async (
+//   memberAddress,
+//   oldDelegateKey,
+//   newDelegateKey
+// ) => {
+//   const member = await moloch.members(memberAddress)
+//   assert.equal(member.delegateKey, newDelegateKey)
+//   const memberByOldDelegateKey = await moloch.memberAddressByDelegateKey(
+//     oldDelegateKey
+//   )
+//   assert.equal(memberByOldDelegateKey, zeroAddress)
+//   const memberByNewDelegateKey = await moloch.memberAddressByDelegateKey(
+//     newDelegateKey
+//   )
+//   assert.equal(memberByNewDelegateKey, memberAddress)
+// }
 
 
 

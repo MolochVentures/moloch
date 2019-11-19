@@ -107,6 +107,9 @@ const revertMesages = {
   molochConstructorDepositCannotBeSmallerThanProcessingReward: '_proposalDeposit cannot be smaller than _processingReward',
   molochConstructorApprovedTokenCannotBe0: '_approvedToken cannot be 0',
   molochConstructorDuplicateApprovedToken: 'revert duplicate approved token',
+  submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
+  submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
+  submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -119,6 +122,8 @@ const _1e18 = new BN('1000000000000000000') // 1e18
 const _1e18Plus1 = _1e18.add(_1)
 const _10e18 = new BN('10000000000000000000') // 10e18
 const _10e18Plus1 = _10e18.add(_1)
+
+const valueOr0 = (val) => val ? val : 0
 
 async function blockTime () {
   const block = await web3.eth.getBlock('latest')
@@ -146,12 +151,12 @@ async function moveForwardPeriods (periods) {
   return true
 }
 
-let moloch, guildBank, tokenAlpha, tokenBeta
-let proposal1, proposal2
-
-const initSummonerBalance = 100
-
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, ...otherAccounts]) => {
+  let moloch, guildBank, tokenAlpha, tokenBeta
+  let proposal1, proposal2
+
+  const initSummonerBalance = 100
+
   let snapshotId
 
   before('deploy contracts', async () => {
@@ -478,4 +483,149 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       ).should.be.rejectedWith(revertMesages.molochConstructorDuplicateApprovedToken)
     })
   })
+
+  describe('submitProposal', () => {
+    beforeEach(async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+    })
+
+    it('happy case', async () => {
+      const countBefore = await moloch.proposalCount()
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      const countAfter = await moloch.proposalCount()
+      assert.equal(+countAfter, +countBefore.add(_1))
+
+      await verifySubmitProposal(proposal1, 0, proposal1.applicant, {
+        initialApplicantBalance: proposal1.tributeOffered
+      })
+    })
+
+    it('require fail - insufficient tribute tokens', async () => {
+      await tokenAlpha.decreaseAllowance(moloch.address, 1, { from: proposal1.applicant })
+
+      // SafeMath reverts in ERC20.transferFrom
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(SolRevert)
+    })
+
+    it('require fail - tribute token is not whitelisted', async () => {
+      proposal1.tributeToken = zeroAddress
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMesages.submitProposalTributeTokenIsNotWhitelisted)
+    })
+
+    it('require fail - payment token is not whitelisted', async () => {
+      proposal1.paymentToken = zeroAddress
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMesages.submitProposalPaymetTokenIsNotWhitelisted)
+    })
+
+    it('require fail - applicant can not be zero', async () => {
+      await moloch.submitProposal(
+        zeroAddress,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMesages.submitProposalApplicantCannotBe0)
+    })
+  })
+
+  // VERIFY SUBMIT PROPOSAL
+  const verifySubmitProposal = async (
+    proposal,
+    proposalIndex,
+    proposer,
+    options
+  ) => {
+    // const initialTotalSharesRequested = valueOr0(options.initialTotalSharesRequested)
+    // const initialTotalShares = valueOr0(options.initialTotalShares)
+    // const initialProposalLength = valueOr0(options.initialProposalLength)
+    // const initialMolochBalance = valueOr0(options.initialMolochBalance)
+    const initialApplicantBalance = valueOr0(options.initialApplicantBalance)
+    // const initialProposerBalance = valueOr0(options.initialProposerBalance)
+    const expectedStartingPeriod = valueOr0(options.expectedStartingPeriod)
+
+    const proposalData = await moloch.proposals(proposalIndex)
+
+    assert.equal(proposalData.applicant, proposal.applicant)
+    assert.equal(proposalData.proposer, proposer)
+    assert.equal(proposalData.sponsor, zeroAddress)
+
+    if (typeof proposal.sharesRequested === 'number') {
+      assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
+    } else {
+      // for testing overflow boundary with BNs
+      assert(proposalData.sharesRequested.eq(proposal.sharesRequested))
+    }
+    assert.equal(proposalData.tributeOffered, proposal.tributeOffered)
+    assert.equal(proposalData.tributeToken, proposal.tributeToken)
+
+    assert.equal(proposalData.paymentRequested, proposal.paymentRequested)
+    assert.equal(proposalData.paymentToken, proposal.paymentToken)
+
+    assert.equal(proposalData.startingPeriod, expectedStartingPeriod)
+    assert.equal(proposalData.yesVotes, 0)
+    assert.equal(proposalData.noVotes, 0)
+
+    const proposalFlags = await moloch.getProposalFlags(proposalIndex)
+
+    // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+    assert.equal(proposalFlags[0], false)
+    assert.equal(proposalFlags[1], false)
+    assert.equal(proposalFlags[2], false)
+    assert.equal(proposalFlags[3], false)
+    assert.equal(proposalFlags[4], false)
+    assert.equal(proposalFlags[5], false)
+
+    assert.equal(proposalData.details, proposal.details)
+    assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
+
+    const molochBalance = await tokenAlpha.balanceOf(moloch.address)
+    assert.equal(molochBalance, proposal.tributeOffered)
+
+    const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
+    assert.equal(applicantBalance, initialApplicantBalance - proposal.tributeOffered)
+  }
 })

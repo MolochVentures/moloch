@@ -475,6 +475,10 @@ contract Moloch {
         return proposalQueue.length;
     }
 
+    function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
+        return proposals[proposalIndex].flags;
+    }
+
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[highestIndexYesVote]].flags[1]; // processed
