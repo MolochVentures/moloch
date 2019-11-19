@@ -238,7 +238,8 @@ contract Moloch {
     function sponsorProposal(uint256 proposalId) public onlyDelegate {
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
 
-        Proposal memory proposal = proposals[proposalId];
+        // TODO changed from memory to storage by BlockRocket. Please approve
+        Proposal storage proposal = proposals[proposalId];
 
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
@@ -475,6 +476,7 @@ contract Moloch {
         return proposalQueue.length;
     }
 
+    // TODO added by BlockRocket. Please approve or remove. Used in tests to pull flag arrays for equality.
     function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
         return proposals[proposalIndex].flags;
     }

@@ -628,9 +628,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   })
 
   describe('submitGuildKickProposal', () => {
-
-    beforeEach(async () => {})
-
     it('happy case', async () => {
       const countBefore = await moloch.proposalCount()
 
@@ -669,6 +666,71 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         'kick me!',
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMesages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
+    })
+  })
+
+  describe.only('sponsorProposal', () => {
+    beforeEach(async () => {
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+    })
+
+    it('happy path - sponsor add token to whitelist', async () => {
+
+      const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!',
+        flags: [false, false, false, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      // whitelist newToken
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      let proposedToWhitelist = await moloch.proposedToWhitelist(whitelistProposal.tributeToken)
+      assert.equal(proposedToWhitelist, false)
+
+      // sponsor send by a delegate
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      proposedToWhitelist = await moloch.proposedToWhitelist(whitelistProposal.tributeToken)
+      assert.equal(proposedToWhitelist, true)
+
+      let proposal = await moloch.proposals(0)
+      assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+
+      let queue = await moloch.proposalQueue(0)
+      assert.equal(+queue, 0)
+    })
+
+    // FIXME check this is a valid use-case!
+    it('edge case - sponsor non-existant proposal', async () => {
+      let proposal = await moloch.proposals(123456)
+      assert.equal(proposal.applicant, zeroAddress)
+      assert.equal(proposal.proposer, zeroAddress)
+      assert.equal(proposal.sponsor, zeroAddress)
+
+      await moloch.sponsorProposal(123456, { from: deploymentConfig.SUMMONER })
+
+      // takes deposit and adds to the queue
+      proposal = await moloch.proposals(123456)
+      assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+
+      let queue = await moloch.proposalQueue(0)
+      assert.equal(+queue, 123456)
     })
   })
 
