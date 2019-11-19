@@ -112,6 +112,7 @@ const revertMesages = {
   submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
   submitWhitelistProposalMustProvideTokenAddress: 'must provide token address',
   submitWhitelistProposalAlreadyHaveWhitelistedToken: 'can\'t already have whitelisted the token',
+  submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share'
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -587,13 +588,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const proposer = proposal1.applicant
       const whitelistProposal = {
         applicant: zeroAddress,
-        details: 'whitelist me!',
         proposer: proposal1.applicant,
         sharesRequested: 0,
         tributeOffered: 0,
         tributeToken: newToken.address,
         paymentRequested: 0,
         paymentToken: zeroAddress,
+        details: 'whitelist me!',
         flags: [false, false, false, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
       }
 
@@ -626,6 +627,51 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
+  describe('submitGuildKickProposal', () => {
+
+    beforeEach(async () => {})
+
+    it('happy case', async () => {
+      const countBefore = await moloch.proposalCount()
+
+      const summonerBalance = await tokenAlpha.balanceOf(summoner)
+
+      const proposer = proposal1.applicant
+      const guildKickProposal = {
+        applicant: deploymentConfig.SUMMONER,
+        proposer: proposer,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: zeroAddress,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'kick me!',
+        flags: [false, false, false, false, false, true] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitGuildKickProposal(
+        guildKickProposal.applicant,
+        guildKickProposal.details,
+        { from: proposer }
+      )
+
+      const countAfter = await moloch.proposalCount()
+      assert.equal(+countAfter, +countBefore.add(_1))
+
+      await verifySubmitProposal(guildKickProposal, 0, proposer, {
+        initialApplicantBalance: summonerBalance
+      })
+    })
+
+    it('require fail - member must have at least one share', async () => {
+      await moloch.submitGuildKickProposal(
+        zeroAddress,
+        'kick me!',
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMesages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
+    })
+  })
+
   // VERIFY SUBMIT PROPOSAL
   const verifySubmitProposal = async (
     proposal,
@@ -638,7 +684,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     const proposalData = await moloch.proposals(proposalIndex)
 
-    assert.equal(proposalData.applicant, proposal.applicant)
+    assert.equal(proposalData.applicant.toLowerCase(), proposal.applicant.toLowerCase()) // FIXME can be improved
     assert.equal(proposalData.proposer, proposer)
     assert.equal(proposalData.sponsor, zeroAddress)
 
