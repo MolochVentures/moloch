@@ -1056,7 +1056,59 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     // TODO edge cases - explore two ifs inside the YES vote
   })
 
-  describe.only('cancelProposal', () => {
+  describe.only('processProposal', () => {
+    let proposer, applicant
+    beforeEach(async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      // sponsor
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+    })
+
+    it('happy path - pass', async () => {
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(0, { from: processor })
+
+      // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      proposal1.flags = [true, true, true, false, false, false] // fixme didPass to be TRUE?
+
+      await verifyProcessProposal(proposal1, 0, proposer, deploymentConfig.SUMMONER, processor, {
+        initialTotalSharesRequested: 1,
+        initialTotalShares: 1,
+        initialMolochBalance: 110,
+        initialSponsorBalance: initSummonerBalance,
+        expectedYesVotes: 1,
+        expectedMaxSharesAtYesVote: 1
+      })
+    })
+  })
+
+  describe('cancelProposal', () => {
     beforeEach(async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
@@ -1179,5 +1231,119 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     const memberVote = await moloch.getMemberProposalVote(memberAddress, proposalIndex)
     assert.equal(memberVote, expectedVote)
+  }
+
+  // VERIFY PROCESS PROPOSAL - note: doesnt check forced reset of delegate key
+  const verifyProcessProposal = async (
+    proposal,
+    proposalIndex,
+    proposer,
+    sponsor,
+    processor,
+    options
+  ) => {
+    // eslint-disable-next-line no-unused-vars
+    const initialTotalSharesRequested = valueOr0(options.initialTotalSharesRequested)
+    const initialTotalShares = valueOr0(options.initialTotalShares)
+    const initialApplicantShares = valueOr0(options.initialApplicantShares)
+    const initialMolochBalance = valueOr0(options.initialMolochBalance)
+    const initialGuildBankBalance = valueOr0(options.initialGuildBankBalance)
+    const initialApplicantBalance = valueOr0(options.initialApplicantBalance)
+    const initialProposerBalance = valueOr0(options.initialProposerBalance)
+    const initialSponsorBalance = valueOr0(options.initialSponsorBalance)
+    const initialProcessorBalance = valueOr0(options.initialProcessorBalance)
+    const expectedYesVotes = valueOr0(options.expectedYesVotes)
+    const expectedNoVotes = valueOr0(options.expectedNoVotes)
+    const expectedMaxSharesAtYesVote = valueOr0(options.expectedMaxSharesAtYesVote)
+    const expectedFinalTotalSharesRequested = valueOr0(options.expectedFinalTotalSharesRequested)
+
+    // flags and proposal data
+    const proposalFlags = await moloch.getProposalFlags(proposalIndex)
+    const proposalData = await moloch.proposals(proposalIndex)
+
+    const didPass = proposalFlags[2]
+    assert.equal(proposalData.yesVotes, expectedYesVotes)
+    assert.equal(proposalData.noVotes, expectedNoVotes)
+    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
+
+    // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+    assert.equal(proposalFlags[0], proposal.flags[0])
+    assert.equal(proposalFlags[1], proposal.flags[1])
+    assert.equal(proposalFlags[2], proposal.flags[2])
+    assert.equal(proposalFlags[3], proposal.flags[3])
+    assert.equal(proposalFlags[4], proposal.flags[4])
+    assert.equal(proposalFlags[5], proposal.flags[5])
+
+    const totalSharesRequested = await moloch.totalSharesRequested()
+    assert.equal(totalSharesRequested, expectedFinalTotalSharesRequested)
+
+    const totalShares = await moloch.totalShares()
+    assert.equal(
+      totalShares,
+      didPass ? initialTotalShares + proposal.sharesRequested : initialTotalShares
+    )
+
+    const molochBalance = await tokenAlpha.balanceOf(moloch.address)
+    assert.equal(
+      molochBalance,
+      initialMolochBalance - proposalData.tributeOffered - deploymentConfig.PROPOSAL_DEPOSIT
+    )
+
+    // FIXME for multi-token
+    const guildBankBalance = await tokenAlpha.balanceOf(guildBank.address)
+    assert.equal(
+      guildBankBalance,
+      didPass ? initialGuildBankBalance + proposal.tributeOffered : initialGuildBankBalance
+    )
+
+    // proposer and applicant are different
+    if (proposer !== proposal.applicant) {
+      const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
+      assert.equal(
+        applicantBalance,
+        didPass ? initialApplicantBalance : initialApplicantBalance + proposal.tributeOffered
+      )
+
+      const proposerBalance = await tokenAlpha.balanceOf(proposer)
+      assert.equal(
+        +proposerBalance,
+        initialProposerBalance +
+        deploymentConfig.PROPOSAL_DEPOSIT -
+        deploymentConfig.PROCESSING_REWARD
+      )
+    } else {
+      const sponsorBalance = await tokenAlpha.balanceOf(sponsor)
+      const expectedBalance =
+        didPass
+          ? initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
+          : initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD + proposal.tributeOffered
+      assert.equal(+sponsorBalance, +expectedBalance)
+    }
+
+    const processorBalance = await tokenAlpha.balanceOf(processor)
+    assert.equal(
+      processorBalance,
+      initialProcessorBalance + deploymentConfig.PROCESSING_REWARD
+    )
+
+    if (didPass) {
+      // existing member
+      if (initialApplicantShares > 0) {
+        const memberData = await moloch.members(proposal.applicant)
+        assert.equal(
+          memberData.shares,
+          proposal.sharesRequested + initialApplicantShares
+        )
+      } else {
+        const newMemberData = await moloch.members(proposal.applicant)
+        assert.equal(newMemberData.delegateKey, proposal.applicant)
+        assert.equal(newMemberData.shares, proposal.sharesRequested)
+        assert.equal(newMemberData.exists, true)
+        assert.equal(newMemberData.highestIndexYesVote, 0)
+
+        const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(proposal.applicant)
+        assert.equal(newMemberAddressByDelegateKey, proposal.applicant)
+      }
+    }
   }
 })

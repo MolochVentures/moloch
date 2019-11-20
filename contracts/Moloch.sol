@@ -332,7 +332,8 @@ contract Moloch {
             didPass = false;
         }
 
-        if (proposal.paymentRequested >= proposal.paymentToken.balanceOf(address(guildBank))) {
+        // TODO BlockRocket changed from >= to > as zero payment test was failing passing proposal here. Please approve or revert.
+        if (proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
 
