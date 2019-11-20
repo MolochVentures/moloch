@@ -413,7 +413,8 @@ contract Moloch {
 //        _ragequit(sharesToBurn, tokenList);
 //    }
 
-    function _ragequit(uint256 sharesToBurn, IERC20[] memory approvedTokens) internal {
+    // TODO 'approvedTokens' was shadowing a gloabl var. Added _ to local var. Please approve or remove or adjust.
+    function _ragequit(uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
@@ -426,7 +427,7 @@ contract Moloch {
         totalShares = totalShares.sub(sharesToBurn);
 
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, approvedTokens),
+            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, _approvedTokens),
             "withdrawal of tokens from guildBank failed"
         );
 

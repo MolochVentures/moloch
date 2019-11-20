@@ -23,6 +23,7 @@ contract GuildBank  {
         for (uint256 i = 0; i < approvedTokens.length; i++) {
             uint256 amount = approvedTokens[i].balanceOf(address(this)).mul(shares).div(totalShares);
             emit Withdrawal(receiver, address(approvedTokens[i]), amount);
+            // TODO changed from 'return approvedTokens[i].transfer(receiver, amount)' - wrapped in require and added return true external to loop. Please approve or remove.
             require(approvedTokens[i].transfer(receiver, amount));
         }
         return true;

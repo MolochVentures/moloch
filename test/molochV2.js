@@ -705,6 +705,64 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(+queue, 0)
     })
 
+    it('happy path - guildKick proposal', async () => {
+      const proposer = proposal1.applicant
+
+      await moloch.submitGuildKickProposal(
+        deploymentConfig.SUMMONER,
+        'kick',
+        { from: proposer }
+      )
+
+      let proposedToKick = await moloch.proposedToKick(deploymentConfig.SUMMONER)
+      assert.equal(proposedToKick, false)
+
+      // sponsor send by a delegate
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      proposedToKick = await moloch.proposedToKick(deploymentConfig.SUMMONER)
+      assert.equal(proposedToKick, true)
+
+      let proposal = await moloch.proposals(0)
+      assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+      assert.equal(proposal.startingPeriod, 1) // should be 1 plus the current period that is 0
+
+      let queue = await moloch.proposalQueue(0)
+      assert.equal(+queue, 0)
+    })
+
+    it('happy path - proposal', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested, // 1
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      let totalSharesRequested = await moloch.totalSharesRequested()
+      assert.equal(+totalSharesRequested, 0)
+
+      // sponsor send by a delegate
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      totalSharesRequested = await moloch.totalSharesRequested()
+      assert.equal(+totalSharesRequested, 1)
+
+      let proposal = await moloch.proposals(0)
+      assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+      assert.equal(proposal.startingPeriod, 1) // should be 1 plus the current period that is 0
+
+      let queue = await moloch.proposalQueue(0)
+      assert.equal(+queue, 0)
+    })
+
     // FIXME check this is a valid use-case!
     it('edge case - sponsor non-existant proposal', async () => {
       let proposal = await moloch.proposals(123456)
@@ -720,6 +778,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       let queue = await moloch.proposalQueue(0)
       assert.equal(+queue, 123456)
+    })
+
+    it('require fail - insufficient deposit token', async () => {
+      await tokenAlpha.decreaseAllowance(moloch.address, 1, { from: deploymentConfig.SUMMONER })
+
+      // SafeMath reverts in ERC20.transferFrom
+      await moloch.sponsorProposal(123, { from: deploymentConfig.SUMMONER })
+        .should.be.rejectedWith(SolRevert)
     })
   })
 
