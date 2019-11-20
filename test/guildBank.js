@@ -32,7 +32,7 @@ async function restore (snapshotId) {
 }
 
 contract('GuildBank', ([creator, shareHolder, random, ...otherAccounts]) => {
-  let guildBank, tokens
+  let guildBank, tokens, tokenAlpha
   let snapshotId
 
   const fromCreator = {from: creator};
@@ -46,6 +46,7 @@ contract('GuildBank', ([creator, shareHolder, random, ...otherAccounts]) => {
 
     guildBank = await GuildBank.new();
 
+    tokenAlpha = tokens[0];
     await tokens[0].transfer(guildBank.address, 1000, fromCreator);
     await tokens[1].transfer(guildBank.address, 450, fromCreator);
   });
@@ -109,6 +110,42 @@ contract('GuildBank', ([creator, shareHolder, random, ...otherAccounts]) => {
     });
   });
 
+  describe('withdrawToken', () => {
+    it('happy path', async function () {
+      const withdrawalAmount = 50;
+      await guildBank.withdrawToken(
+        tokenAlpha.address,
+        shareHolder,
+        withdrawalAmount,
+        fromCreator
+      );
+      await verifyWithdrawToken(tokenAlpha, shareHolder, withdrawalAmount);
+    });
+
+    it('require revert - withdrawing an amount of token that exceeds the contract balance', async function () {
+      let guildBankTokenAlphaBalance = await tokenAlpha.balanceOf(guildBank.address);
+      guildBankTokenAlphaBalance = Number(guildBankTokenAlphaBalance.toString());
+
+      const withdrawalAmount = guildBankTokenAlphaBalance + 1;
+
+      await guildBank.withdrawToken(
+        tokenAlpha.address,
+        shareHolder,
+        withdrawalAmount,
+        fromCreator
+      ).should.be.rejectedWith(SolRevert);
+    });
+
+    it('modifier - onlyOwner', async function () {
+      await guildBank.withdrawToken(
+        tokenAlpha.address,
+        shareHolder,
+        25,
+        { from: random }
+      ).should.be.rejectedWith(SolRevert);
+    });
+  });
+
   const verifyWithdraw = async (receiver, shares, totalShares, tokens, contractTokenBalancesBefore) => {
     for(let i = 0; i < tokens.length; i++) {
       const token = tokens[i];
@@ -118,5 +155,10 @@ contract('GuildBank', ([creator, shareHolder, random, ...otherAccounts]) => {
       assert.equal(actualReceiverBalance.toString(), amountReceiverShouldHaveReceived.toString());
       //todo: check for event emitted
     }
+  };
+
+  const verifyWithdrawToken = async (token, receiver, amount) => {
+    const receiverBalance = await token.balanceOf(receiver);
+    assert.equal(receiverBalance.toString(), amount.toString());
   };
 });
