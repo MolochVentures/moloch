@@ -31,7 +31,7 @@ async function restore (snapshotId) {
   return ethereum.send('evm_revert', [snapshotId])
 }
 
-contract('GuildBank', ([creator, shareHolder, ...otherAccounts]) => {
+contract('GuildBank', ([creator, shareHolder, random, ...otherAccounts]) => {
   let guildBank, tokens
   let snapshotId
 
@@ -66,24 +66,46 @@ contract('GuildBank', ([creator, shareHolder, ...otherAccounts]) => {
   });
 
   describe('withdraw', () => {
+    // Withdrawal scenario
+    const sharesToWithdraw = 10;
+    const totalDAOShares = 100;
+
     it('happy case', async () => {
       const contractTokenBalancesBefore = {};
       for(let i = 0; i < tokens.length; i++) {
         contractTokenBalancesBefore[tokens[i].address] = await tokens[i].balanceOf(guildBank.address);
       }
 
-      // Withdrawal scenario
-      const sharesToWithdraw = 10;
-      const totalDAOShares = 100;
-
       await guildBank.withdraw(
         shareHolder,
         sharesToWithdraw,
         totalDAOShares,
-        tokens.map(token => token.address)
+        tokens.map(token => token.address),
+        fromCreator
       );
 
       await verifyWithdraw(shareHolder, sharesToWithdraw, totalDAOShares, tokens, contractTokenBalancesBefore);
+    });
+
+    it('require revert - asking to withdraw a share amount that exceeds the token balance', async function () {
+      // This causes the transfer in the method to fail
+      await guildBank.withdraw(
+        shareHolder,
+        totalDAOShares + 1,
+        totalDAOShares,
+        tokens.map(token => token.address),
+        fromCreator
+      ).should.be.rejectedWith(SolRevert);
+    });
+
+    it('modifier - onlyOwner', async function () {
+      await guildBank.withdraw(
+        shareHolder,
+        sharesToWithdraw,
+        totalDAOShares,
+        tokens.map(token => token.address),
+        { from: random }
+      ).should.be.rejectedWith(SolRevert);
     });
   });
 
@@ -94,8 +116,7 @@ contract('GuildBank', ([creator, shareHolder, ...otherAccounts]) => {
       const amountReceiverShouldHaveReceived = contractTokenBalanceBefore.mul(new BN(shares.toString())).div(new BN(totalShares.toString()));
       const actualReceiverBalance = await token.balanceOf(receiver);
       assert.equal(actualReceiverBalance.toString(), amountReceiverShouldHaveReceived.toString());
+      //todo: check for event emitted
     }
-
-    //todo: check for event emitted
   };
 });
