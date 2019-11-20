@@ -245,10 +245,12 @@ contract Moloch {
         require(!proposal.flags[3], "proposal has been cancelled");
 
         if (proposal.flags[4]) {
-            require(!proposedToWhitelist[address(proposal.tributeToken)]);
+            // TODO BlockRocket added message. Please approve or remove.
+            require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
             proposedToWhitelist[address(proposal.tributeToken)] = true;
         } else if (proposal.flags[5]) {
-            require(!proposedToKick[proposal.applicant]);
+            // TODO BlockRocket added message. Please approve or remove.
+            require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
         } else {
             require(totalShares.add(totalSharesRequested).add(proposal.sharesRequested) <= MAX_NUMBER_OF_SHARES, "too many shares requested");
@@ -265,6 +267,9 @@ contract Moloch {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         proposal.sponsor = memberAddress;
 
+        // TODO BlockRocket added this missing flag on sponsor success. Please approve or remove.
+        proposal.flags[0] = true;
+
         proposalQueue.push(proposalId);
     }
 
@@ -278,7 +283,7 @@ contract Moloch {
         require(uintVote < 3, "must be less than 3");
         Vote vote = Vote(uintVote);
 
-        require(proposal.flags[0], "proposal has not been sponsored");
+        require(proposal.flags[0], "proposal has not been sponsored"); // TODO BlockRocket - unreachable require? Please approve or remove.
         require(getCurrentPeriod() >= proposal.startingPeriod, "voting period has not started");
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "member has already voted");
