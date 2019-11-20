@@ -1056,7 +1056,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     // TODO edge cases - explore two ifs inside the YES vote
   })
 
-  describe.only('processProposal', () => {
+  describe('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
@@ -1075,11 +1075,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.details,
         { from: proposer }
       )
-
-      const proposalDeposit = await moloch.proposalDeposit()
-      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
-
+      
       // sponsor
       await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
 
@@ -1101,7 +1097,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         initialTotalSharesRequested: 1,
         initialTotalShares: 1,
         initialMolochBalance: 110,
-        initialSponsorBalance: initSummonerBalance,
+        initialSponsorBalance: initSummonerBalance - deploymentConfig.PROPOSAL_DEPOSIT,
         expectedYesVotes: 1,
         expectedMaxSharesAtYesVote: 1
       })

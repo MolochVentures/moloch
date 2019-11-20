@@ -6,6 +6,7 @@ import "./oz/IERC20.sol";
 contract GuildBank  {
     using SafeMath for uint256;
 
+    // TODO BlockRocket changed from OZ ownable to bring in smaller version. Please approve or remove.
     address public owner;
 
     constructor () public {
@@ -23,7 +24,7 @@ contract GuildBank  {
         for (uint256 i = 0; i < approvedTokens.length; i++) {
             uint256 amount = approvedTokens[i].balanceOf(address(this)).mul(shares).div(totalShares);
             emit Withdrawal(receiver, address(approvedTokens[i]), amount);
-            // TODO changed from 'return approvedTokens[i].transfer(receiver, amount)' - wrapped in require and added return true external to loop. Please approve or remove.
+            // TODO BlockRocket changed from 'return approvedTokens[i].transfer(receiver, amount)' - wrapped in require and added return true external to loop. Please approve or remove.
             require(approvedTokens[i].transfer(receiver, amount));
         }
         return true;
