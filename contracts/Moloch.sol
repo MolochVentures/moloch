@@ -417,7 +417,7 @@ contract Moloch {
             // guild kick proposal passed, ragequit 100% of the member's shares
             // NOTE - if any approvedToken is broken gkicks will fail and get stuck here (until emergency processing)
             } else if (proposal.flags[5]) {
-                _ragequit(members[proposal.applicant].shares, members[proposal.applicant].loot, approvedTokens);
+                _ragequit(proposal.applicant, members[proposal.applicant].shares, members[proposal.applicant].loot, approvedTokens);
 
             // standard proposal passed, collect tribute, send payment, mint shares
             } else {
@@ -494,7 +494,7 @@ contract Moloch {
     }
 
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public onlyMember {
-        _ragequit(sharesToBurn, lootToBurn, approvedTokens);
+        _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
     }
 
     function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public onlyMember {
@@ -508,13 +508,13 @@ contract Moloch {
             }
         }
 
-        _ragequit(sharesToBurn, lootToBurn, tokenList);
+        _ragequit(msg.sender, sharesToBurn, lootToBurn, tokenList);
     }
 
-    function _ragequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
         uint256 initialTotalSharesAndLoot = totalSharesAndLoot;
 
-        Member storage member = members[msg.sender];
+        Member storage member = members[memberAddress];
 
         require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
         require(member.loot >= lootToBurn, "Moloch::ragequit - insufficient loot");
@@ -528,10 +528,9 @@ contract Moloch {
         member.loot = member.loot.sub(lootToBurn);
         totalSharesAndLoot = totalSharesAndLoot.sub(sharesAndLootToBurn);
 
-
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalSharesAndLoot, approvedTokens),
+            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalSharesAndLoot, approvedTokens),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
 
