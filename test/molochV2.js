@@ -1273,7 +1273,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(0, { from: processor })
 
       // proposal 1 has given applicant shares
-      const member = await moloch.members(applicant)
+      let member = await moloch.members(applicant)
       assert.equal(+member.shares, proposal1.sharesRequested)
 
       await moloch.submitGuildKickProposal(
@@ -1301,6 +1301,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.processProposal(1, { from: applicant })
 
+      member = await moloch.members(applicant)
+      assert.equal(+member.shares, 0) // all shares gone!
+
+      // TODO verify value returned
+      //
       // await verifyProcessProposal(proposal1, 0, proposer, deploymentConfig.SUMMONER, processor, {
       //   initialTotalSharesRequested: 0,
       //   initialTotalShares: 1,
@@ -1309,7 +1314,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       //   expectedYesVotes: 1,
       //   expectedMaxSharesAtYesVote: 1
       // })
-
     })
   })
 
