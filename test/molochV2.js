@@ -1237,6 +1237,80 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const newApprovedToken = await moloch.approvedTokens(2)
       assert.equal(newApprovedToken, newToken.address)
     })
+
+    it.only('happy path - kick member', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      // sponsor
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(0, { from: processor })
+
+      // proposal 1 has given applicant shares
+      const member = await moloch.members(applicant)
+      assert.equal(+member.shares, proposal1.sharesRequested)
+
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      // sponsor
+      await moloch.sponsorProposal(1, { from: deploymentConfig.SUMMONER })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(1, 1, { from: deploymentConfig.SUMMONER })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      const proposal = await moloch.proposals(1)
+      console.log('Proposal', proposal)
+      console.log('member', member)
+
+      await moloch.processProposal(1, { from: applicant })
+
+      // await verifyProcessProposal(proposal1, 0, proposer, deploymentConfig.SUMMONER, processor, {
+      //   initialTotalSharesRequested: 0,
+      //   initialTotalShares: 1,
+      //   initialMolochBalance: proposalDeposit,
+      //   initialSponsorBalance: initSummonerBalance,
+      //   expectedYesVotes: 1,
+      //   expectedMaxSharesAtYesVote: 1
+      // })
+
+    })
   })
 
   describe('cancelProposal', () => {
