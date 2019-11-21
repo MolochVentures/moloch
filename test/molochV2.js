@@ -1238,7 +1238,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(newApprovedToken, newToken.address)
     })
 
-    it.only('happy path - kick member', async () => {
+    it('happy path - kick member', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
 
