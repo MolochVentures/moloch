@@ -319,6 +319,8 @@ contract Moloch {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         proposal.sponsor = memberAddress;
 
+        proposal.flags[0] = true;
+
         // ... and append it to the queue by its id
         proposalQueue.push(proposalId);
 
