@@ -383,7 +383,7 @@ contract Moloch {
 
         // If emergencyExitWait has passed from when this proposal *should* have been able to be processed, skip all effects
         bool emergencyProcessing = false;
-        if (getCurrentPeriod() > proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
             emergencyProcessing = true;
             didPass = false;
         }
@@ -394,7 +394,7 @@ contract Moloch {
         }
 
         // Make sure there is enough tokens for payments, or auto-fail
-        if (proposal.paymentRequested >= proposal.paymentToken.balanceOf(address(guildBank))) {
+        if (proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
 
