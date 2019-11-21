@@ -1069,7 +1069,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('emits SubmitVote', async () => {
       await moveForwardPeriods(1)
       const emittedLogs = await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
-      
+
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalIndex, delegateKey, memberAddress, uintVote } = log.args
@@ -1382,6 +1382,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('failure - only the proposer can cancel', async () => {
       await moloch.cancelProposal(0, { from: creator })
         .should.be.rejectedWith(revertMesages.cancelProposalOnlyTheProposerCanCancel)
+    })
+
+    it('emits event', async () => {
+      const emittedLogs = await moloch.cancelProposal(0, { from: proposal1.applicant })
+      const { logs } = emittedLogs
+      const log = logs[0]
+      const { proposalIndex, applicantAddress } = log.args
+      assert.equal(log.event, 'CancelProposal')
+      assert.equal(proposalIndex, 0)
+      assert.equal(applicantAddress, proposal1.applicant)
     })
   })
 
