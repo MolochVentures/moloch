@@ -333,7 +333,8 @@ contract Moloch {
         }
 
         // TODO BlockRocket changed from >= to > as zero payment test was failing passing proposal here. Please approve or revert.
-        if (proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
+        // TODO BlockRocket proposal.paymentToken != IERC20(0) due to revert when zeroAddress payment token
+        if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
 

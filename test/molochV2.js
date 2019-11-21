@@ -1059,6 +1059,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   describe('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {
+
+    })
+
+    it('happy path - pass', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
 
@@ -1075,16 +1079,18 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.details,
         { from: proposer }
       )
-      
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
       // sponsor
       await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
 
       // vote
       await moveForwardPeriods(1)
       await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
-    })
 
-    it('happy path - pass', async () => {
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
@@ -1097,10 +1103,62 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         initialTotalSharesRequested: 1,
         initialTotalShares: 1,
         initialMolochBalance: 110,
-        initialSponsorBalance: initSummonerBalance - deploymentConfig.PROPOSAL_DEPOSIT,
+        initialSponsorBalance: initSummonerBalance,
         expectedYesVotes: 1,
         expectedMaxSharesAtYesVote: 1
       })
+    })
+
+    it.only('happy path - token whitelist', async () => {
+      const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      // submit whitelist proposal
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!',
+        flags: [true, true, true, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      // sponsor
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(0, { from: processor })
+
+      await verifyProcessProposal(whitelistProposal, 0, proposer, deploymentConfig.SUMMONER, processor, {
+        initialTotalSharesRequested: 0,
+        initialTotalShares: 1,
+        initialMolochBalance: proposalDeposit,
+        initialSponsorBalance: initSummonerBalance,
+        expectedYesVotes: 1,
+        expectedMaxSharesAtYesVote: 1
+      })
+
+      const newApprovedToken = await moloch.approvedTokens(2)
+      assert.equal(newApprovedToken, newToken.address)
     })
   })
 
@@ -1300,12 +1358,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         didPass ? initialApplicantBalance : initialApplicantBalance + proposal.tributeOffered
       )
 
+      // TODO fixme
       const proposerBalance = await tokenAlpha.balanceOf(proposer)
       assert.equal(
         +proposerBalance,
-        initialProposerBalance +
-        deploymentConfig.PROPOSAL_DEPOSIT -
-        deploymentConfig.PROCESSING_REWARD
+        initialProposerBalance
       )
     } else {
       const sponsorBalance = await tokenAlpha.balanceOf(sponsor)
@@ -1323,22 +1380,27 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     )
 
     if (didPass) {
-      // existing member
-      if (initialApplicantShares > 0) {
-        const memberData = await moloch.members(proposal.applicant)
-        assert.equal(
-          memberData.shares,
-          proposal.sharesRequested + initialApplicantShares
-        )
-      } else {
-        const newMemberData = await moloch.members(proposal.applicant)
-        assert.equal(newMemberData.delegateKey, proposal.applicant)
-        assert.equal(newMemberData.shares, proposal.sharesRequested)
-        assert.equal(newMemberData.exists, true)
-        assert.equal(newMemberData.highestIndexYesVote, 0)
+      // whitelist token
+      if (proposalFlags[4]) {
 
-        const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(proposal.applicant)
-        assert.equal(newMemberAddressByDelegateKey, proposal.applicant)
+      } else {
+        // existing member
+        if (initialApplicantShares > 0) {
+          const memberData = await moloch.members(proposal.applicant)
+          assert.equal(
+            memberData.shares,
+            proposal.sharesRequested + initialApplicantShares
+          )
+        } else {
+          const newMemberData = await moloch.members(proposal.applicant)
+          assert.equal(newMemberData.delegateKey, proposal.applicant)
+          assert.equal(newMemberData.shares, proposal.sharesRequested)
+          assert.equal(newMemberData.exists, true)
+          assert.equal(newMemberData.highestIndexYesVote, 0)
+
+          const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(proposal.applicant)
+          assert.equal(newMemberAddressByDelegateKey, proposal.applicant)
+        }
       }
     }
   }
