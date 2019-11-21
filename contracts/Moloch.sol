@@ -284,7 +284,7 @@ contract Moloch {
         // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
 
-        Proposal memory proposal = proposals[proposalId];
+        Proposal storage proposal = proposals[proposalId];
 
         require(!proposal.flags[0], "Moloch::sponsorProposal - proposal has already been sponsored");
         require(!proposal.flags[3], "Moloch::sponsorProposal - proposal has been cancelled");
