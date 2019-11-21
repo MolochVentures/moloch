@@ -126,6 +126,8 @@ const revertMesages = {
   submitVoteVoteMustBeEitherYesOrNo: 'vote must be either Yes or No',
   cancelProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
   cancelProposalOnlyTheProposerCanCancel: 'only the proposer can cancel',
+  molochNotAMember: 'not a member',
+  molochRageQuitInsufficientShares: 'insufficient shares'
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -167,7 +169,7 @@ async function moveForwardPeriods (periods) {
   return true
 }
 
-contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, ...otherAccounts]) => {
+contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
   let moloch, guildBank, tokenAlpha, tokenBeta
   let proposal1, proposal2
 
@@ -200,7 +202,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     proposal1 = {
       applicant: applicant1,
-      sharesRequested: 1,
+      sharesRequested: 100,
       tributeOffered: 100,
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
@@ -211,7 +213,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     proposal2 = {
       applicant: applicant2,
-      sharesRequested: 1,
+      sharesRequested: 50,
       tributeOffered: 50,
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
@@ -786,9 +788,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
 
       totalSharesRequested = await moloch.totalSharesRequested()
-      assert.equal(+totalSharesRequested, 1)
+      assert.equal(+totalSharesRequested, 100)
 
-      let proposal = await moloch.proposals(0)
+      const proposal = await moloch.proposals(0)
       assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
       assert.equal(proposal.startingPeriod, 1) // should be 1 plus the current period that is 0
 
@@ -1289,6 +1291,124 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.cancelProposal(0, { from: creator })
         .should.be.rejectedWith(revertMesages.cancelProposalOnlyTheProposerCanCancel)
     })
+  })
+
+  describe('rageQuit', () => {
+
+    beforeEach(async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+      await verifySubmitVote(proposal1, 0, deploymentConfig.SUMMONER, 1, {
+        expectedMaxSharesAtYesVote: 1
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(0, { from: processor })
+    })
+
+    describe('fails when', () => {
+
+      it('not a member', async () => {
+        await moloch.ragequit(1, { from: nonMemberAccount })
+          .should.be.rejectedWith(revertMesages.molochNotAMember)
+      })
+
+      it('requesting more shares than you own', async () => {
+        await moloch.ragequit(proposal1.sharesRequested + 1, { from: proposal1.applicant })
+          .should.be.rejectedWith(revertMesages.molochRageQuitInsufficientShares)
+      })
+
+      it('unable to quit when proposal in flight', async () => {
+        // TODO
+      })
+
+      it('guild bank fails to transfer tokens', async () => {
+        // TODO
+      })
+    })
+
+    describe('all shares', () => {
+
+      let emittedLogs
+
+      beforeEach(async () => {
+        const { logs } = await moloch.ragequit(proposal1.sharesRequested, { from: proposal1.applicant })
+        emittedLogs = logs
+      })
+
+      it('member shares reduced', async () => {
+        const newMemberData = await moloch.members(proposal1.applicant)
+        assert.equal(newMemberData.shares, 0)
+      })
+
+      it('total shares reduced', async () => {
+        const totalShares = await moloch.totalShares()
+        assert.equal(totalShares, 1)
+      })
+
+      it('emits event', async () => {
+        const log = emittedLogs[0]
+        const { memberAddress, sharesToBurn } = log.args
+        assert.equal(log.event, 'Ragequit')
+        assert.equal(memberAddress, proposal1.applicant)
+        assert.equal(sharesToBurn, proposal1.sharesRequested)
+      })
+
+    })
+
+    describe('partial shares', () => {
+      let emittedLogs
+
+      let partialRageQuitShares
+
+      beforeEach(async () => {
+        partialRageQuitShares = 20
+        const { logs } = await moloch.ragequit(partialRageQuitShares, { from: proposal1.applicant })
+        emittedLogs = logs
+      })
+
+      it('member shares reduced', async () => {
+        const newMemberData = await moloch.members(proposal1.applicant)
+        assert.equal(newMemberData.shares, proposal1.sharesRequested - partialRageQuitShares)
+      })
+
+      it('total shares reduced', async () => {
+        const totalShares = await moloch.totalShares()
+        // your remaining shares plus the summoners 1 share
+        assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + 1)
+      })
+
+      it('emits event', async () => {
+        const log = emittedLogs[0]
+        const { memberAddress, sharesToBurn } = log.args
+        assert.equal(log.event, 'Ragequit')
+        assert.equal(memberAddress, proposal1.applicant)
+        assert.equal(sharesToBurn, partialRageQuitShares)
+      })
+    })
+
   })
 
   // VERIFY SUBMIT PROPOSAL
