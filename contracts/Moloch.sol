@@ -291,12 +291,12 @@ contract Moloch {
 
         // token whitelist proposal
         if (proposal.flags[4]) {
-            require(!proposedToWhitelist[address(proposal.tributeToken)]); // already an active proposal to whitelist this token
+            require(!proposedToWhitelist[address(proposal.tributeToken)], "Moloch::sponsorProposal - already proposed to whitelist");
             proposedToWhitelist[address(proposal.tributeToken)] = true;
 
-        // gkick proposal
+        // kick proposal
         } else if (proposal.flags[5]) {
-            require(!proposedToKick[proposal.applicant]); // already an active proposal to kick this member
+            require(!proposedToKick[proposal.applicant], "Moloch::sponsorProposal - already proposed to kick");
             proposedToKick[proposal.applicant] = true;
 
         // standard proposal
