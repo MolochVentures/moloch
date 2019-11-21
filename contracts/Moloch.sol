@@ -424,6 +424,7 @@ contract Moloch {
     function _ragequit(uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
+        // FIXME this means the person being kicked must call processProposal!?
         Member storage member = members[msg.sender];
 
         require(member.shares >= sharesToBurn, "insufficient shares");
