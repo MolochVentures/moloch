@@ -209,6 +209,17 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       flags: [false, false, false, false, false, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
     }
 
+    proposal2 = {
+      applicant: applicant2,
+      sharesRequested: 1,
+      tributeOffered: 50,
+      tributeToken: tokenAlpha.address,
+      paymentRequested: 0,
+      paymentToken: tokenAlpha.address,
+      details: 'all hail moloch 2',
+      flags: [false, false, false, false, false, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+    }
+
     tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
   })
 
@@ -1054,6 +1065,72 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     // TODO edge cases - explore two ifs inside the YES vote
+
+    describe('submitVote modifying member.highestIndexYesVote', () => {
+
+      const proposal2Index = 1
+
+      beforeEach(async () => {
+        await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, { from: creator })
+        await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, { from: proposal2.applicant })
+
+        await moloch.submitProposal(
+          proposal2.applicant,
+          proposal2.sharesRequested,
+          proposal2.tributeOffered,
+          proposal2.tributeToken,
+          proposal2.paymentRequested,
+          proposal2.paymentToken,
+          proposal2.details,
+          { from: proposal2.applicant }
+        )
+
+        const proposalDeposit = await moloch.proposalDeposit()
+        await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+        await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+        await moloch.sponsorProposal(1, { from: deploymentConfig.SUMMONER })
+      })
+
+      it('proposal two should be created in the right state', async () => {
+
+        // TODO consider passing flags into the validate method and not mutating the proposal template IMO
+        proposal2.flags = [true, false, false, false, false, false]
+
+        await verifySubmitProposal(proposal2, proposal2Index, proposal2.applicant, {
+          initialApplicantBalance: proposal2.tributeOffered,
+          sponsor: deploymentConfig.SUMMONER,
+          expectedStartingPeriod: 2,
+          expectedMolochBalance: 170 // (100 (proposal 1) + 10 (sponsorship)) + (50 (proposal 2) + 10 (sponsorship)) = 170
+        })
+      })
+
+      it('require fail - voting period not starting yet', async () => {
+        await moloch.submitVote(proposal2Index, 1, { from: deploymentConfig.SUMMONER })
+          .should.be.rejectedWith(revertMesages.submitVoteVotingPeriodHasNotStarted)
+      })
+
+      it('happy case - yes vote - highestIndexYesVote update', async () => {
+        await moveForwardPeriods(2)
+        await moloch.submitVote(proposal2Index, 1, { from: deploymentConfig.SUMMONER })
+        await verifySubmitVote(proposal2, proposal2Index, deploymentConfig.SUMMONER, 1, {
+          expectedMaxSharesAtYesVote: 1
+        })
+
+        const memberData = await moloch.members(deploymentConfig.SUMMONER)
+        assert.equal(memberData.highestIndexYesVote, proposal2Index, 'highestIndexYesVote does not match')
+      })
+
+      it('happy case - no vote - highestIndexYesVote not updated', async () => {
+        await moveForwardPeriods(2)
+        await moloch.submitVote(proposal2Index, 2, { from: deploymentConfig.SUMMONER })
+        await verifySubmitVote(proposal2, proposal2Index, summoner, 2, {})
+
+        const memberData = await moloch.members(deploymentConfig.SUMMONER)
+        assert.equal(memberData.highestIndexYesVote, 0, 'highestIndexYesVote does not match')
+      })
+
+    })
   })
 
   describe('processProposal', () => {
@@ -1109,7 +1186,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it.only('happy path - token whitelist', async () => {
+    it('happy path - token whitelist', async () => {
       const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
       // submit whitelist proposal
@@ -1227,43 +1304,47 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const proposalData = await moloch.proposals(proposalIndex)
 
     assert.equal(proposalData.applicant.toLowerCase(), proposal.applicant.toLowerCase()) // FIXME can be improved
-    assert.equal(proposalData.proposer, proposer)
-    assert.equal(proposalData.sponsor, zeroAddress)
+    assert.equal(proposalData.proposer, proposer, 'proposers does not match')
+    const expectedSponsor = options.sponsor
+      ? options.sponsor.toLowerCase()
+      : zeroAddress
+    assert.equal(proposalData.sponsor.toLowerCase(), expectedSponsor, 'sponsors incorrectly set')
 
     if (typeof proposal.sharesRequested === 'number') {
-      assert.equal(proposalData.sharesRequested, proposal.sharesRequested)
+      assert.equal(proposalData.sharesRequested, proposal.sharesRequested, 'sharesRequested does not match')
     } else {
       // for testing overflow boundary with BNs
-      assert(proposalData.sharesRequested.eq(proposal.sharesRequested))
+      assert(proposalData.sharesRequested.eq(proposal.sharesRequested), 'sharesRequested does not match')
     }
-    assert.equal(proposalData.tributeOffered, proposal.tributeOffered)
-    assert.equal(proposalData.tributeToken, proposal.tributeToken)
+    assert.equal(proposalData.tributeOffered, proposal.tributeOffered, 'tributeOffered does not match')
+    assert.equal(proposalData.tributeToken, proposal.tributeToken, 'tributeToken does not match')
 
-    assert.equal(proposalData.paymentRequested, proposal.paymentRequested)
-    assert.equal(proposalData.paymentToken, proposal.paymentToken)
+    assert.equal(proposalData.paymentRequested, proposal.paymentRequested, 'paymentRequested does not match')
+    assert.equal(proposalData.paymentToken, proposal.paymentToken, 'paymentToken does not match')
 
-    assert.equal(proposalData.startingPeriod, expectedStartingPeriod)
-    assert.equal(proposalData.yesVotes, 0)
-    assert.equal(proposalData.noVotes, 0)
+    assert.equal(proposalData.startingPeriod, expectedStartingPeriod, 'startingPeriod does not match')
+    assert.equal(proposalData.yesVotes, 0, 'yesVotes does not match')
+    assert.equal(proposalData.noVotes, 0, 'noVotes does not match')
 
     const proposalFlags = await moloch.getProposalFlags(proposalIndex)
 
     // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-    assert.equal(proposalFlags[0], proposal.flags[0])
-    assert.equal(proposalFlags[1], proposal.flags[1])
-    assert.equal(proposalFlags[2], proposal.flags[2])
-    assert.equal(proposalFlags[3], proposal.flags[3])
-    assert.equal(proposalFlags[4], proposal.flags[4])
-    assert.equal(proposalFlags[5], proposal.flags[5])
+    assert.equal(proposalFlags[0], proposal.flags[0], 'sponsored flag incorrect')
+    assert.equal(proposalFlags[1], proposal.flags[1], 'processed flag incorrect')
+    assert.equal(proposalFlags[2], proposal.flags[2], 'didPass flag incorrect')
+    assert.equal(proposalFlags[3], proposal.flags[3], 'cancelled flag incorrect')
+    assert.equal(proposalFlags[4], proposal.flags[4], 'whitelist flag incorrect')
+    assert.equal(proposalFlags[5], proposal.flags[5], 'guildkick flag incorrect')
 
-    assert.equal(proposalData.details, proposal.details)
-    assert.equal(proposalData.maxTotalSharesAtYesVote, 0)
+    assert.equal(proposalData.details, proposal.details, 'details does not match')
+    assert.equal(proposalData.maxTotalSharesAtYesVote, 0, 'maxTotalSharesAtYesVote invalid')
 
     const molochBalance = await tokenAlpha.balanceOf(moloch.address)
-    assert.equal(molochBalance, proposal.tributeOffered)
+    const expectedMolochBalance = options.expectedMolochBalance || proposal.tributeOffered
+    assert.equal(molochBalance, expectedMolochBalance, 'moloch balance incorrect')
 
     const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
-    assert.equal(applicantBalance, initialApplicantBalance - proposal.tributeOffered)
+    assert.equal(applicantBalance, initialApplicantBalance - proposal.tributeOffered, 'application balance incorrect')
   }
 
   // VERIFY SUBMIT VOTE
@@ -1296,6 +1377,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     processor,
     options
   ) => {
+    // TODO fix initialTotalSharesRequested not used
     // eslint-disable-next-line no-unused-vars
     const initialTotalSharesRequested = valueOr0(options.initialTotalSharesRequested)
     const initialTotalShares = valueOr0(options.initialTotalShares)
@@ -1316,73 +1398,64 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const proposalData = await moloch.proposals(proposalIndex)
 
     const didPass = proposalFlags[2]
-    assert.equal(proposalData.yesVotes, expectedYesVotes)
-    assert.equal(proposalData.noVotes, expectedNoVotes)
-    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
+    assert.equal(proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
+    assert.equal(proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')
+    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote, 'proposal total shares at yes cote incorrect')
 
     // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-    assert.equal(proposalFlags[0], proposal.flags[0])
-    assert.equal(proposalFlags[1], proposal.flags[1])
-    assert.equal(proposalFlags[2], proposal.flags[2])
-    assert.equal(proposalFlags[3], proposal.flags[3])
-    assert.equal(proposalFlags[4], proposal.flags[4])
-    assert.equal(proposalFlags[5], proposal.flags[5])
+    assert.equal(proposalFlags[0], proposal.flags[0], 'sponsored flag incorrect')
+    assert.equal(proposalFlags[1], proposal.flags[1], 'processed flag incorrect')
+    assert.equal(proposalFlags[2], proposal.flags[2], 'didPass flag incorrect')
+    assert.equal(proposalFlags[3], proposal.flags[3], 'cancelled flag incorrect')
+    assert.equal(proposalFlags[4], proposal.flags[4], 'whitelist flag incorrect')
+    assert.equal(proposalFlags[5], proposal.flags[5], 'guildkick flag incorrect')
 
     const totalSharesRequested = await moloch.totalSharesRequested()
-    assert.equal(totalSharesRequested, expectedFinalTotalSharesRequested)
+    assert.equal(totalSharesRequested, expectedFinalTotalSharesRequested, 'total shares requested incorrect')
 
     const totalShares = await moloch.totalShares()
-    assert.equal(
-      totalShares,
-      didPass ? initialTotalShares + proposal.sharesRequested : initialTotalShares
-    )
+    const expectedTotalShares = didPass ? initialTotalShares + proposal.sharesRequested : initialTotalShares
+    assert.equal(totalShares, expectedTotalShares, 'total shares incorrect')
 
     const molochBalance = await tokenAlpha.balanceOf(moloch.address)
-    assert.equal(
-      molochBalance,
-      initialMolochBalance - proposalData.tributeOffered - deploymentConfig.PROPOSAL_DEPOSIT
-    )
+    const expectedMolochBalance = initialMolochBalance - proposalData.tributeOffered - deploymentConfig.PROPOSAL_DEPOSIT
+    assert.equal(molochBalance, expectedMolochBalance, 'moloch balance incorrect')
 
     // FIXME for multi-token
     const guildBankBalance = await tokenAlpha.balanceOf(guildBank.address)
-    assert.equal(
-      guildBankBalance,
-      didPass ? initialGuildBankBalance + proposal.tributeOffered : initialGuildBankBalance
-    )
+    const expectedGuildBankBalance = didPass ? initialGuildBankBalance + proposal.tributeOffered : initialGuildBankBalance
+    assert.equal(guildBankBalance, expectedGuildBankBalance, 'application balance incorrect')
 
     // proposer and applicant are different
     if (proposer !== proposal.applicant) {
       const applicantBalance = await tokenAlpha.balanceOf(proposal.applicant)
-      assert.equal(
-        applicantBalance,
-        didPass ? initialApplicantBalance : initialApplicantBalance + proposal.tributeOffered
-      )
+      const expectedApplicantBalance = didPass ? initialApplicantBalance : initialApplicantBalance + proposal.tributeOffered
+      assert.equal(applicantBalance, expectedApplicantBalance, 'application balance incorrect')
 
       // TODO fixme
       const proposerBalance = await tokenAlpha.balanceOf(proposer)
-      assert.equal(
-        +proposerBalance,
-        initialProposerBalance
-      )
+      const expectedProposerBalance = initialProposerBalance
+      assert.equal(+proposerBalance, +expectedProposerBalance, 'proposer balance incorrect')
     } else {
+
       const sponsorBalance = await tokenAlpha.balanceOf(sponsor)
-      const expectedBalance =
-        didPass
-          ? initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
-          : initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD + proposal.tributeOffered
-      assert.equal(+sponsorBalance, +expectedBalance)
+      const expectedBalance = didPass
+        ? initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
+        : initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD + proposal.tributeOffered
+      assert.equal(+sponsorBalance, +expectedBalance, 'sponsor balance incorrect')
     }
 
     const processorBalance = await tokenAlpha.balanceOf(processor)
     assert.equal(
       processorBalance,
-      initialProcessorBalance + deploymentConfig.PROCESSING_REWARD
+      initialProcessorBalance + deploymentConfig.PROCESSING_REWARD,
+      'processing balance incorrect'
     )
 
     if (didPass) {
       // whitelist token
       if (proposalFlags[4]) {
-
+        // FIXME rework
       } else {
         // existing member
         if (initialApplicantShares > 0) {
