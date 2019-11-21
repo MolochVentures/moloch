@@ -504,7 +504,7 @@ contract Moloch {
         _ragequit(sharesToBurn, tokenList);
     }
 
-    function _ragequit(uint256 sharesToBurn, IERC20[] memory approvedTokens) internal {
+    function _ragequit(uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[msg.sender];
@@ -519,7 +519,7 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, approvedTokens),
+            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, _approvedTokens),
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
 
