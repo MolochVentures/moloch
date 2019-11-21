@@ -1066,6 +1066,20 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith('not a delegate')
     })
 
+    it('emits SubmitVote', async () => {
+      await moveForwardPeriods(1)
+      const emittedLogs = await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+      
+      const { logs } = emittedLogs
+      const log = logs[0]
+      const { proposalIndex, delegateKey, memberAddress, uintVote } = log.args
+      assert.equal(log.event, 'SubmitVote')
+      assert.equal(proposalIndex, 0)
+      assert.equal(delegateKey.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+      assert.equal(memberAddress.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
+      assert.equal(uintVote, 1)
+    })
+
     // TODO edge cases - explore two ifs inside the YES vote
 
     describe('submitVote modifying member.highestIndexYesVote', () => {
@@ -1418,12 +1432,41 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           .should.be.rejectedWith(revertMesages.molochRageQuitInsufficientShares)
       })
 
-      it('unable to quit when proposal in flight', async () => {
+      it('guild bank fails to transfer tokens', async () => {
         // TODO
       })
 
-      it('guild bank fails to transfer tokens', async () => {
-        // TODO
+      describe('when a proposal is in flight', () => {
+
+        beforeEach(async () => {
+          await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, { from: creator })
+          await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, { from: proposal2.applicant })
+
+          await moloch.submitProposal(
+            proposal2.applicant,
+            proposal2.sharesRequested,
+            proposal2.tributeOffered,
+            proposal2.tributeToken,
+            proposal2.paymentRequested,
+            proposal2.paymentToken,
+            proposal2.details,
+            { from: proposal2.applicant }
+          )
+
+          const proposalDeposit = await moloch.proposalDeposit()
+          await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+          await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+          await moloch.sponsorProposal(1, { from: deploymentConfig.SUMMONER })
+
+          await moveForwardPeriods(1)
+          await moloch.submitVote(1, 1, { from: deploymentConfig.SUMMONER })
+        })
+
+        it('unable to quit when proposal in flight', async () => {
+          await moloch.ragequit(1, { from: deploymentConfig.SUMMONER })
+            .should.be.rejectedWith('cant ragequit until highest index proposal member voted YES on is processed')
+        })
       })
     })
 
