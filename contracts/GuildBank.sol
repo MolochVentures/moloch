@@ -13,8 +13,10 @@ contract GuildBank is Ownable {
         for (uint256 i=0; i < approvedTokens.length; i++) {
             uint256 amount = approvedTokens[i].balanceOf(address(this)).mul(shares).div(totalShares);
             emit Withdrawal(receiver, address(approvedTokens[i]), amount);
-            return approvedTokens[i].transfer(receiver, amount);
+            require(approvedTokens[i].transfer(receiver, amount), "GuildBank::withdraw - token transfer failed");
         }
+
+        return true;
     }
 
     function withdrawToken(IERC20 token, address receiver, uint256 amount) public onlyOwner returns (bool) {
