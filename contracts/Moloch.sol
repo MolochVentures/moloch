@@ -286,6 +286,8 @@ contract Moloch {
 
         Proposal storage proposal = proposals[proposalId];
 
+        require(proposal.proposer != address(0), 'Moloch::sponsorProposal - proposal must have been proposed');
+
         require(!proposal.flags[0], "Moloch::sponsorProposal - proposal has already been sponsored");
         require(!proposal.flags[3], "Moloch::sponsorProposal - proposal has been cancelled");
 
