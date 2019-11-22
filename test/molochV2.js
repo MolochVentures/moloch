@@ -120,7 +120,10 @@ const revertMesages = {
   molochNotAMember: 'not a member',
   molochRageQuitInsufficientShares: 'insufficient shares',
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
-  updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members'
+  updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members',
+  canRageQuitProposalDoesNotExist: 'proposal does not exist',
+  getMemberProposalVoteMemberDoesntExist: 'member doesn\'t exist',
+  getMemberProposalVoteProposalDoesntExist: 'proposal doesn\'t exist',
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -1134,7 +1137,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.only('processProposal', () => {
+  describe('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {
 
@@ -1489,7 +1492,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // submit
       proposer = proposal1.applicant
       applicant = proposal1.applicant
-      proposal1.paymentRequested = 1000
+      proposal1.paymentRequested = 101
       await moloch.submitProposal(
         applicant,
         proposal1.sharesRequested,
@@ -1902,6 +1905,100 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.updateDelegateKey(applicant, { from: summoner })
         .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingMembers)
+    })
+  })
+
+  describe('canRageQuit', () => {
+    it('happy case', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      const proposer = proposal1.applicant
+      const applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      let canRageQuit = await moloch.canRagequit(firstPropsalIndex)
+      assert.equal(canRageQuit, false)
+
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
+
+      canRageQuit = await moloch.canRagequit(firstPropsalIndex)
+      assert.equal(canRageQuit, true)
+    })
+
+    it('failure - proposal does not exist', async () => {
+      await moloch.canRagequit(invalidPropsalIndex)
+        .should.be.rejectedWith(revertMesages.canRageQuitProposalDoesNotExist)
+    })
+  })
+
+  describe('getMemberProposalVote', () => {
+    it('happy case', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      const proposer = proposal1.applicant
+      const applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+
+      // vote
+      let memberVote = await moloch.getMemberProposalVote(summoner, firstPropsalIndex)
+      assert.equal(memberVote, 0)
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+
+      memberVote = await moloch.getMemberProposalVote(summoner, firstPropsalIndex)
+      assert.equal(memberVote, 1)
+    })
+
+    it('failure - member does not exist', async () => {
+      await moloch.getMemberProposalVote(zeroAddress, firstPropsalIndex)
+        .should.be.rejectedWith(revertMesages.getMemberProposalVoteMemberDoesntExist)
+    })
+
+    it('failure - proposal does not exist', async () => {
+      await moloch.getMemberProposalVote(summoner, invalidPropsalIndex)
+        .should.be.rejectedWith(revertMesages.getMemberProposalVoteProposalDoesntExist)
     })
   })
 
