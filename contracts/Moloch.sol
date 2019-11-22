@@ -396,7 +396,7 @@ contract Moloch {
         }
 
         // Make sure there is enough tokens for payments, or auto-fail
-        if (proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
+        if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
 
