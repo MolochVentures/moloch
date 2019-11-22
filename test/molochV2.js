@@ -190,8 +190,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   let snapshotId
 
-
-
   before('deploy contracts', async () => {
     tokenAlpha = await Token.new(deploymentConfig.TOKEN_SUPPLY)
     tokenBeta = await Token.new(deploymentConfig.TOKEN_SUPPLY)
@@ -1170,21 +1168,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
 
       // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
       proposal1.flags = [true, true, true, false, false, false] // fixme didPass to be TRUE?
 
-      await verifyProcessProposal(proposal1, 0, proposer, summoner, processor, {
+      await verifyProcessProposal(proposal1, firstPropsalIndex, proposer, summoner, processor, {
         initialTotalSharesRequested: 1,
         initialTotalShares: 1,
         initialMolochBalance: 110,
@@ -1221,16 +1219,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
 
       await verifyProcessProposal(whitelistProposal, 0, proposer, summoner, processor, {
         initialTotalSharesRequested: 0,
@@ -1267,16 +1265,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
 
       // proposal 1 has given applicant shares
       let member = await moloch.members(applicant)
@@ -1292,16 +1290,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(1, { from: summoner })
+      await moloch.sponsorProposal(secondPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(1, 1, { from: summoner })
+      await moloch.submitVote(secondPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(1, { from: applicant })
+      await moloch.processProposal(secondPropsalIndex, { from: applicant })
 
       member = await moloch.members(applicant)
       assert.equal(+member.shares, 0) // all shares gone!
@@ -1319,7 +1317,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('require fail  - proposal does not exist', async () => {
-      await moloch.processProposal(123, { from: processor })
+      await moloch.processProposal(invalidPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalProposalDoesNotExist)
     })
 
@@ -1345,13 +1343,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalProposalIsNotReadyToBeProcessed)
     })
 
@@ -1377,18 +1375,18 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalProposalHasAlreadyBeenProcessed)
     })
 
@@ -1425,18 +1423,18 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT * 2, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
-      await moloch.sponsorProposal(1, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+      await moloch.sponsorProposal(secondPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(2)
-      await moloch.submitVote(0, 1, { from: summoner })
-      await moloch.submitVote(1, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+      await moloch.submitVote(secondPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(1, { from: processor })
+      await moloch.processProposal(secondPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalPreviousProposalMustBeProcessed)
     })
   })
@@ -1461,18 +1459,18 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
-      await verifySubmitVote(proposal1, 0, summoner, 1, {
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+      await verifySubmitVote(proposal1, firstPropsalIndex, summoner, 1, {
         expectedMaxSharesAtYesVote: 1
       })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
     })
 
     describe('fails when', () => {
@@ -1511,14 +1509,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
           await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
-          await moloch.sponsorProposal(1, { from: summoner })
+          await moloch.sponsorProposal(secondPropsalIndex, { from: summoner })
 
           await moveForwardPeriods(1)
-          await moloch.submitVote(1, 1, { from: summoner })
+          await moloch.submitVote(secondPropsalIndex, yes, { from: summoner })
         })
 
         it('unable to quit when proposal in flight', async () => {
-          await moloch.ragequit(1, { from: summoner })
+          await moloch.ragequit(secondPropsalIndex, { from: summoner })
             .should.be.rejectedWith('cant ragequit until highest index proposal member voted YES on is processed')
         })
       })
@@ -1611,7 +1609,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       let proposerBalance = await tokenAlpha.balanceOf(proposal1.applicant)
 
-      await moloch.cancelProposal(0, { from: proposal1.applicant })
+      await moloch.cancelProposal(firstPropsalIndex, { from: proposal1.applicant })
 
       proposalFlags = await moloch.getProposalFlags(0)
       assert.equal(proposalFlags[3], true) // cancelled
@@ -1625,14 +1623,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
-      await moloch.cancelProposal(0, { from: proposal1.applicant })
+      await moloch.cancelProposal(firstPropsalIndex, { from: proposal1.applicant })
         .should.be.rejectedWith(revertMesages.cancelProposalProposalHasAlreadyBeenSponsored)
     })
 
     it('failure - only the proposer can cancel', async () => {
-      await moloch.cancelProposal(0, { from: creator })
+      await moloch.cancelProposal(firstPropsalIndex, { from: creator })
         .should.be.rejectedWith(revertMesages.cancelProposalOnlyTheProposerCanCancel)
     })
 
@@ -1642,7 +1640,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const log = logs[0]
       const { proposalIndex, applicantAddress } = log.args
       assert.equal(log.event, 'CancelProposal')
-      assert.equal(proposalIndex, 0)
+      assert.equal(proposalIndex, firstPropsalIndex)
       assert.equal(applicantAddress, proposal1.applicant)
     })
   })
@@ -1682,16 +1680,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       // sponsor
-      await moloch.sponsorProposal(0, { from: summoner })
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // vote
       await moveForwardPeriods(1)
-      await moloch.submitVote(0, 1, { from: summoner })
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(0, { from: processor })
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
 
       await moloch.updateDelegateKey(applicant, { from: summoner })
         .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingMembers)
