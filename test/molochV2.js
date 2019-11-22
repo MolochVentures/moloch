@@ -1140,7 +1140,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     })
 
-    it('happy path - pass', async () => {
+    it('happy path - pass - yes wins', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
 
@@ -1184,6 +1184,129 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedMaxSharesAtYesVote: 1
       })
+    })
+
+    it('happy path - fail - no wins', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstPropsalIndex, no, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      let newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
+
+      // no shares given
+      newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      // flags and proposal data
+      const proposalFlags = await moloch.getProposalFlags(firstPropsalIndex)
+      assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
+      assert.equal(proposalFlags[1], true, 'processed flag incorrect')
+      assert.equal(proposalFlags[2], false, 'didPass flag incorrect')
+      assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
+
+      // FIXME check all balances of tokens - for all processing tests!
+    })
+
+    it('happy path  - shares added to existing member', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered * 2, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered * 2, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT * 2, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT * 2, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+      await moloch.sponsorProposal(secondPropsalIndex, { from: summoner })
+
+      // vote
+      await moveForwardPeriods(2)
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+      await moloch.submitVote(secondPropsalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      let newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
+
+      newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, proposal1.sharesRequested)
+
+      await moloch.processProposal(secondPropsalIndex, { from: processor })
+
+      newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, proposal1.sharesRequested + proposal1.sharesRequested)
+
+      // flags and proposal data
+      let proposalFlags = await moloch.getProposalFlags(firstPropsalIndex)
+      assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
+      assert.equal(proposalFlags[1], true, 'processed flag incorrect')
+      assert.equal(proposalFlags[2], true, 'didPass flag incorrect')
+      assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
+
+      proposalFlags = await moloch.getProposalFlags(secondPropsalIndex)
+      assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
+      assert.equal(proposalFlags[1], true, 'processed flag incorrect')
+      assert.equal(proposalFlags[2], true, 'didPass flag incorrect')
+      assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
+
+      // FIXME check all balances of tokens - for all processing tests!
     })
 
     it('happy path - token whitelist', async () => {
@@ -1310,7 +1433,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // })
     })
 
-    it('happy path - emergency processing', async () => {
+    it('edge case - emergency processing', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
 
@@ -1341,6 +1464,55 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
+
+      let newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
+
+      // no shares given
+      newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      // flags and proposal data
+      const proposalFlags = await moloch.getProposalFlags(firstPropsalIndex)
+      assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
+      assert.equal(proposalFlags[1], true, 'processed flag incorrect')
+      assert.equal(proposalFlags[2], false, 'didPass flag incorrect')
+      assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
+    })
+
+    it('edge case - paymentRequested more than funds in the bank', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      proposal1.paymentRequested = 1000
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       let newMemberData = await moloch.members(applicant)
       assert.equal(newMemberData.shares, 0)
@@ -1842,7 +2014,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const didPass = proposalFlags[2]
     assert.equal(proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
     assert.equal(proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')
-    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote, 'proposal total shares at yes cote incorrect')
+    assert.equal(proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote, 'proposal total shares at yes vote incorrect')
 
     // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
     assert.equal(proposalFlags[0], proposal.flags[0], 'sponsored flag incorrect')
