@@ -132,7 +132,9 @@ const revertMesages = {
   processProposalProposalHasAlreadyBeenProcessed: 'proposal has already been processed',
   processProposalPreviousProposalMustBeProcessed: 'previous proposal must be processed',
   molochNotAMember: 'not a member',
-  molochRageQuitInsufficientShares: 'insufficient shares'
+  molochRageQuitInsufficientShares: 'insufficient shares',
+  updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
+  updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members'
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -1142,7 +1144,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.only('processProposal', () => {
+  describe('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {
 
@@ -1447,68 +1449,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe('cancelProposal', () => {
-    beforeEach(async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        proposal1.sharesRequested,
-        proposal1.tributeOffered,
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-    })
-
-    it('happy case', async () => {
-      const proposal = await moloch.proposals(0)
-
-      let proposalFlags = await moloch.getProposalFlags(0)
-      assert.equal(proposalFlags[3], false) // not cancelled
-
-      let proposerBalance = await tokenAlpha.balanceOf(proposal1.applicant)
-
-      await moloch.cancelProposal(0, { from: proposal1.applicant })
-
-      proposalFlags = await moloch.getProposalFlags(0)
-      assert.equal(proposalFlags[3], true) // cancelled
-
-      // tribute offered has been returned
-      let proposerBalanceAfterCancel = await tokenAlpha.balanceOf(proposal1.applicant)
-      assert.equal(+proposerBalanceAfterCancel, +proposerBalance + proposal.tributeOffered)
-    })
-
-    it('failure - already sponsored', async () => {
-      const proposalDeposit = await moloch.proposalDeposit()
-      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
-
-      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
-
-      await moloch.cancelProposal(0, { from: proposal1.applicant })
-        .should.be.rejectedWith(revertMesages.cancelProposalProposalHasAlreadyBeenSponsored)
-    })
-
-    it('failure - only the proposer can cancel', async () => {
-      await moloch.cancelProposal(0, { from: creator })
-        .should.be.rejectedWith(revertMesages.cancelProposalOnlyTheProposerCanCancel)
-    })
-
-    it('emits event', async () => {
-      const emittedLogs = await moloch.cancelProposal(0, { from: proposal1.applicant })
-      const { logs } = emittedLogs
-      const log = logs[0]
-      const { proposalIndex, applicantAddress } = log.args
-      assert.equal(log.event, 'CancelProposal')
-      assert.equal(proposalIndex, 0)
-      assert.equal(applicantAddress, proposal1.applicant)
-    })
-  })
-
   describe('rageQuit', () => {
 
     beforeEach(async () => {
@@ -1654,6 +1594,120 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
+  })
+
+  describe('cancelProposal', () => {
+    beforeEach(async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+    })
+
+    it('happy case', async () => {
+      const proposal = await moloch.proposals(0)
+
+      let proposalFlags = await moloch.getProposalFlags(0)
+      assert.equal(proposalFlags[3], false) // not cancelled
+
+      let proposerBalance = await tokenAlpha.balanceOf(proposal1.applicant)
+
+      await moloch.cancelProposal(0, { from: proposal1.applicant })
+
+      proposalFlags = await moloch.getProposalFlags(0)
+      assert.equal(proposalFlags[3], true) // cancelled
+
+      // tribute offered has been returned
+      let proposerBalanceAfterCancel = await tokenAlpha.balanceOf(proposal1.applicant)
+      assert.equal(+proposerBalanceAfterCancel, +proposerBalance + proposal.tributeOffered)
+    })
+
+    it('failure - already sponsored', async () => {
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      await moloch.cancelProposal(0, { from: proposal1.applicant })
+        .should.be.rejectedWith(revertMesages.cancelProposalProposalHasAlreadyBeenSponsored)
+    })
+
+    it('failure - only the proposer can cancel', async () => {
+      await moloch.cancelProposal(0, { from: creator })
+        .should.be.rejectedWith(revertMesages.cancelProposalOnlyTheProposerCanCancel)
+    })
+
+    it('emits event', async () => {
+      const emittedLogs = await moloch.cancelProposal(0, { from: proposal1.applicant })
+      const { logs } = emittedLogs
+      const log = logs[0]
+      const { proposalIndex, applicantAddress } = log.args
+      assert.equal(log.event, 'CancelProposal')
+      assert.equal(proposalIndex, 0)
+      assert.equal(applicantAddress, proposal1.applicant)
+    })
+  })
+
+  describe('updateDelegateKey', () => {
+    it('happy case', async () => {
+      await moloch.updateDelegateKey(processor, { from: deploymentConfig.SUMMONER })
+
+      const member = await moloch.members(deploymentConfig.SUMMONER)
+      assert.equal(member.delegateKey, processor)
+    })
+
+    it('failure - can not be zero address', async () => {
+      await moloch.updateDelegateKey(zeroAddress, { from: deploymentConfig.SUMMONER })
+        .should.be.rejectedWith(revertMesages.updateDelegateKeyNewDelegateKeyCannotBe0)
+    })
+
+    it('failure - cant overwrite existing members', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      const proposer = proposal1.applicant
+      const applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit, { from: deploymentConfig.SUMMONER })
+
+      // sponsor
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(0, { from: processor })
+
+      await moloch.updateDelegateKey(applicant, { from: deploymentConfig.SUMMONER })
+        .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingMembers)
+    })
   })
 
   // VERIFY SUBMIT PROPOSAL
