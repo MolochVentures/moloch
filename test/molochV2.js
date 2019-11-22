@@ -188,7 +188,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   const yes = 1
   const no = 2
 
+  const standardShareRequest = 100
+  const standardTribute = 100
+
   let snapshotId
+
+  const fundAndApproveToMoloch = async ({ to, from, value }) => {
+    await tokenAlpha.transfer(to, value, { from: creator })
+    await tokenAlpha.approve(moloch.address, value, { from: to })
+  }
 
   before('deploy contracts', async () => {
     tokenAlpha = await Token.new(deploymentConfig.TOKEN_SUPPLY)
@@ -215,8 +223,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     proposal1 = {
       applicant: applicant1,
-      sharesRequested: 100,
-      tributeOffered: 100,
+      sharesRequested: standardShareRequest,
+      tributeOffered: standardTribute,
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
       paymentToken: tokenAlpha.address,
@@ -236,6 +244,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     }
 
     tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
+    
   })
 
   afterEach(async () => {
@@ -527,8 +536,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('submitProposal', () => {
     beforeEach(async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: applicant1,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
     })
 
     it('happy case', async () => {
@@ -708,8 +720,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('sponsorProposal', () => {
     beforeEach(async () => {
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
     })
 
     it('happy path - sponsor add token to whitelist', async () => {
@@ -774,8 +789,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('happy path - sponsor proposal', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       await moloch.submitProposal(
         proposal1.applicant,
@@ -809,8 +827,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('failure - proposal has already been sponsored', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       await moloch.submitProposal(
         proposal1.applicant,
@@ -827,8 +848,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
 
       // add another deposit to re-sponsor
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      // FIXME why not just approve summoner upfront?
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
 
       await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
         .should.be.rejectedWith(revertMesages.sponsorProposalProposalHasAlreadyBeenSponsored)
@@ -877,8 +902,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       // add another deposit to sponsor proposal 1
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      // FIXME why not just approve summoner upfront?
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
 
       await moloch.sponsorProposal(secondPropsalIndex, { from: summoner })
         .should.be.rejectedWith(revertMesages.sponsorProposalAlreadyProposedToWhitelist)
