@@ -70,8 +70,6 @@ const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
 const chai = require('chai')
 const { assert } = chai
 
-const utils = require('./utils')
-
 const BN = web3.utils.BN
 
 chai
@@ -128,7 +126,6 @@ const revertMesages = {
 const SolRevert = 'VM Exception while processing transaction: revert'
 
 const zeroAddress = '0x0000000000000000000000000000000000000000'
-const notOwnedAddress = '0x0000000000000000000000000000000000000002'
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -136,7 +133,7 @@ const _1e18Plus1 = _1e18.add(_1)
 const _10e18 = new BN('10000000000000000000') // 10e18
 const _10e18Plus1 = _10e18.add(_1)
 
-const valueOr0 = (val) => val ? val : 0
+const valueOr0 = (val) => val || 0
 
 async function blockTime () {
   const block = await web3.eth.getBlock('latest')
@@ -1077,7 +1074,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     // TODO edge cases - explore two ifs inside the YES vote
 
     describe('submitVote modifying member.highestIndexYesVote', () => {
-
       beforeEach(async () => {
         await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, { from: creator })
         await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, { from: proposal2.applicant })
@@ -1100,7 +1096,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       it('proposal two should be created in the right state', async () => {
-
         // TODO consider passing flags into the validate method and not mutating the proposal template IMO
         proposal2.flags = [true, false, false, false, false, false]
 
@@ -1136,11 +1131,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         const memberData = await moloch.members(summoner)
         assert.equal(memberData.highestIndexYesVote, 0, 'highestIndexYesVote does not match')
       })
-
     })
   })
 
-  describe('processProposal', () => {
+  describe.only('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {
 
@@ -1316,6 +1310,55 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // })
     })
 
+    it('happy path - emergency processing', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: summoner })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstPropsalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
+
+      let newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
+
+      // no shares given
+      newMemberData = await moloch.members(applicant)
+      assert.equal(newMemberData.shares, 0)
+
+      // flags and proposal data
+      const proposalFlags = await moloch.getProposalFlags(firstPropsalIndex)
+      assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
+      assert.equal(proposalFlags[1], true, 'processed flag incorrect')
+      assert.equal(proposalFlags[2], false, 'didPass flag incorrect')
+      assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
+    })
+
     it('require fail  - proposal does not exist', async () => {
       await moloch.processProposal(invalidPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalProposalDoesNotExist)
@@ -1440,7 +1483,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   })
 
   describe('rageQuit', () => {
-
     beforeEach(async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
@@ -1474,7 +1516,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     describe('fails when', () => {
-
       it('not a member', async () => {
         await moloch.ragequit(1, { from: nonMemberAccount })
           .should.be.rejectedWith(revertMesages.molochNotAMember)
@@ -1490,7 +1531,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       describe('when a proposal is in flight', () => {
-
         beforeEach(async () => {
           await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, { from: creator })
           await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, { from: proposal2.applicant })
@@ -1523,7 +1563,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     describe('all shares', () => {
-
       let emittedLogs
 
       beforeEach(async () => {
@@ -1548,7 +1587,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         assert.equal(memberAddress, proposal1.applicant)
         assert.equal(sharesToBurn, proposal1.sharesRequested)
       })
-
     })
 
     describe('partial shares', () => {
@@ -1581,7 +1619,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         assert.equal(sharesToBurn, partialRageQuitShares)
       })
     })
-
   })
 
   describe('cancelProposal', () => {
@@ -1842,7 +1879,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const expectedProposerBalance = initialProposerBalance
       assert.equal(+proposerBalance, +expectedProposerBalance, 'proposer balance incorrect')
     } else {
-
       const sponsorBalance = await tokenAlpha.balanceOf(sponsor)
       const expectedBalance = didPass
         ? initialSponsorBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
