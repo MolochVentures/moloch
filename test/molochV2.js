@@ -130,6 +130,7 @@ const revertMesages = {
   processProposalProposalDoesNotExist: 'proposal does not exist',
   processProposalProposalIsNotReadyToBeProcessed: 'proposal is not ready to be processed',
   processProposalProposalHasAlreadyBeenProcessed: 'proposal has already been processed',
+  processProposalPreviousProposalMustBeProcessed: 'previous proposal must be processed',
   molochNotAMember: 'not a member',
   molochRageQuitInsufficientShares: 'insufficient shares'
 }
@@ -1394,6 +1395,55 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.processProposal(0, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalProposalHasAlreadyBeenProcessed)
+    })
+
+    it('require fail  - previous proposal must be processed', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered * 2, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered * 2, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      const proposalDeposit = await moloch.proposalDeposit()
+      await tokenAlpha.transfer(deploymentConfig.SUMMONER, proposalDeposit * 2, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposalDeposit * 2, { from: deploymentConfig.SUMMONER })
+
+      // sponsor
+      await moloch.sponsorProposal(0, { from: deploymentConfig.SUMMONER })
+      await moloch.sponsorProposal(1, { from: deploymentConfig.SUMMONER })
+
+      // vote
+      await moveForwardPeriods(2)
+      await moloch.submitVote(0, 1, { from: deploymentConfig.SUMMONER })
+      await moloch.submitVote(1, 1, { from: deploymentConfig.SUMMONER })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(1, { from: processor })
+        .should.be.rejectedWith(revertMesages.processProposalPreviousProposalMustBeProcessed)
     })
   })
 
