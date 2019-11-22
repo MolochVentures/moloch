@@ -107,6 +107,7 @@ const revertMesages = {
   molochConstructorDepositCannotBeSmallerThanProcessingReward: '_proposalDeposit cannot be smaller than _processingReward',
   molochConstructorApprovedTokenCannotBe0: '_approvedToken cannot be 0',
   molochConstructorDuplicateApprovedToken: 'revert duplicate approved token',
+  submitProposalProposalMustHaveBeenProposed: 'proposal must have been proposed',
   submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
   submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
   submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
@@ -933,21 +934,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(SolRevert)
     })
 
-    // FIXME check this is a valid use-case!
-    it('edge case - sponsor non-existant proposal', async () => {
-      let proposal = await moloch.proposals(123456)
-      assert.equal(proposal.applicant, zeroAddress)
-      assert.equal(proposal.proposer, zeroAddress)
-      assert.equal(proposal.sponsor, zeroAddress)
-
+    it('require fail - sponsor non-existant proposal fails', async () => {
       await moloch.sponsorProposal(123456, { from: deploymentConfig.SUMMONER })
-
-      // takes deposit and adds to the queue
-      proposal = await moloch.proposals(123456)
-      assert.equal(proposal.sponsor.toLowerCase(), deploymentConfig.SUMMONER.toLowerCase())
-
-      let queue = await moloch.proposalQueue(0)
-      assert.equal(+queue, 123456)
+        .should.be.rejectedWith(revertMesages.submitProposalProposalMustHaveBeenProposed)
     })
   })
 

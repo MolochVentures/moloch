@@ -241,6 +241,9 @@ contract Moloch {
         // TODO changed from memory to storage by BlockRocket. Please approve
         Proposal storage proposal = proposals[proposalId];
 
+        // TODO BlockRocket edit. Ensure proposer is no address zero - discussed with Ameen
+        require(proposal.proposer != address(0), 'proposal must have been proposed');
+
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
 
