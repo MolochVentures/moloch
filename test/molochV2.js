@@ -244,7 +244,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     }
 
     tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
-    
+
   })
 
   afterEach(async () => {
@@ -1333,6 +1333,71 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
 
       proposalFlags = await moloch.getProposalFlags(secondPropsalIndex)
+      assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
+      assert.equal(proposalFlags[1], true, 'processed flag incorrect')
+      assert.equal(proposalFlags[2], true, 'didPass flag incorrect')
+      assert.equal(proposalFlags[3], false, 'cancelled flag incorrect')
+
+      // FIXME check all balances of tokens - for all processing tests!
+    })
+
+    it('happy path  - applicant is used as a delegate key so delegate key is reset', async () => {
+
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+
+      await moloch.updateDelegateKey(proposer, { from: summoner })
+
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(proposer, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: proposer })
+
+      // sponsor
+      await moloch.sponsorProposal(firstPropsalIndex, { from: proposer })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstPropsalIndex, yes, { from: proposer })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      // using a delegate
+      let summonerMemberData = await moloch.members(summoner)
+      assert.equal(summonerMemberData.delegateKey, proposer)
+
+      let summonerAddressByDelegateKey = await moloch.memberAddressByDelegateKey(proposer)
+      assert.equal(summonerAddressByDelegateKey, summoner)
+
+      await moloch.processProposal(firstPropsalIndex, { from: processor })
+
+      // delegate reset to summoner
+      summonerMemberData = await moloch.members(summoner)
+      assert.equal(summonerMemberData.delegateKey, summoner)
+
+      summonerAddressByDelegateKey = await moloch.memberAddressByDelegateKey(summoner)
+      assert.equal(summonerAddressByDelegateKey, summoner)
+
+      // no shares given
+      const applicantMemberData = await moloch.members(applicant)
+      assert.equal(applicantMemberData.shares, proposal1.sharesRequested)
+
+      // flags and proposal data
+      let proposalFlags = await moloch.getProposalFlags(firstPropsalIndex)
       assert.equal(proposalFlags[0], true, 'sponsored flag incorrect')
       assert.equal(proposalFlags[1], true, 'processed flag incorrect')
       assert.equal(proposalFlags[2], true, 'didPass flag incorrect')
