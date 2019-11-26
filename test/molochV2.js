@@ -1513,7 +1513,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     let proposer, applicant
     beforeEach(async () => {})
 
-    it.only('happy path - pass - yes wins', async () => {
+    it('happy path - pass - yes wins', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -1631,7 +1631,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it.only('happy path - fail - no wins', async () => {
+    it('happy path - fail - no wins', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -1672,8 +1672,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      let newMemberData = await moloch.members(applicant)
-      assert.equal(newMemberData.shares, 0)
       await verifyMember({
         member: proposal1.applicant,
         expectedShares: 0,
