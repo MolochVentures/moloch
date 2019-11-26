@@ -1,6 +1,6 @@
 pragma solidity ^0.5.2;
 
-import "./oz/ERC20.sol";
+import "../oz/ERC20.sol";
 
 contract Token is ERC20 {
     bool transfersEnabled = true;
