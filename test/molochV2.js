@@ -1313,7 +1313,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     // TODO require(proposal.flags[0], "proposal has not been sponsored"); can not be reached because of this: require(proposalIndex < proposalQueue.length, "proposal does not exist");
-    it('require fail - proposal has not been sponsored', async () => {
+    it.skip('require fail - proposal has not been sponsored', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
 
@@ -2370,6 +2370,194 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     })
 
+    it('edge case - dilution bound is exceeded', async () => {
+
+      /////////////////////////////////////////////////////
+      // Setup Proposal 1 so we have shares to play with //
+      /////////////////////////////////////////////////////
+
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      // submit
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        proposalIndex: firstProposalIndex,
+        memberAddress: summoner,
+        expectedVote: yes,
+        expectedMaxSharesAtYesVote: 1
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        proposalIndex: firstProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedFinalTotalSharesRequested: 0,
+        expectedMaxSharesAtYesVote: 1
+      })
+
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, true, true, false, false, false]
+      })
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: 0,
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
+        processor: processor,
+        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+      })
+
+      await verifyMember({
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: proposal1.tributeOffered,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+
+      //////////////////////////////////////////////////////////////
+      // Setup Proposal 2 so we can rage quit during the proposal //
+      //////////////////////////////////////////////////////////////
+
+      await fundAndApproveToMoloch({
+        to: proposal2.applicant,
+        from: creator,
+        value: proposal2.tributeOffered
+      })
+
+      const proposer = proposal2.applicant
+      await moloch.submitProposal(
+        proposal2.applicant,
+        proposal2.sharesRequested,
+        proposal2.tributeOffered,
+        proposal2.tributeToken,
+        proposal2.paymentRequested,
+        proposal2.paymentToken,
+        proposal2.details,
+        { from: proposal2.applicant }
+      )
+
+      await verifyProposal({
+        proposal: proposal2,
+        proposalIndex: secondProposalIndex,
+        proposer: proposer,
+        sponsor: zeroAddress,
+        expectedStartingPeriod: 0,
+        expectedProposalCount: 2,
+        expectedProposalQueueLength: 1
+      })
+
+      await verifyFlags({
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [false, false, false, false, false, false]
+      })
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      await verifyProposal({
+        proposal: proposal2,
+        proposalIndex: secondProposalIndex,
+        proposer: proposer,
+        sponsor: summoner,
+        expectedStartingPeriod: 72,
+        expectedProposalCount: 2,
+        expectedProposalQueueLength: 2
+      })
+
+      await verifyFlags({
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+
+      // moloch has the deposit
+      // (50 (proposal 2) + 10 (sponsorship)) = 60
+      await verifyBalance({
+        token: depositToken,
+        address: moloch.address,
+        expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal2.tributeOffered
+      })
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(1, 1, { from: summoner })
+
+      /////////////////////////////////////////////////////////////
+      // Rage quit majority of shares below dilution bound value //
+      /////////////////////////////////////////////////////////////
+
+      const proposalData = await moloch.proposals(secondProposalIndex)
+      assert.equal(+proposalData.maxTotalSharesAtYesVote, 101)
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.ragequit(68, { from: proposal1.applicant })
+
+      await moloch.processProposal(secondProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        proposalIndex: secondProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: (proposal1.sharesRequested + 1) - 68, // add the 1 the summoner, minus the 68 rage quit
+        expectedFinalTotalSharesRequested: 0,
+        expectedMaxSharesAtYesVote: 101
+      })
+
+      // Ensure didPass=false and processed=True
+      await verifyFlags({
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [true, true, false, false, false, false]
+      })
+    })
+
     it('require fail  - proposal does not exist', async () => {
       await moloch.processProposal(invalidPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalProposalDoesNotExist)
@@ -2494,6 +2682,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(secondProposalIndex, { from: processor })
         .should.be.rejectedWith(revertMesages.processProposalPreviousProposalMustBeProcessed)
     })
+
   })
 
   describe('rageQuit', () => {
