@@ -2496,10 +2496,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.only('rageQuit', () => {
+  describe('rageQuit', () => {
     beforeEach(async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       await moloch.submitProposal(
         proposal1.applicant,
@@ -2560,8 +2563,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       describe('when a proposal is in flight', () => {
         beforeEach(async () => {
-          await tokenAlpha.transfer(proposal2.applicant, proposal2.tributeOffered, { from: creator })
-          await tokenAlpha.approve(moloch.address, proposal2.tributeOffered, { from: proposal2.applicant })
+          await fundAndApproveToMoloch({
+            to: proposal2.applicant,
+            from: creator,
+            value: proposal1.tributeOffered
+          })
 
           await moloch.submitProposal(
             proposal2.applicant,
@@ -2574,13 +2580,28 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
             { from: proposal2.applicant }
           )
 
-          await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-          await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+          await fundAndApproveToMoloch({
+            to: summoner,
+            from: creator,
+            value: deploymentConfig.PROPOSAL_DEPOSIT
+          })
 
           await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
+          await verifyFlags({
+            proposalIndex: secondProposalIndex,
+            expectedFlags: [true, false, false, false, false, false]
+          })
+
           await moveForwardPeriods(1)
           await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+          await verifySubmitVote({
+            proposalIndex: secondProposalIndex,
+            memberAddress: summoner,
+            expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1,
+            expectedVote: yes
+          })
         })
 
         it('unable to quit when proposal in flight', async () => {
