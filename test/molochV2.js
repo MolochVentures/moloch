@@ -1581,7 +1581,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 1 // FIXME - review this number?
+        expectedMaxSharesAtYesVote: 1
       })
 
       await verifyFlags({
@@ -1688,7 +1688,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedNoVotes: 1,
         expectedTotalShares: 1, // just the summoner still in
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 0 // FIXME - review this number?
+        expectedMaxSharesAtYesVote: 0
       })
 
       await verifyFlags({
@@ -1946,7 +1946,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 1 // FIXME - review this number?
+        expectedMaxSharesAtYesVote: 1
       })
 
       await verifyFlags({
@@ -2071,7 +2071,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 1 // FIXME - review this number?
+        expectedMaxSharesAtYesVote: 1
       })
 
       await verifyFlags({
@@ -2196,7 +2196,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1 // FIXME - Is this right? Should be 1?
+        expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1 // FIXME - check is this right? Should be 1?
       })
 
       await verifyFlags({
@@ -2275,7 +2275,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: 1,
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 1 // FIXME - review this number?
+        expectedMaxSharesAtYesVote: 1
       })
 
       await verifyFlags({
@@ -2286,7 +2286,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: proposal1.tributeOffered, // FIXME check tribute should be kept?
+        expectedMolochBalance: proposal1.tributeOffered,
         guildBank: guildBank.address,
         expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
@@ -2367,7 +2367,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, false, false, false, false]
       })
-
     })
 
     it('require fail  - proposal does not exist', async () => {
@@ -2543,7 +2542,47 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
-      // TODO verify stuff
+      await verifyProcessProposal({
+        proposalIndex: firstProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedFinalTotalSharesRequested: 0,
+        expectedMaxSharesAtYesVote: 1
+      })
+
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, true, true, false, false, false]
+      })
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: 0,
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
+        processor: processor,
+        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+      })
+
+      await verifyMember({
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: proposal1.tributeOffered,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+
+      await verifyMember({
+        member: proposal1.applicant,
+        expectedExists: true,
+        expectedShares: proposal1.tributeOffered,
+        expectedDelegateKey: proposal1.applicant,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
     })
 
     describe('fails when', () => {
@@ -2555,10 +2594,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       it('requesting more shares than you own', async () => {
         await moloch.ragequit(proposal1.sharesRequested + 1, { from: proposal1.applicant })
           .should.be.rejectedWith(revertMesages.molochRageQuitInsufficientShares)
-      })
-
-      it('guild bank fails to transfer tokens', async () => {
-        // TODO
       })
 
       describe('when a proposal is in flight', () => {
@@ -2672,8 +2707,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('cancelProposal', () => {
     beforeEach(async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       await moloch.submitProposal(
         proposal1.applicant,
@@ -2745,8 +2783,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('failure - cant overwrite existing members', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       // submit
       const proposer = proposal1.applicant
@@ -2762,8 +2803,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         { from: proposer }
       )
 
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
 
       // sponsor
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
@@ -2784,8 +2828,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('canRageQuit', () => {
     it('happy case', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       // submit
       const proposer = proposal1.applicant
@@ -2801,8 +2848,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         { from: proposer }
       )
 
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
 
       // sponsor
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
@@ -2831,8 +2881,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   describe('getMemberProposalVote', () => {
     it('happy case', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
 
       // submit
       const proposer = proposal1.applicant
@@ -2848,8 +2901,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         { from: proposer }
       )
 
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
 
       // sponsor
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
