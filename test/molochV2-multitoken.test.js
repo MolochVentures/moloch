@@ -127,7 +127,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   let moloch, guildBank, tokenAlpha, tokenBeta
   let proposal1, proposal2, depositToken
 
-  const initSummonerBalance = 100
 
   const firstProposalIndex = 0
   const secondProposalIndex = 1
@@ -136,8 +135,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   const yes = 1
   const no = 2
 
-  const standardShareRequest = 100
-  const standardTribute = 100
+  const standardShareRequest = 1000
+  const standardTribute = 1000
+  const summonerShares = 1
 
   let snapshotId
 
@@ -194,14 +194,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       details: 'all hail moloch BETA'
     }
 
-    tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
+    // tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
   })
 
   afterEach(async () => {
     await restore(snapshotId)
   })
 
-  describe('rageQuit - multi-token', () => {
+  describe.only('rageQuit - multi-token', () => {
     beforeEach(async () => {
       // 1st proposal for with token alpha tribute
       await fundAndApproveToMoloch({
@@ -254,9 +254,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyProcessProposal({
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 1
+        expectedMaxSharesAtYesVote: summonerShares
       })
 
       await verifyFlags({
@@ -273,7 +273,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
+        expectedSponsorBalance: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
         processor: processor,
         expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
       })
@@ -336,9 +336,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyProcessProposal({
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + proposal2.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + proposal2.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1
+        expectedMaxSharesAtYesVote: proposal1.sharesRequested + summonerShares
       })
 
       await verifyFlags({
@@ -370,7 +370,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance + ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
+        expectedSponsorBalance: ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
         processor: processor,
         expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2
       })
@@ -384,7 +384,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     describe('happy path - ', () => {
-      const sharesToQuit = 10
+      const sharesToQuit = 10 // 10%
       beforeEach(async () => {
         await moloch.ragequit(sharesToQuit, { from: proposal1.applicant })
       })
@@ -393,12 +393,40 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await verifyMember({
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
-          expectedShares: 90,
+          expectedShares: proposal1.sharesRequested - sharesToQuit,
           expectedMemberAddressByDelegateKey: proposal1.applicant
         })
 
         const totalShares = await moloch.totalShares()
-        assert.equal(+totalShares, 1 + proposal1.sharesRequested + proposal2.sharesRequested - sharesToQuit)
+        assert.equal(+totalShares, summonerShares + proposal1.sharesRequested + proposal2.sharesRequested - sharesToQuit)
+
+        await verifyBalances({
+          token: depositToken,
+          moloch: moloch.address,
+          expectedMolochBalance: 0,
+          guildBank: guildBank.address,
+          expectedGuildBankBalance: 996,  // subtract 1000 (balance) * 10 (shares to quit) / 2001 (total shares) = 4.99
+          applicant: proposal1.applicant,
+          expectedApplicantBalance: 4,
+          sponsor: summoner,
+          expectedSponsorBalance: ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
+          processor: processor,
+          expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2
+        })
+
+        await verifyBalances({
+          token: tokenBeta,
+          moloch: moloch.address,
+          expectedMolochBalance: 0,
+          guildBank: guildBank.address,
+          expectedGuildBankBalance: 996,
+          applicant: proposal1.applicant,
+          expectedApplicantBalance: 4,
+          sponsor: summoner,
+          expectedSponsorBalance: 0,
+          processor: processor,
+          expectedProcessorBalance: 0
+        })
       })
     })
 
