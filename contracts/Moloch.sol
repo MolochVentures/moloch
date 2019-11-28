@@ -327,7 +327,7 @@ contract Moloch {
                approvedTokens.push(proposal.tributeToken);
 
             } else if (proposal.flags[5]) {
-                _ragequit(members[proposal.applicant].shares, approvedTokens);
+                _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
 
             } else {
                 if (members[proposal.applicant].exists) {
@@ -385,7 +385,7 @@ contract Moloch {
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
-        _ragequit(sharesToBurn, approvedTokens);
+        _ragequit(msg.sender, sharesToBurn, approvedTokens);
     }
 
 //    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
@@ -397,15 +397,15 @@ contract Moloch {
 //            }
 //        }
 //
-//        _ragequit(sharesToBurn, tokenList);
+//        _ragequit(msg.sender, sharesToBurn, tokenList);
 //    }
 
     // TODO 'approvedTokens' was shadowing a gloabl var. Added _ to local var. Please approve or remove or adjust.
-    function _ragequit(uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
         // FIXME this means the person being kicked must call processProposal!?
-        Member storage member = members[msg.sender];
+        Member storage member = members[memberAddress];
 
         require(member.shares >= sharesToBurn, "insufficient shares");
 
@@ -415,7 +415,7 @@ contract Moloch {
         totalShares = totalShares.sub(sharesToBurn);
 
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalShares, _approvedTokens),
+            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, _approvedTokens),
             "withdrawal of tokens from guildBank failed"
         );
 
