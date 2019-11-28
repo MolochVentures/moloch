@@ -195,7 +195,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   let snapshotId
 
   const fundAndApproveToMoloch = async ({ to, from, value }) => {
-    await tokenAlpha.transfer(to, value, { from: creator })
+    await tokenAlpha.transfer(to, value, { from: from })
     await tokenAlpha.approve(moloch.address, value, { from: to })
   }
 
@@ -234,7 +234,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       paymentRequested: 0,
       paymentToken: tokenAlpha.address,
       details: 'all hail moloch',
-      flags: [false, false, false, false, false, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
     }
 
     proposal2 = {
@@ -245,7 +244,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       paymentRequested: 0,
       paymentToken: tokenAlpha.address,
       details: 'all hail moloch 2',
-      flags: [false, false, false, false, false, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
     }
 
     tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
@@ -1599,7 +1597,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyMember({
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
-        expectedShares: proposal1.tributeOffered,
+        expectedShares: proposal1.sharesRequested,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
     })
@@ -1986,7 +1984,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyMember({
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
-        expectedShares: proposal1.tributeOffered,
+        expectedShares: proposal1.sharesRequested,
         expectedExists: true,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
@@ -2446,7 +2444,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyMember({
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
-        expectedShares: proposal1.tributeOffered,
+        expectedShares: proposal1.sharesRequested,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
 
@@ -2754,7 +2752,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyMember({
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
-        expectedShares: proposal1.tributeOffered,
+        expectedShares: proposal1.sharesRequested,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
     })
@@ -2960,7 +2958,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyMember({
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
-        expectedShares: proposal1.tributeOffered,
+        expectedShares: proposal1.sharesRequested,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
     })
