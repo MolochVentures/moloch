@@ -149,7 +149,7 @@ contract Moloch {
         address paymentToken,
         string memory details
     )
-        public
+    public
     {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
@@ -159,6 +159,38 @@ contract Moloch {
 
         bool[6] memory flags;
 
+        _submitProposal(applicant, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
+    }
+
+    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
+        require(tokenToWhitelist != address(0), "must provide token address");
+        require(!tokenWhitelist[tokenToWhitelist], "can't already have whitelisted the token");
+
+        bool[6] memory flags;
+        flags[4] = true;
+
+        _submitProposal(address(0), 0, 0, tokenToWhitelist, 0, address(0), details, flags);
+    }
+
+    function submitGuildKickProposal(address memberToKick, string memory details) public {
+        require(members[memberToKick].shares > 0, "member must have at least one share");
+
+        bool[6] memory flags;
+        flags[5] = true;
+
+        _submitProposal(memberToKick, 0, 0, address(0), 0, address(0), details, flags);
+    }
+
+    function _submitProposal(
+        address applicant,
+        uint256 sharesRequested,
+        uint256 tributeOffered,
+        address tributeToken,
+        uint256 paymentRequested,
+        address paymentToken,
+        string memory details,
+        bool[6] memory flags
+    ) internal {
         Proposal memory proposal = Proposal({
             applicant: applicant,
             proposer: msg.sender,
@@ -174,62 +206,7 @@ contract Moloch {
             flags: flags,
             details: details,
             maxTotalSharesAtYesVote: 0
-        });
-
-        proposals[proposalCount] = proposal;
-        proposalCount += 1;
-    }
-
-    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
-        require(tokenToWhitelist != address(0), "must provide token address");
-        require(!tokenWhitelist[tokenToWhitelist], "can't already have whitelisted the token");
-
-        bool[6] memory flags;
-        flags[4] = true;
-
-        Proposal memory proposal = Proposal({
-            applicant: address(0),
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: 0,
-            tributeOffered: 0,
-            tributeToken: IERC20(tokenToWhitelist),
-            paymentRequested: 0,
-            paymentToken: IERC20(address(0)),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
-
-        proposals[proposalCount] = proposal;
-        proposalCount += 1;
-    }
-
-    function submitGuildKickProposal(address memberToKick, string memory details) public {
-        require(members[memberToKick].shares > 0, "member must have at least one share");
-
-        bool[6] memory flags;
-        flags[5] = true;
-
-        Proposal memory proposal = Proposal({
-            applicant: memberToKick,
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: 0,
-            tributeOffered: 0,
-            tributeToken: IERC20(address(0)),
-            paymentRequested: 0,
-            paymentToken: IERC20(address(0)),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
+            });
 
         proposals[proposalCount] = proposal;
         proposalCount += 1;
