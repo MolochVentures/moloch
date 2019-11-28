@@ -121,6 +121,7 @@ const revertMesages = {
   molochRageQuitInsufficientShares: 'insufficient shares',
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
   updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members',
+  updateDelegateKeyCantOverwriteExistingDelegateKeys: 'cant overwrite existing delegate keys',
   canRageQuitProposalDoesNotExist: 'proposal does not exist',
   molochSafeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
   molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
@@ -2055,7 +2056,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
-      const newApprovedToken = await moloch.approvedTokens(2)
+      const newApprovedToken = await moloch.approvedTokens(1) // second token to be added
       assert.equal(newApprovedToken, newToken.address)
 
       await verifyProcessProposal({
@@ -3210,8 +3211,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('happy case', async () => {
       await moloch.updateDelegateKey(processor, { from: summoner })
 
-      const member = await moloch.members(summoner)
-      assert.equal(member.delegateKey, processor)
+      await verifyMember({
+        member: summoner,
+        expectedDelegateKey: processor,
+        expectedShares: 1,
+        expectedMemberAddressByDelegateKey: summoner
+      })
     })
 
     it('failure - can not be zero address', async () => {
@@ -3260,6 +3265,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.updateDelegateKey(applicant, { from: summoner })
         .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingMembers)
+    })
+
+    it('failure - cant overwrite existing delegate keys', async () => {
+      await moloch.updateDelegateKey(processor, { from: summoner })
+
+      await moloch.updateDelegateKey(processor, { from: summoner })
+        .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingDelegateKeys)
     })
   })
 
