@@ -3083,6 +3083,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         await moloch.processProposal(secondProposalIndex, { from: summoner })
 
+        // correct order
+        await moloch.safeRagequit(1, [tokenAlpha.address, newToken.address], { from: proposal1.applicant })
+
+        // incorrect order
         await moloch.safeRagequit(1, [newToken.address, tokenAlpha.address], { from: proposal1.applicant })
           .should.be.rejectedWith(revertMesages.molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder)
       })
