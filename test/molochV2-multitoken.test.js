@@ -201,7 +201,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe.only('rageQuit - multi-token', () => {
+  describe('rageQuit - multi-token', () => {
     beforeEach(async () => {
       // 1st proposal for with token alpha tribute
       await fundAndApproveToMoloch({
