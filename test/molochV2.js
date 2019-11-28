@@ -2844,11 +2844,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       it('member shares reduced', async () => {
-        const newMemberData = await moloch.members(proposal1.applicant)
-        assert.equal(newMemberData.shares, 0)
-      })
+        await verifyMember({
+          member: proposal1.applicant,
+          expectedDelegateKey: proposal1.applicant,
+          expectedShares: 0,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
 
-      it('total shares reduced', async () => {
         const totalShares = await moloch.totalShares()
         assert.equal(totalShares, 1)
       })
@@ -2874,11 +2876,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       it('member shares reduced', async () => {
-        const newMemberData = await moloch.members(proposal1.applicant)
-        assert.equal(newMemberData.shares, proposal1.sharesRequested - partialRageQuitShares)
-      })
+        await verifyMember({
+          member: proposal1.applicant,
+          expectedDelegateKey: proposal1.applicant,
+          expectedShares: proposal1.sharesRequested - partialRageQuitShares,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
 
-      it('total shares reduced', async () => {
         const totalShares = await moloch.totalShares()
         // your remaining shares plus the summoners 1 share
         assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + 1)
@@ -2915,26 +2919,31 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     it('happy case', async () => {
-      const proposal = await moloch.proposals(0)
-
-      let proposalFlags = await moloch.getProposalFlags(0)
-      assert.equal(proposalFlags[3], false) // not cancelled
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [false, false, false, false, false, false]
+      })
 
       let proposerBalance = await tokenAlpha.balanceOf(proposal1.applicant)
 
       await moloch.cancelProposal(firstProposalIndex, { from: proposal1.applicant })
 
-      proposalFlags = await moloch.getProposalFlags(0)
-      assert.equal(proposalFlags[3], true) // cancelled
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [false, false, false, true, false, false]
+      })
 
       // tribute offered has been returned
       let proposerBalanceAfterCancel = await tokenAlpha.balanceOf(proposal1.applicant)
-      assert.equal(+proposerBalanceAfterCancel, +proposerBalance + proposal.tributeOffered)
+      assert.equal(+proposerBalanceAfterCancel, +proposerBalance + proposal1.tributeOffered)
     })
 
     it('failure - already sponsored', async () => {
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
 
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 

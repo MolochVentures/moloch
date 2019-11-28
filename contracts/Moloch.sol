@@ -388,19 +388,19 @@ contract Moloch {
         _ragequit(msg.sender, sharesToBurn, approvedTokens);
     }
 
-//    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
-//        for (uint256 i=0; i < tokenList.length; i++) {
-//            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
-//
-//            if (i > 0) {
-//                require(tokenList[i] > tokenList[i-1], "tokenList must be unique and in ascending order");
-//            }
-//        }
-//
-//        _ragequit(msg.sender, sharesToBurn, tokenList);
-//    }
+    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
+        for (uint256 i=0; i < tokenList.length; i++) {
+            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
 
-    // TODO 'approvedTokens' was shadowing a gloabl var. Added _ to local var. Please approve or remove or adjust.
+            if (i > 0) {
+                require(tokenList[i] > tokenList[i-1], "tokenList must be unique and in ascending order");
+            }
+        }
+
+        _ragequit(msg.sender, sharesToBurn, tokenList);
+    }
+
+    // TODO 'approvedTokens' was shadowing a global var. Added _ to local var. Please approve or remove or adjust.
     function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
