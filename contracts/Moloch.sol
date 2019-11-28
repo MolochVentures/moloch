@@ -159,25 +159,7 @@ contract Moloch {
 
         bool[6] memory flags;
 
-        Proposal memory proposal = Proposal({
-            applicant: applicant,
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: sharesRequested,
-            tributeOffered: tributeOffered,
-            tributeToken: IERC20(tributeToken),
-            paymentRequested: paymentRequested,
-            paymentToken: IERC20(paymentToken),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
-
-        proposals[proposalCount] = proposal;
-        proposalCount += 1;
+        _submitProposal(applicant, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
     }
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
@@ -187,25 +169,7 @@ contract Moloch {
         bool[6] memory flags;
         flags[4] = true;
 
-        Proposal memory proposal = Proposal({
-            applicant: address(0),
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: 0,
-            tributeOffered: 0,
-            tributeToken: IERC20(tokenToWhitelist),
-            paymentRequested: 0,
-            paymentToken: IERC20(address(0)),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
-
-        proposals[proposalCount] = proposal;
-        proposalCount += 1;
+        _submitProposal(address(0), 0, 0, tokenToWhitelist, 0, address(0), details, flags);
     }
 
     function submitGuildKickProposal(address memberToKick, string memory details) public {
@@ -214,15 +178,28 @@ contract Moloch {
         bool[6] memory flags;
         flags[5] = true;
 
+        _submitProposal(memberToKick, 0, 0, address(0), 0, address(0), details, flags);
+    }
+
+    function _submitProposal(
+        address applicant,
+        uint256 sharesRequested,
+        uint256 tributeOffered,
+        address tributeToken,
+        uint256 paymentRequested,
+        address paymentToken,
+        string memory details,
+        bool[6] memory flags
+    ) internal {
         Proposal memory proposal = Proposal({
-            applicant: memberToKick,
+            applicant: applicant,
             proposer: msg.sender,
             sponsor: address(0),
-            sharesRequested: 0,
-            tributeOffered: 0,
-            tributeToken: IERC20(address(0)),
-            paymentRequested: 0,
-            paymentToken: IERC20(address(0)),
+            sharesRequested: sharesRequested,
+            tributeOffered: tributeOffered,
+            tributeToken: IERC20(tributeToken),
+            paymentRequested: paymentRequested,
+            paymentToken: IERC20(paymentToken),
             startingPeriod: 0,
             yesVotes: 0,
             noVotes: 0,

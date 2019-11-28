@@ -218,6 +218,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     guildBank = await GuildBank.at(guildBankAddress)
 
     depositToken = await moloch.depositToken()
+
+    // TODO this seems redundant with the firstWhitelistedToken constructor test
     assert.equal(depositToken, tokenAlpha.address)
 
     depositToken = tokenAlpha
@@ -385,6 +387,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROCESSING_REWARD
       ).should.be.rejectedWith(revertMesages.molochConstructorVotingPeriodLengthExceedsLimit)
 
+      // TODO following the boundary condition rule, we should check _1e18 - 1
       await Moloch.new(
         summoner,
         [tokenAlpha.address, tokenBeta.address],
@@ -411,6 +414,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROCESSING_REWARD
       ).should.be.rejectedWith(revertMesages.molochConstructorGracePeriodLengthExceedsLimit)
 
+      // TODO following the boundary condition rule, we should check _1e18 - 1
       await Moloch.new(
         summoner,
         [tokenAlpha.address, tokenBeta.address],
@@ -465,6 +469,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROCESSING_REWARD
       ).should.be.rejectedWith(revertMesages.molochConstructorDilutionBoundExceedsLimit)
 
+      // TODO following the boundary condition rule, we should check _1e18 - 1
       await Moloch.new(
         summoner,
         [tokenAlpha.address, tokenBeta.address],
