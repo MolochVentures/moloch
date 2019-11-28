@@ -122,6 +122,8 @@ const revertMesages = {
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
   updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members',
   canRageQuitProposalDoesNotExist: 'proposal does not exist',
+  molochSafeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
+  molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
   getMemberProposalVoteMemberDoesntExist: 'member doesn\'t exist',
   getMemberProposalVoteProposalDoesntExist: 'proposal doesn\'t exist',
 }
@@ -135,8 +137,6 @@ const _1e18 = new BN('1000000000000000000') // 1e18
 const _1e18Plus1 = _1e18.add(_1)
 const _10e18 = new BN('10000000000000000000') // 10e18
 const _10e18Plus1 = _10e18.add(_1)
-
-const valueOr0 = (val) => val || 0
 
 async function blockTime () {
   const block = await web3.eth.getBlock('latest')
@@ -176,7 +176,7 @@ async function moveForwardPeriods (periods) {
 }
 
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
-  let moloch, guildBank, tokenAlpha, tokenBeta
+  let moloch, guildBank, tokenAlpha
   let proposal1, proposal2, depositToken
 
   const initSummonerBalance = 100
@@ -200,11 +200,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   before('deploy contracts', async () => {
     tokenAlpha = await Token.new(deploymentConfig.TOKEN_SUPPLY)
-    tokenBeta = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
     moloch = await Moloch.new(
       summoner,
-      [tokenAlpha.address, tokenBeta.address],
+      [tokenAlpha.address],
       deploymentConfig.PERIOD_DURATION_IN_SECONDS,
       deploymentConfig.VOTING_DURATON_IN_PERIODS,
       deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -317,23 +316,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const tokenAlphaApproved = await moloch.tokenWhitelist(tokenAlpha.address)
       assert.equal(tokenAlphaApproved, true)
 
-      const tokenBetaApproved = await moloch.tokenWhitelist(tokenBeta.address)
-      assert.equal(tokenBetaApproved, true)
-
       // first token should be the deposit token
       const firstWhitelistedToken = await moloch.approvedTokens(0)
       assert.equal(firstWhitelistedToken, depositToken.address)
       assert.equal(firstWhitelistedToken, tokenAlpha.address)
-
-      // second token should be the additional token
-      const secondWhitelistedToken = await moloch.approvedTokens(1)
-      assert.equal(secondWhitelistedToken, tokenBeta.address)
     })
 
     it('require fail - summoner can not be zero address', async () => {
       await Moloch.new(
         zeroAddress,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -347,7 +339,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - period duration can not be zero', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         0,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -361,7 +353,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - voting period can not be zero', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         0,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -375,7 +367,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - voting period exceeds limit', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         _10e18,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -387,7 +379,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         _10e18Plus1,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -401,7 +393,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - grace period exceeds limit', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         _10e18,
@@ -413,7 +405,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         _10e18Plus1,
@@ -427,7 +419,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - emergency exit wait can not be zero', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -441,7 +433,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - dilution bound can not be zero', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -455,7 +447,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - dilution bound exceeds limit', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -467,7 +459,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -495,7 +487,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - deposit cannot be smaller than processing reward', async () => {
       await Moloch.new(
         summoner,
-        [tokenAlpha.address, tokenBeta.address],
+        [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -509,7 +501,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - approved token cannot be zero', async () => {
       await Moloch.new(
         summoner,
-        [zeroAddress, tokenBeta.address],
+        [zeroAddress],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -2526,7 +2518,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await moveForwardPeriods(1)
-      await moloch.submitVote(1, 1, { from: summoner })
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
       /////////////////////////////////////////////////////////////
       // Rage quit majority of shares below dilution bound value //
@@ -2764,17 +2756,71 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedShares: proposal1.tributeOffered,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
+    })
 
-      await verifyMember({
-        member: proposal1.applicant,
-        expectedExists: true,
-        expectedShares: proposal1.tributeOffered,
-        expectedDelegateKey: proposal1.applicant,
-        expectedMemberAddressByDelegateKey: proposal1.applicant
+    describe('happy path - ', () => {
+      let emittedLogs
+
+      beforeEach(async () => {
+        const { logs } = await moloch.ragequit(proposal1.sharesRequested, { from: proposal1.applicant })
+        emittedLogs = logs
+      })
+
+      it('member shares reduced', async () => {
+        await verifyMember({
+          member: proposal1.applicant,
+          expectedDelegateKey: proposal1.applicant,
+          expectedShares: 0,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
+
+        const totalShares = await moloch.totalShares()
+        assert.equal(totalShares, 1)
+      })
+
+      it('emits event', async () => {
+        const log = emittedLogs[0]
+        const { memberAddress, sharesToBurn } = log.args
+        assert.equal(log.event, 'Ragequit')
+        assert.equal(memberAddress, proposal1.applicant)
+        assert.equal(sharesToBurn, proposal1.sharesRequested)
       })
     })
 
-    describe('fails when', () => {
+    describe('partial shares', () => {
+      let emittedLogs
+
+      let partialRageQuitShares
+
+      beforeEach(async () => {
+        partialRageQuitShares = 20
+        const { logs } = await moloch.ragequit(partialRageQuitShares, { from: proposal1.applicant })
+        emittedLogs = logs
+      })
+
+      it('member shares reduced', async () => {
+        await verifyMember({
+          member: proposal1.applicant,
+          expectedDelegateKey: proposal1.applicant,
+          expectedShares: proposal1.sharesRequested - partialRageQuitShares,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
+
+        const totalShares = await moloch.totalShares()
+        // your remaining shares plus the summoners 1 share
+        assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + 1)
+      })
+
+      it('emits event', async () => {
+        const log = emittedLogs[0]
+        const { memberAddress, sharesToBurn } = log.args
+        assert.equal(log.event, 'Ragequit')
+        assert.equal(memberAddress, proposal1.applicant)
+        assert.equal(sharesToBurn, partialRageQuitShares)
+      })
+    })
+
+    describe('require fail - ', () => {
       it('not a member', async () => {
         await moloch.ragequit(1, { from: nonMemberAccount })
           .should.be.rejectedWith(revertMesages.molochNotAMember)
@@ -2834,12 +2880,95 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
     })
+  })
 
-    describe('all shares', () => {
+  describe('safeRageQuit', () => {
+    beforeEach(async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        proposalIndex: firstProposalIndex,
+        memberAddress: summoner,
+        expectedMaxSharesAtYesVote: 1,
+        expectedVote: yes
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        proposalIndex: firstProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedFinalTotalSharesRequested: 0,
+        expectedMaxSharesAtYesVote: 1
+      })
+
+      await verifyFlags({
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, true, true, false, false, false]
+      })
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: 0,
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
+        processor: processor,
+        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+      })
+
+      await verifyMember({
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: proposal1.tributeOffered,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+    })
+
+    describe('happy path - ', () => {
       let emittedLogs
 
       beforeEach(async () => {
-        const { logs } = await moloch.ragequit(proposal1.sharesRequested, { from: proposal1.applicant })
+        const { logs } = await moloch.safeRagequit(proposal1.sharesRequested, [proposal1.tributeToken], { from: proposal1.applicant })
         emittedLogs = logs
       })
 
@@ -2871,7 +3000,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       beforeEach(async () => {
         partialRageQuitShares = 20
-        const { logs } = await moloch.ragequit(partialRageQuitShares, { from: proposal1.applicant })
+        const { logs } = await moloch.safeRagequit(partialRageQuitShares, [proposal1.tributeToken], { from: proposal1.applicant })
         emittedLogs = logs
       })
 
@@ -2893,7 +3022,117 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         const { memberAddress, sharesToBurn } = log.args
         assert.equal(log.event, 'Ragequit')
         assert.equal(memberAddress, proposal1.applicant)
-        assert.equal(sharesToBurn, partialRageQuitShares)
+        assert.equal(+sharesToBurn, partialRageQuitShares)
+      })
+    })
+
+    describe('require fail - ', () => {
+      it('not a member', async () => {
+        await moloch.safeRagequit(1, [proposal1.tributeToken], { from: nonMemberAccount })
+          .should.be.rejectedWith(revertMesages.molochNotAMember)
+      })
+
+      it('requesting more shares than you own', async () => {
+        await moloch.safeRagequit(proposal1.sharesRequested + 1, [proposal1.tributeToken], { from: proposal1.applicant })
+          .should.be.rejectedWith(revertMesages.molochRageQuitInsufficientShares)
+      })
+
+      it('token must be whitelisted', async () => {
+        const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+        await moloch.safeRagequit(1, [newToken.address], { from: proposal1.applicant })
+          .should.be.rejectedWith(revertMesages.molochSafeRageQuitTokenMustBeWhitelisted)
+      })
+
+      it('token list must be in order', async () => {
+
+        // whitelist newToken
+        const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+        const proposer = proposal1.applicant
+        const whitelistProposal = {
+          applicant: zeroAddress,
+          proposer: proposal1.applicant,
+          sharesRequested: 0,
+          tributeOffered: 0,
+          tributeToken: newToken.address,
+          paymentRequested: 0,
+          paymentToken: zeroAddress,
+          details: 'whitelist me!'
+        }
+
+        await moloch.submitWhitelistProposal(
+          whitelistProposal.tributeToken,
+          whitelistProposal.details,
+          { from: proposer }
+        )
+
+        await fundAndApproveToMoloch({
+          to: summoner,
+          from: creator,
+          value: deploymentConfig.PROPOSAL_DEPOSIT
+        })
+
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        await moveForwardPeriods(1)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+        await moloch.processProposal(secondProposalIndex, { from: summoner })
+
+        await moloch.safeRagequit(1, [newToken.address, tokenAlpha.address], { from: proposal1.applicant })
+          .should.be.rejectedWith(revertMesages.molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder)
+      })
+
+      describe('when a proposal is in flight', () => {
+        beforeEach(async () => {
+          await fundAndApproveToMoloch({
+            to: proposal2.applicant,
+            from: creator,
+            value: proposal1.tributeOffered
+          })
+
+          await moloch.submitProposal(
+            proposal2.applicant,
+            proposal2.sharesRequested,
+            proposal2.tributeOffered,
+            proposal2.tributeToken,
+            proposal2.paymentRequested,
+            proposal2.paymentToken,
+            proposal2.details,
+            { from: proposal2.applicant }
+          )
+
+          await fundAndApproveToMoloch({
+            to: summoner,
+            from: creator,
+            value: deploymentConfig.PROPOSAL_DEPOSIT
+          })
+
+          await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+          await verifyFlags({
+            proposalIndex: secondProposalIndex,
+            expectedFlags: [true, false, false, false, false, false]
+          })
+
+          await moveForwardPeriods(1)
+          await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+          await verifySubmitVote({
+            proposalIndex: secondProposalIndex,
+            memberAddress: summoner,
+            expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1,
+            expectedVote: yes
+          })
+        })
+
+        it('unable to quit when proposal in flight', async () => {
+          await moloch.safeRagequit(secondProposalIndex, [proposal1.tributeToken], { from: summoner })
+            .should.be.rejectedWith('cant ragequit until highest index proposal member voted YES on is processed')
+        })
       })
     })
   })
@@ -3277,11 +3516,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       expectedMemberAddressByDelegateKey = zeroAddress
     }
   ) => {
-    const newMemberData = await moloch.members(member)
-    assert.equal(newMemberData.delegateKey, expectedDelegateKey, 'delegate key incorrect')
-    assert.equal(+newMemberData.shares, expectedShares, 'expected shares incorrect')
-    assert.equal(newMemberData.exists, expectedExists, 'exists incorrect')
-    assert.equal(newMemberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
+    const memberData = await moloch.members(member)
+    assert.equal(memberData.delegateKey, expectedDelegateKey, 'delegate key incorrect')
+    assert.equal(+memberData.shares, expectedShares, 'expected shares incorrect')
+    assert.equal(memberData.exists, expectedExists, 'exists incorrect')
+    assert.equal(memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
 
     const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(expectedDelegateKey)
     assert.equal(newMemberAddressByDelegateKey, expectedMemberAddressByDelegateKey, 'member address by delegate key incorrect')

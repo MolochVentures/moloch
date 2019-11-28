@@ -263,7 +263,7 @@ contract Moloch {
         require(uintVote < 3, "must be less than 3");
         Vote vote = Vote(uintVote);
 
-        require(proposal.flags[0], "proposal has not been sponsored"); // TODO BlockRocket - unreachable require? Please approve or remove.
+        // require(proposal.flags[0], "proposal has not been sponsored"); // TODO BlockRocket - unreachable require? Please approve or remove.
         require(getCurrentPeriod() >= proposal.startingPeriod, "voting period has not started");
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "member has already voted");
@@ -393,7 +393,7 @@ contract Moloch {
             require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
 
             if (i > 0) {
-                require(tokenList[i] > tokenList[i-1], "tokenList must be unique and in ascending order");
+                require(tokenList[i] > tokenList[i-1], "token list must be unique and in ascending order");
             }
         }
 
