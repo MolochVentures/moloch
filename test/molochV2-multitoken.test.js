@@ -1,7 +1,7 @@
 // v2 test spec
 
 // New Edge Cases
-// - ragequit with multiple tokens in guildbank
+// - ragequit with multiple tokens in guildbank - DONE
 // - ragequit too many tokens (loop should run out of gas)
 // - ragequit one less than too many tokens
 // - safeRagequit even when there are too many tokens to ragequit
@@ -11,6 +11,8 @@
 //   - proposal after it in queue should be able to be processed immediately
 //   - broken tribute tokens must not be returned (check balance)
 // - processProposal guildkick auto-fails b/c of token transfer restriction
+//   - proposal cannot complete due to transfer() returning false - DONE
+//   - proposal cannot complete due to transfer() reverting - DONE
 //   - proposal can still be processed after emergencyExitWait expires
 
 const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
@@ -345,5 +347,124 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
     })
+  })
+
+  describe('processProposal - failing token transfer', () => {
+
+    beforeEach(async () => {
+      // 1st proposal for with token alpha tribute
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+    })
+
+    describe('proposal.tributeToken.transfer()', async () => {
+      it('require fail - reverts because token transfer fails', async () => {
+
+        // Force the transfer method to revert
+        await tokenAlpha.updateTransfersEnabled(false)
+
+        // Attempt to process the proposal
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+          .should.be.rejectedWith(SolRevert)
+
+        // Ensure balances do not change
+        await verifyBalances({
+          token: depositToken,
+          moloch: moloch.address,
+          expectedMolochBalance: proposal1.tributeOffered, // maintains tribute from proposal
+          guildBank: guildBank.address,
+          expectedGuildBankBalance: 0,  // balance of zero as failed to process
+          applicant: proposal1.applicant,
+          expectedApplicantBalance: 0,
+          sponsor: summoner,
+          expectedSponsorBalance: 0,
+          processor: processor,
+          expectedProcessorBalance: 0
+        })
+
+        // Ensure not actually a member
+        await verifyMember({
+          moloch: moloch,
+          member: proposal1.applicant,
+          expectedDelegateKey: zeroAddress,
+          expectedShares: 0,
+          expectedMemberAddressByDelegateKey: zeroAddress,
+          expectedExists: false
+        })
+
+      })
+
+      it('require fail - reverts with reason because token transfer fails', async () => {
+
+        // Force the transfer method to return false skipping token transfer
+        await tokenAlpha.updateTransfersReturningFalse(true)
+
+        // Attempt to process the proposal
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+          .should.be.rejectedWith('token transfer to guild bank failed')
+
+        // Ensure balances do not change
+        await verifyBalances({
+          token: depositToken,
+          moloch: moloch.address,
+          expectedMolochBalance: proposal1.tributeOffered, // maintains tribute from proposal
+          guildBank: guildBank.address,
+          expectedGuildBankBalance: 0,  // balance of zero as failed to process
+          applicant: proposal1.applicant,
+          expectedApplicantBalance: 0,
+          sponsor: summoner,
+          expectedSponsorBalance: 0,
+          processor: processor,
+          expectedProcessorBalance: 0
+        })
+
+        // Ensure not actually a member
+        await verifyMember({
+          moloch: moloch,
+          member: proposal1.applicant,
+          expectedDelegateKey: zeroAddress,
+          expectedShares: 0,
+          expectedMemberAddressByDelegateKey: zeroAddress,
+          expectedExists: false
+        })
+
+      })
+    })
+
+    describe('guildBank.withdrawToken()', async () => {
+      // TODO switch to
+    })
+
   })
 })

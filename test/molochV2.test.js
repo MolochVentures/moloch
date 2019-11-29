@@ -91,7 +91,7 @@ const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
 
-const revertMesages = {
+const revertMessages = {
   molochConstructorSummonerCannotBe0: 'summoner cannot be 0',
   molochConstructorPeriodDurationCannotBe0: '_periodDuration cannot be 0',
   molochConstructorVotingPeriodLengthCannotBe0: '_votingPeriodLength cannot be 0',
@@ -344,7 +344,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorSummonerCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorSummonerCannotBe0)
     })
 
     it('require fail - period duration can not be zero', async () => {
@@ -358,7 +358,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorPeriodDurationCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorPeriodDurationCannotBe0)
     })
 
     it('require fail - voting period can not be zero', async () => {
@@ -372,7 +372,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorVotingPeriodLengthCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorVotingPeriodLengthCannotBe0)
     })
 
     it('require fail - voting period exceeds limit', async () => {
@@ -386,7 +386,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorVotingPeriodLengthExceedsLimit)
+      ).should.be.rejectedWith(revertMessages.molochConstructorVotingPeriodLengthExceedsLimit)
 
       await Moloch.new(
         summoner,
@@ -398,7 +398,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorVotingPeriodLengthExceedsLimit)
+      ).should.be.rejectedWith(revertMessages.molochConstructorVotingPeriodLengthExceedsLimit)
     })
 
     it('require fail - grace period exceeds limit', async () => {
@@ -412,7 +412,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorGracePeriodLengthExceedsLimit)
+      ).should.be.rejectedWith(revertMessages.molochConstructorGracePeriodLengthExceedsLimit)
 
       await Moloch.new(
         summoner,
@@ -424,7 +424,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorGracePeriodLengthExceedsLimit)
+      ).should.be.rejectedWith(revertMessages.molochConstructorGracePeriodLengthExceedsLimit)
     })
 
     it('require fail - emergency exit wait can not be zero', async () => {
@@ -438,7 +438,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorEmergencyExitWaitCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorEmergencyExitWaitCannotBe0)
     })
 
     it('require fail - dilution bound can not be zero', async () => {
@@ -452,7 +452,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         0,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorDilutionBoundCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorDilutionBoundCannotBe0)
     })
 
     it('require fail - dilution bound exceeds limit', async () => {
@@ -466,7 +466,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         _10e18,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorDilutionBoundExceedsLimit)
+      ).should.be.rejectedWith(revertMessages.molochConstructorDilutionBoundExceedsLimit)
 
       await Moloch.new(
         summoner,
@@ -478,7 +478,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         _10e18Plus1,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorDilutionBoundExceedsLimit)
+      ).should.be.rejectedWith(revertMessages.molochConstructorDilutionBoundExceedsLimit)
     })
 
     it('require fail - need at least one approved token', async () => {
@@ -492,7 +492,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorNeedAtLeastOneApprovedToken)
+      ).should.be.rejectedWith(revertMessages.molochConstructorNeedAtLeastOneApprovedToken)
     })
 
     it('require fail - deposit cannot be smaller than processing reward', async () => {
@@ -506,7 +506,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         _1e18,
         deploymentConfig.DILUTION_BOUND,
         _1e18Plus1
-      ).should.be.rejectedWith(revertMesages.molochConstructorDepositCannotBeSmallerThanProcessingReward)
+      ).should.be.rejectedWith(revertMessages.molochConstructorDepositCannotBeSmallerThanProcessingReward)
     })
 
     it('require fail - approved token cannot be zero', async () => {
@@ -520,7 +520,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorApprovedTokenCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorApprovedTokenCannotBe0)
     })
 
     it('require fail - duplicate approved token', async () => {
@@ -534,7 +534,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMesages.molochConstructorDuplicateApprovedToken)
+      ).should.be.rejectedWith(revertMessages.molochConstructorDuplicateApprovedToken)
     })
   })
 
@@ -628,7 +628,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.paymentToken,
         proposal1.details,
         { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMesages.submitProposalTributeTokenIsNotWhitelisted)
+      ).should.be.rejectedWith(revertMessages.submitProposalTributeTokenIsNotWhitelisted)
     })
 
     it('require fail - payment token is not whitelisted', async () => {
@@ -643,7 +643,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.paymentToken,
         proposal1.details,
         { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMesages.submitProposalPaymetTokenIsNotWhitelisted)
+      ).should.be.rejectedWith(revertMessages.submitProposalPaymetTokenIsNotWhitelisted)
     })
 
     it('require fail - applicant can not be zero', async () => {
@@ -656,7 +656,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.paymentToken,
         proposal1.details,
         { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMesages.submitProposalApplicantCannotBe0)
+      ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBe0)
     })
   })
 
@@ -726,7 +726,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         zeroAddress,
         'whitelist me!',
         { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMesages.submitWhitelistProposalMustProvideTokenAddress)
+      ).should.be.rejectedWith(revertMessages.submitWhitelistProposalMustProvideTokenAddress)
     })
 
     it('require fail - cannot add already have whitelisted the token', async () => {
@@ -734,7 +734,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         tokenAlpha.address,
         'whitelist me!',
         { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMesages.submitWhitelistProposalAlreadyHaveWhitelistedToken)
+      ).should.be.rejectedWith(revertMessages.submitWhitelistProposalAlreadyHaveWhitelistedToken)
     })
   })
 
@@ -799,7 +799,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         zeroAddress,
         'kick me!',
         { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMesages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
+      ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
     })
   })
 
@@ -1123,7 +1123,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMesages.sponsorProposalProposalHasAlreadyBeenSponsored)
+        .should.be.rejectedWith(revertMessages.sponsorProposalProposalHasAlreadyBeenSponsored)
     })
 
     it('failure - proposal has been cancelled', async () => {
@@ -1141,7 +1141,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.cancelProposal(firstProposalIndex, { from: proposer })
 
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMesages.sponsorProposal)
+        .should.be.rejectedWith(revertMessages.sponsorProposal)
     })
 
     it('failure - sponsor whitelist token proposal already proposed', async () => {
@@ -1176,7 +1176,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMesages.sponsorProposalAlreadyProposedToWhitelist)
+        .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyProposedToWhitelist)
     })
 
     it('failure - sponsor kick proposal already proposed', async () => {
@@ -1205,7 +1205,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMesages.sponsorProposalAlreadyProposedToKick)
+        .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyProposedToKick)
     })
 
     it('failure - too many shares requested', async () => {
@@ -1224,7 +1224,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMesages.sponsorProposalTooManySharesRequested)
+        .should.be.rejectedWith(revertMessages.sponsorProposalTooManySharesRequested)
     })
 
     it('require fail - insufficient deposit token', async () => {
@@ -1237,7 +1237,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('require fail - sponsor non-existant proposal fails', async () => {
       await moloch.sponsorProposal(invalidPropsalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMesages.submitProposalProposalMustHaveBeenProposed)
+        .should.be.rejectedWith(revertMessages.submitProposalProposalMustHaveBeenProposed)
     })
   })
 
@@ -1333,12 +1333,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - proposal does not exist', async () => {
       await moveForwardPeriods(1)
       await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-        .should.be.rejectedWith(revertMesages.submitVoteProposalDoesNotExist)
+        .should.be.rejectedWith(revertMessages.submitVoteProposalDoesNotExist)
     })
 
     it('require fail - vote must be less than 3', async () => {
       await moloch.submitVote(firstProposalIndex, 3, { from: summoner })
-        .should.be.rejectedWith(revertMesages.submitVoteMustBeLessThan3)
+        .should.be.rejectedWith(revertMessages.submitVoteMustBeLessThan3)
     })
 
     // TODO require(proposal.flags[0], "proposal has not been sponsored"); can not be reached because of this: require(proposalIndex < proposalQueue.length, "proposal does not exist");
@@ -1366,7 +1366,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('require fail - voting period has not started', async () => {
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
-        .should.be.rejectedWith(revertMesages.submitVoteVotingPeriodHasNotStarted)
+        .should.be.rejectedWith(revertMessages.submitVoteVotingPeriodHasNotStarted)
     })
 
     describe('voting period boundary', () => {
@@ -1374,7 +1374,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS + 1)
         await moloch
           .submitVote(firstProposalIndex, yes, { from: summoner })
-          .should.be.rejectedWith(revertMesages.submitVoteVotingPeriodHasExpired)
+          .should.be.rejectedWith(revertMessages.submitVoteVotingPeriodHasExpired)
       })
 
       it('success - vote 1 period before voting period expires', async () => {
@@ -1396,7 +1396,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
       await moloch
         .submitVote(firstProposalIndex, yes, { from: summoner })
-        .should.be.rejectedWith(revertMesages.submitVoteMemberHasAlreadyVoted)
+        .should.be.rejectedWith(revertMessages.submitVoteMemberHasAlreadyVoted)
     })
 
     it('require fail - vote must be yes or no', async () => {
@@ -1404,7 +1404,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // vote null
       await moloch
         .submitVote(firstProposalIndex, 0, { from: summoner })
-        .should.be.rejectedWith(revertMesages.submitVoteVoteMustBeEitherYesOrNo)
+        .should.be.rejectedWith(revertMessages.submitVoteVoteMustBeEitherYesOrNo)
     })
 
     it('modifier - delegate', async () => {
@@ -1501,7 +1501,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       it('require fail - voting period not starting yet', async () => {
         await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-          .should.be.rejectedWith(revertMesages.submitVoteVotingPeriodHasNotStarted)
+          .should.be.rejectedWith(revertMessages.submitVoteVotingPeriodHasNotStarted)
       })
 
       it('happy case - yes vote, highestIndexYesVote is updated', async () => {
@@ -2653,7 +2653,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('require fail  - proposal does not exist', async () => {
       await moloch.processProposal(invalidPropsalIndex, { from: processor })
-        .should.be.rejectedWith(revertMesages.processProposalProposalDoesNotExist)
+        .should.be.rejectedWith(revertMessages.processProposalProposalDoesNotExist)
     })
 
     it('require fail  - proposal is not ready to be processed', async () => {
@@ -2688,7 +2688,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
-        .should.be.rejectedWith(revertMesages.processProposalProposalIsNotReadyToBeProcessed)
+        .should.be.rejectedWith(revertMessages.processProposalProposalIsNotReadyToBeProcessed)
     })
 
     it('require fail  - proposal has already been processed', async () => {
@@ -2725,7 +2725,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
-        .should.be.rejectedWith(revertMesages.processProposalProposalHasAlreadyBeenProcessed)
+        .should.be.rejectedWith(revertMessages.processProposalProposalHasAlreadyBeenProcessed)
     })
 
     it('require fail  - previous proposal must be processed', async () => {
@@ -2773,7 +2773,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       await moloch.processProposal(secondProposalIndex, { from: processor })
-        .should.be.rejectedWith(revertMesages.processProposalPreviousProposalMustBeProcessed)
+        .should.be.rejectedWith(revertMessages.processProposalPreviousProposalMustBeProcessed)
     })
 
   })
@@ -2932,12 +2932,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     describe('require fail - ', () => {
       it('not a member', async () => {
         await moloch.ragequit(1, { from: nonMemberAccount })
-          .should.be.rejectedWith(revertMesages.molochNotAMember)
+          .should.be.rejectedWith(revertMessages.molochNotAMember)
       })
 
       it('requesting more shares than you own', async () => {
         await moloch.ragequit(proposal1.sharesRequested + 1, { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMesages.molochRageQuitInsufficientShares)
+          .should.be.rejectedWith(revertMessages.molochRageQuitInsufficientShares)
       })
 
       describe('when a proposal is in flight', () => {
@@ -3147,19 +3147,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     describe('require fail - ', () => {
       it('not a member', async () => {
         await moloch.safeRagequit(1, [proposal1.tributeToken], { from: nonMemberAccount })
-          .should.be.rejectedWith(revertMesages.molochNotAMember)
+          .should.be.rejectedWith(revertMessages.molochNotAMember)
       })
 
       it('requesting more shares than you own', async () => {
         await moloch.safeRagequit(proposal1.sharesRequested + 1, [proposal1.tributeToken], { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMesages.molochRageQuitInsufficientShares)
+          .should.be.rejectedWith(revertMessages.molochRageQuitInsufficientShares)
       })
 
       it('token must be whitelisted', async () => {
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
         await moloch.safeRagequit(1, [newToken.address], { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMesages.molochSafeRageQuitTokenMustBeWhitelisted)
+          .should.be.rejectedWith(revertMessages.molochSafeRageQuitTokenMustBeWhitelisted)
       })
 
       it('token list must be in order', async () => {
@@ -3205,7 +3205,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         // incorrect order
         await moloch.safeRagequit(1, [newToken.address, tokenAlpha.address], { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMesages.molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder)
+          .should.be.rejectedWith(revertMessages.molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder)
       })
 
       describe('when a proposal is in flight', () => {
@@ -3313,12 +3313,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await moloch.cancelProposal(firstProposalIndex, { from: proposal1.applicant })
-        .should.be.rejectedWith(revertMesages.cancelProposalProposalHasAlreadyBeenSponsored)
+        .should.be.rejectedWith(revertMessages.cancelProposalProposalHasAlreadyBeenSponsored)
     })
 
     it('failure - only the proposer can cancel', async () => {
       await moloch.cancelProposal(firstProposalIndex, { from: creator })
-        .should.be.rejectedWith(revertMesages.cancelProposalOnlyTheProposerCanCancel)
+        .should.be.rejectedWith(revertMessages.cancelProposalOnlyTheProposerCanCancel)
     })
 
     it('emits event', async () => {
@@ -3347,7 +3347,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('failure - can not be zero address', async () => {
       await moloch.updateDelegateKey(zeroAddress, { from: summoner })
-        .should.be.rejectedWith(revertMesages.updateDelegateKeyNewDelegateKeyCannotBe0)
+        .should.be.rejectedWith(revertMessages.updateDelegateKeyNewDelegateKeyCannotBe0)
     })
 
     it('failure - cant overwrite existing members', async () => {
@@ -3390,14 +3390,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await moloch.updateDelegateKey(applicant, { from: summoner })
-        .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingMembers)
+        .should.be.rejectedWith(revertMessages.updateDelegateKeyCantOverwriteExistingMembers)
     })
 
     it('failure - cant overwrite existing delegate keys', async () => {
       await moloch.updateDelegateKey(processor, { from: summoner })
 
       await moloch.updateDelegateKey(processor, { from: summoner })
-        .should.be.rejectedWith(revertMesages.updateDelegateKeyCantOverwriteExistingDelegateKeys)
+        .should.be.rejectedWith(revertMessages.updateDelegateKeyCantOverwriteExistingDelegateKeys)
     })
   })
 
@@ -3450,7 +3450,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('failure - proposal does not exist', async () => {
       await moloch.canRagequit(invalidPropsalIndex)
-        .should.be.rejectedWith(revertMesages.canRageQuitProposalDoesNotExist)
+        .should.be.rejectedWith(revertMessages.canRageQuitProposalDoesNotExist)
     })
   })
 
@@ -3498,12 +3498,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('failure - member does not exist', async () => {
       await moloch.getMemberProposalVote(zeroAddress, firstProposalIndex)
-        .should.be.rejectedWith(revertMesages.getMemberProposalVoteMemberDoesntExist)
+        .should.be.rejectedWith(revertMessages.getMemberProposalVoteMemberDoesntExist)
     })
 
     it('failure - proposal does not exist', async () => {
       await moloch.getMemberProposalVote(summoner, invalidPropsalIndex)
-        .should.be.rejectedWith(revertMesages.getMemberProposalVoteProposalDoesntExist)
+        .should.be.rejectedWith(revertMessages.getMemberProposalVoteProposalDoesntExist)
     })
   })
 })
