@@ -76,6 +76,17 @@ chai
   .use(require('chai-as-promised'))
   .should()
 
+const {
+  verifyBalance,
+  verifyAllowance,
+  verifyProposal,
+  verifyFlags,
+  verifyBalances,
+  verifySubmitVote,
+  verifyProcessProposal,
+  verifyMember
+} = require('./test-utils')
+
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
@@ -218,8 +229,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const guildBankAddress = await moloch.guildBank()
     guildBank = await GuildBank.at(guildBankAddress)
 
-    depositToken = await moloch.depositToken()
-    assert.equal(depositToken, tokenAlpha.address)
+    const depositTokenAddress = await moloch.depositToken()
+    assert.equal(depositTokenAddress, tokenAlpha.address)
 
     depositToken = tokenAlpha
   })
@@ -234,7 +245,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
       paymentToken: tokenAlpha.address,
-      details: 'all hail moloch',
+      details: 'all hail moloch'
     }
 
     proposal2 = {
@@ -244,7 +255,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
       paymentToken: tokenAlpha.address,
-      details: 'all hail moloch 2',
+      details: 'all hail moloch 2'
     }
 
     tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
@@ -294,7 +305,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       const summonerData = await moloch.members(summoner)
       assert.equal(summonerData.delegateKey, summoner) // delegateKey matches
-      assert.equal(summonerData.shares, 1)
+      assert.equal(summonerData.shares, summonerShares)
       assert.equal(summonerData.exists, true)
       assert.equal(summonerData.highestIndexYesVote, 0)
 
@@ -302,7 +313,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(summonerAddressByDelegateKey, summoner)
 
       const totalShares = await moloch.totalShares()
-      assert.equal(+totalShares, 1)
+      assert.equal(+totalShares, summonerShares)
 
       // confirm initial deposit token supply and summoner balance
       const tokenSupply = await tokenAlpha.totalSupply()
@@ -561,6 +572,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(+countAfter, +countBefore.add(_1))
 
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal1,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -568,6 +580,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, false, false]
       })
@@ -680,6 +693,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       await verifyProposal({
+        moloch: moloch,
         proposal: whitelistProposal,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -687,6 +701,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, true, false] // whitelist flag set to true after proposal
       })
@@ -751,6 +766,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       await verifyProposal({
+        moloch: moloch,
         proposal: guildKickProposal,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -758,6 +774,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, false, true] // guild kick flag set to true after proposal
       })
@@ -833,6 +850,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // ensure period and queue length at zero
       await verifyProposal({
+        moloch: moloch,
         proposal: whitelistProposal,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -843,6 +861,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, true, false] // not sponsored yet...
       })
@@ -851,6 +870,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyProposal({
+        moloch: moloch,
         proposal: whitelistProposal,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -861,12 +881,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, true, false] // sponsored flag set
       })
 
       // deposit has moved
       await verifyBalance({
+        moloch: moloch,
         token: depositToken,
         address: summoner,
         expectedBalance: initSummonerBalance
@@ -874,6 +896,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // moloch has the deposit
       await verifyBalance({
+        moloch: moloch,
         token: depositToken,
         address: moloch.address,
         expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT
@@ -908,6 +931,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // ensure period and queue length at zero
       await verifyProposal({
+        moloch: moloch,
         proposal: guildKickProposal,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -918,6 +942,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, false, true] // not sponsored yet...
       })
@@ -932,6 +957,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(proposedToKick, true)
 
       await verifyProposal({
+        moloch: moloch,
         proposal: guildKickProposal,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -942,6 +968,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, true] // sponsored flag set
       })
@@ -1008,6 +1035,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // ensure period and queue length at zero
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal1,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -1018,6 +1046,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, false, false]
       })
@@ -1027,6 +1056,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // ensure period and queue length at zero
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal1,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -1037,6 +1067,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -1231,6 +1262,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal1,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -1241,6 +1273,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, false, false]
       })
@@ -1254,6 +1287,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal1,
         proposalIndex: firstProposalIndex,
         proposer: proposer,
@@ -1264,6 +1298,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -1274,6 +1309,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedVote: yes,
@@ -1286,6 +1322,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, no, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedVote: no,
@@ -1345,6 +1382,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
         await verifySubmitVote({
+          moloch: moloch,
           proposalIndex: firstProposalIndex,
           memberAddress: summoner,
           expectedVote: yes,
@@ -1411,6 +1449,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         )
 
         await verifyProposal({
+          moloch: moloch,
           proposal: proposal2,
           proposalIndex: secondProposalIndex,
           proposer: proposer,
@@ -1421,6 +1460,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
 
         await verifyFlags({
+          moloch: moloch,
           proposalIndex: secondProposalIndex,
           expectedFlags: [false, false, false, false, false, false]
         })
@@ -1434,6 +1474,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
         await verifyProposal({
+          moloch: moloch,
           proposal: proposal2,
           proposalIndex: secondProposalIndex,
           proposer: proposer,
@@ -1444,6 +1485,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
 
         await verifyFlags({
+          moloch: moloch,
           proposalIndex: secondProposalIndex,
           expectedFlags: [true, false, false, false, false, false]
         })
@@ -1467,6 +1509,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
         await verifySubmitVote({
+          moloch: moloch,
           proposalIndex: secondProposalIndex,
           memberAddress: summoner,
           expectedVote: yes,
@@ -1486,6 +1529,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitVote(secondProposalIndex, no, { from: summoner })
 
         await verifySubmitVote({
+          moloch: moloch,
           proposalIndex: secondProposalIndex,
           memberAddress: summoner,
           expectedVote: no,
@@ -1534,6 +1578,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -1543,6 +1588,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -1569,6 +1615,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
@@ -1577,6 +1624,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -1596,6 +1644,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
@@ -1634,6 +1683,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -1643,6 +1693,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, no, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 0,
@@ -1653,6 +1704,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedShares: 0,
         expectedExists: false
@@ -1675,6 +1727,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 0,
         expectedNoVotes: 1,
@@ -1684,6 +1737,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, false, false, false, false]
       })
@@ -1703,6 +1757,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: zeroAddress,
         expectedShares: 0,
@@ -1753,11 +1808,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -1768,6 +1825,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -1775,6 +1833,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -1782,6 +1841,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedShares: 0,
         expectedExists: false
@@ -1818,16 +1878,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(newMemberData.shares, proposal1.sharesRequested + proposal1.sharesRequested)
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedShares: proposal1.sharesRequested + proposal1.sharesRequested, // two lots of shares
         expectedExists: true,
@@ -1884,6 +1947,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: proposer })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -1893,6 +1957,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: proposer })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -1910,6 +1975,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(summonerAddressByDelegateKey, summoner)
 
       await verifyMember({
+        moloch: moloch,
         member: summoner,
         expectedDelegateKey: proposer,
         expectedShares: 1, // summoner already has one share
@@ -1934,6 +2000,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
@@ -1942,6 +2009,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -1954,6 +2022,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(summonerAddressByDelegateKey, summoner)
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -1974,6 +2043,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // delegate reset
       await verifyMember({
+        moloch: moloch,
         member: summoner,
         expectedDelegateKey: summoner,
         expectedShares: 1, // summoner already has one share
@@ -1983,6 +2053,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // applicant has approved shares
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
@@ -2021,6 +2092,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, true, false]
       })
@@ -2030,6 +2102,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -2059,6 +2132,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(newApprovedToken, newToken.address)
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
@@ -2067,6 +2141,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, true, false]
       })
@@ -2117,6 +2192,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2132,6 +2208,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // proposal 1 has given applicant shares
       await verifyMember({
+        moloch: moloch,
         member: applicant,
         expectedDelegateKey: applicant,
         expectedShares: proposal1.sharesRequested,
@@ -2155,6 +2232,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, false, false, false, false, true] // kick flag set
       })
@@ -2164,6 +2242,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -2177,6 +2256,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // shares removed
       await verifyMember({
+        moloch: moloch,
         member: applicant,
         expectedDelegateKey: applicant,
         expectedShares: 0,
@@ -2184,6 +2264,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
@@ -2192,6 +2273,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, true, true, false, false, true]
       })
@@ -2228,6 +2310,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2241,6 +2324,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
 
       await verifyMember({
+        moloch: moloch,
         member: applicant,
         expectedExists: false,
         expectedShares: 0
@@ -2263,6 +2347,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1,
@@ -2271,6 +2356,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, false, false, false, false] // didPass is false
       })
@@ -2291,6 +2377,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // still no shares
       await verifyMember({
+        moloch: moloch,
         member: applicant,
         expectedExists: false,
         expectedShares: 0
@@ -2329,6 +2416,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2341,6 +2429,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       await verifyMember({
+        moloch: moloch,
         member: applicant,
         expectedExists: false,
         expectedShares: 0
@@ -2349,6 +2438,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyMember({
+        moloch: moloch,
         member: applicant,
         expectedExists: false,
         expectedShares: 0
@@ -2356,6 +2446,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // now processed
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, false, false, false, false]
       })
@@ -2395,6 +2486,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2404,6 +2496,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedVote: yes,
@@ -2416,6 +2509,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
@@ -2424,6 +2518,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -2443,6 +2538,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
@@ -2472,6 +2568,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal2,
         proposalIndex: secondProposalIndex,
         proposer: proposer,
@@ -2482,6 +2579,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [false, false, false, false, false, false]
       })
@@ -2495,6 +2593,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
       await verifyProposal({
+        moloch: moloch,
         proposal: proposal2,
         proposalIndex: secondProposalIndex,
         proposer: proposer,
@@ -2505,6 +2604,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2535,6 +2635,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(secondProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: (proposal1.sharesRequested + 1) - 68, // add the 1 the summoner, minus the 68 rage quit
@@ -2544,6 +2645,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // Ensure didPass=false and processed=True
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, true, false, false, false, false]
       })
@@ -2704,6 +2806,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2712,6 +2815,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -2724,6 +2828,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
@@ -2732,6 +2837,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -2751,6 +2857,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
@@ -2768,6 +2875,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       it('member shares reduced', async () => {
         await verifyMember({
+          moloch: moloch,
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: 0,
@@ -2800,6 +2908,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       it('member shares reduced', async () => {
         await verifyMember({
+          moloch: moloch,
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: proposal1.sharesRequested - partialRageQuitShares,
@@ -2859,6 +2968,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
           await verifyFlags({
+            moloch: moloch,
             proposalIndex: secondProposalIndex,
             expectedFlags: [true, false, false, false, false, false]
           })
@@ -2867,6 +2977,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
           await verifySubmitVote({
+            moloch: moloch,
             proposalIndex: secondProposalIndex,
             memberAddress: summoner,
             expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1,
@@ -2910,6 +3021,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -2918,6 +3030,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -2930,6 +3043,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
@@ -2938,6 +3052,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -2957,6 +3072,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
@@ -2974,6 +3090,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       it('member shares reduced', async () => {
         await verifyMember({
+          moloch: moloch,
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: 0,
@@ -3006,6 +3123,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       it('member shares reduced', async () => {
         await verifyMember({
+          moloch: moloch,
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: proposal1.sharesRequested - partialRageQuitShares,
@@ -3118,6 +3236,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
           await verifyFlags({
+            moloch: moloch,
             proposalIndex: secondProposalIndex,
             expectedFlags: [true, false, false, false, false, false]
           })
@@ -3126,6 +3245,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
           await verifySubmitVote({
+            moloch: moloch,
             proposalIndex: secondProposalIndex,
             memberAddress: summoner,
             expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1,
@@ -3163,6 +3283,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('happy case', async () => {
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, false, false, false]
       })
@@ -3172,6 +3293,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.cancelProposal(firstProposalIndex, { from: proposal1.applicant })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [false, false, false, true, false, false]
       })
@@ -3215,6 +3337,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.updateDelegateKey(processor, { from: summoner })
 
       await verifyMember({
+        moloch: moloch,
         member: summoner,
         expectedDelegateKey: processor,
         expectedShares: 1,
@@ -3383,161 +3506,4 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMesages.getMemberProposalVoteProposalDoesntExist)
     })
   })
-
-  // VERIFY PROPOSAL
-  const verifyProposal = async (
-    {
-      proposal,
-      proposalIndex,
-      proposer,
-      sponsor = zeroAddress,
-      expectedStartingPeriod = 0,
-      expectedProposalCount = 0,
-      expectedProposalQueueLength = 0,
-    }
-  ) => {
-    const proposalData = await moloch.proposals(proposalIndex)
-
-    const proposalCount = await moloch.proposalCount()
-    assert.equal(+proposalCount, expectedProposalCount)
-
-    const proposalQueueLength = await moloch.getProposalQueueLength()
-    assert.equal(+proposalQueueLength, expectedProposalQueueLength)
-
-    assert.equal(proposalData.applicant, proposal.applicant)
-    assert.equal(proposalData.proposer, proposer, 'proposers does not match')
-    assert.equal(proposalData.sponsor, sponsor, 'sponsor does not match')
-
-    assert.equal(proposalData.sharesRequested, proposal.sharesRequested, 'sharesRequested does not match')
-
-    assert.equal(proposalData.tributeOffered, proposal.tributeOffered, 'tributeOffered does not match')
-    assert.equal(proposalData.tributeToken, proposal.tributeToken, 'tributeToken does not match')
-
-    assert.equal(proposalData.paymentRequested, proposal.paymentRequested, 'paymentRequested does not match')
-    assert.equal(proposalData.paymentToken, proposal.paymentToken, 'paymentToken does not match')
-
-    assert.equal(+proposalData.startingPeriod, expectedStartingPeriod, 'startingPeriod does not match')
-    assert.equal(proposalData.yesVotes, 0, 'yesVotes does not match')
-    assert.equal(proposalData.noVotes, 0, 'noVotes does not match')
-    assert.equal(proposalData.details, proposal.details, 'details does not match')
-    assert.equal(proposalData.maxTotalSharesAtYesVote, 0, 'maxTotalSharesAtYesVote invalid')
-  }
-
-  const verifyFlags = async ({ proposalIndex, expectedFlags }) => {
-    const actualFlags = await moloch.getProposalFlags(proposalIndex)
-
-    // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-    assert.equal(actualFlags[0], expectedFlags[0], 'sponsored flag incorrect')
-    assert.equal(actualFlags[1], expectedFlags[1], 'processed flag incorrect')
-    assert.equal(actualFlags[2], expectedFlags[2], 'didPass flag incorrect')
-    assert.equal(actualFlags[3], expectedFlags[3], 'cancelled flag incorrect')
-    assert.equal(actualFlags[4], expectedFlags[4], 'whitelist flag incorrect')
-    assert.equal(actualFlags[5], expectedFlags[5], 'guildkick flag incorrect')
-  }
-
-  const verifyBalance = async ({ token, address, expectedBalance }) => {
-    const balance = await token.balanceOf(address)
-    assert.equal(+balance, expectedBalance, `token balance incorrect for ${token.address} with ${address}`)
-  }
-
-  const verifyBalances = async (
-    {
-      token,
-      moloch,
-      expectedMolochBalance,
-      guildBank,
-      expectedGuildBankBalance,
-      applicant,
-      expectedApplicantBalance,
-      sponsor,
-      expectedSponsorBalance,
-      processor,
-      expectedProcessorBalance
-    }
-  ) => {
-    const molochBalance = await token.balanceOf(moloch)
-    assert.equal(+molochBalance, expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
-
-    const guildBankBalance = await token.balanceOf(guildBank)
-    assert.equal(+guildBankBalance, expectedGuildBankBalance, `Guild Bank token balance incorrect for ${token.address} with ${guildBank}`)
-
-    const applicantBalance = await token.balanceOf(applicant)
-    assert.equal(+applicantBalance, expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
-
-    const sponsorBalance = await token.balanceOf(sponsor)
-    assert.equal(+sponsorBalance, expectedSponsorBalance, `Sponsor token balance incorrect for ${token.address} with ${sponsor}`)
-
-    const processorBalance = await token.balanceOf(processor)
-    assert.equal(+processorBalance, expectedProcessorBalance, `Processor token balance incorrect for ${token.address} with ${processor}`)
-  }
-
-  const verifyAllowance = async ({ token, owner, spender, expectedAllowance }) => {
-    const allowance = await token.allowance(owner, spender)
-    assert.equal(+allowance, expectedAllowance, `allowance incorrect for ${token.address} owner ${owner} spender ${spender}`)
-  }
-
-  // VERIFY SUBMIT VOTE
-  const verifySubmitVote = async (
-    {
-      proposalIndex,
-      memberAddress,
-      expectedVote,
-      expectedMaxSharesAtYesVote = 0,
-      initialYesVotes = 0,
-      initialNoVotes = 0
-    }
-  ) => {
-    const proposalData = await moloch.proposals(proposalIndex)
-    assert.equal(+proposalData.yesVotes, initialYesVotes + (expectedVote === 1 ? 1 : 0))
-    assert.equal(+proposalData.noVotes, initialNoVotes + (expectedVote === 1 ? 0 : 1))
-    assert.equal(+proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
-
-    const memberVote = await moloch.getMemberProposalVote(memberAddress, proposalIndex)
-    assert.equal(+memberVote, expectedVote)
-  }
-
-  // VERIFY PROCESS PROPOSAL - note: doesnt check forced reset of delegate key
-  const verifyProcessProposal = async (
-    {
-      proposalIndex,
-      expectedYesVotes = 0,
-      expectedNoVotes = 0,
-      expectedTotalShares = 0,
-      expectedFinalTotalSharesRequested = 0,
-      expectedMaxSharesAtYesVote = 0,
-    }
-  ) => {
-    // flags and proposal data
-    const proposalData = await moloch.proposals(proposalIndex)
-
-    assert.equal(+proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
-    assert.equal(+proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')
-    assert.equal(+proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote, 'total shares at yes vote incorrect')
-
-    const totalSharesRequested = await moloch.totalSharesRequested()
-    assert.equal(+totalSharesRequested, expectedFinalTotalSharesRequested, 'total shares requested incorrect')
-
-    const totalShares = await moloch.totalShares()
-    assert.equal(+totalShares, expectedTotalShares, 'total shares incorrect')
-  }
-
-  const verifyMember = async (
-    {
-      member,
-      expectedDelegateKey = zeroAddress,
-      expectedShares = 0,
-      expectedExists = true,
-      expectedHighestIndexYesVote = 0,
-      expectedMemberAddressByDelegateKey = zeroAddress
-    }
-  ) => {
-    const memberData = await moloch.members(member)
-    assert.equal(memberData.delegateKey, expectedDelegateKey, 'delegate key incorrect')
-    assert.equal(+memberData.shares, expectedShares, 'expected shares incorrect')
-    assert.equal(memberData.exists, expectedExists, 'exists incorrect')
-    assert.equal(memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
-
-    const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(expectedDelegateKey)
-    assert.equal(newMemberAddressByDelegateKey, expectedMemberAddressByDelegateKey, 'member address by delegate key incorrect')
-  }
 })

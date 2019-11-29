@@ -22,9 +22,7 @@ const BN = web3.utils.BN
 const {
   verifyProposal,
   verifyFlags,
-  verifyBalance,
   verifyBalances,
-  verifyAllowance,
   verifySubmitVote,
   verifyProcessProposal,
   verifyMember
@@ -44,10 +42,9 @@ const zeroAddress = '0x0000000000000000000000000000000000000000'
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
-const _1e18Plus1 = _1e18.add(_1)
+
 const _10e18 = new BN('10000000000000000000') // 10e18
 const _100e18 = new BN('100000000000000000000') // 10e18
-const _10e18Plus1 = _10e18.add(_1)
 
 async function blockTime () {
   const block = await web3.eth.getBlock('latest')
@@ -127,8 +124,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const guildBankAddress = await moloch.guildBank()
     guildBank = await GuildBank.at(guildBankAddress)
 
-    depositToken = await moloch.depositToken()
-    assert.equal(depositToken, tokenAlpha.address)
+    const depositTokenAddress = await moloch.depositToken()
+    assert.equal(depositTokenAddress, tokenAlpha.address)
 
     depositToken = tokenAlpha
   })
@@ -155,15 +152,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       paymentToken: tokenBeta.address,
       details: 'all hail moloch BETA'
     }
-
-    // tokenAlpha.transfer(summoner, initSummonerBalance, { from: creator })
   })
 
   afterEach(async () => {
     await restore(snapshotId)
   })
 
-  describe.only('rageQuit - multi-token', () => {
+  describe('rageQuit - multi-token', () => {
     beforeEach(async () => {
       // 1st proposal for with token alpha tribute
       await fundAndApproveToMoloch({
@@ -193,42 +188,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
-      await verifyFlags({
-        moloch: moloch,
-        proposalIndex: firstProposalIndex,
-        expectedFlags: [true, false, false, false, false, false]
-      })
-
       await moveForwardPeriods(1)
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
-
-      await verifySubmitVote({
-        moloch: moloch,
-        proposalIndex: firstProposalIndex,
-        memberAddress: summoner,
-        expectedMaxSharesAtYesVote: 1,
-        expectedVote: yes
-      })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
-
-      await verifyProcessProposal({
-        moloch: moloch,
-        proposalIndex: firstProposalIndex,
-        expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
-        expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: summonerShares
-      })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalIndex: firstProposalIndex,
-        expectedFlags: [true, true, true, false, false, false]
-      })
 
       await verifyBalances({
         token: depositToken,
@@ -280,42 +246,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
-      await verifyFlags({
-        moloch: moloch,
-        proposalIndex: secondProposalIndex,
-        expectedFlags: [true, false, false, false, false, false]
-      })
-
       await moveForwardPeriods(1)
       await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-
-      await verifySubmitVote({
-        moloch: moloch,
-        proposalIndex: secondProposalIndex,
-        memberAddress: summoner,
-        expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1,
-        expectedVote: yes
-      })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       await moloch.processProposal(secondProposalIndex, { from: processor })
-
-      await verifyProcessProposal({
-        moloch: moloch,
-        proposalIndex: secondProposalIndex,
-        expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + proposal2.sharesRequested + summonerShares, // add the 1 the summoner has
-        expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: proposal1.sharesRequested + summonerShares
-      })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalIndex: secondProposalIndex,
-        expectedFlags: [true, true, true, false, false, false]
-      })
 
       await verifyBalances({
         token: tokenBeta,
