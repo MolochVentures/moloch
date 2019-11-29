@@ -84,6 +84,7 @@ const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
 const _1e18Plus1 = _1e18.add(_1)
 const _10e18 = new BN('10000000000000000000') // 10e18
+const _100e18 = new BN('100000000000000000000') // 10e18
 const _10e18Plus1 = _10e18.add(_1)
 
 async function blockTime () {
@@ -111,7 +112,7 @@ const deploymentConfig = {
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
-  'TOKEN_SUPPLY': 10000
+  'TOKEN_SUPPLY': _100e18
 }
 
 async function moveForwardPeriods (periods) {
@@ -135,8 +136,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   const yes = 1
   const no = 2
 
-  const standardShareRequest = 1000
-  const standardTribute = 1000
+  const standardShareRequest = 1
+  const standardTribute = _1e18
   const summonerShares = 1
 
   let snapshotId
@@ -201,7 +202,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe('rageQuit - multi-token', () => {
+  describe.only('rageQuit - multi-token', () => {
     beforeEach(async () => {
       // 1st proposal for with token alpha tribute
       await fundAndApproveToMoloch({
@@ -384,8 +385,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     describe('happy path - ', () => {
-      const sharesToQuit = 10 // 10%
+      const sharesToQuit = new BN('1') // all
+      let initialShares
       beforeEach(async () => {
+        initialShares = await moloch.totalShares()
         await moloch.ragequit(sharesToQuit, { from: proposal1.applicant })
       })
 
@@ -397,17 +400,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           expectedMemberAddressByDelegateKey: proposal1.applicant
         })
 
+        // started with 3 total shares - rage quitted 1 - so now 2
         const totalShares = await moloch.totalShares()
         assert.equal(+totalShares, summonerShares + proposal1.sharesRequested + proposal2.sharesRequested - sharesToQuit)
+        
+        // we have 1e18 of Token Alpha and Token Beta - we are quitting 1 share of 3 in total
+        // so the quitter should get a 1/3 of each token in the DAO
 
         await verifyBalances({
           token: depositToken,
           moloch: moloch.address,
           expectedMolochBalance: 0,
           guildBank: guildBank.address,
-          expectedGuildBankBalance: 996,  // subtract 1000 (balance) * 10 (shares to quit) / 2001 (total shares) = 4.99
+          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares)),
           applicant: proposal1.applicant,
-          expectedApplicantBalance: 4,
+          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares),
           sponsor: summoner,
           expectedSponsorBalance: ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
           processor: processor,
@@ -419,9 +426,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           moloch: moloch.address,
           expectedMolochBalance: 0,
           guildBank: guildBank.address,
-          expectedGuildBankBalance: 996,
+          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares)),
           applicant: proposal1.applicant,
-          expectedApplicantBalance: 4,
+          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares),
           sponsor: summoner,
           expectedSponsorBalance: 0,
           processor: processor,
@@ -503,19 +510,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     }
   ) => {
     const molochBalance = await token.balanceOf(moloch)
-    assert.equal(+molochBalance, expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
+    assert.equal(+molochBalance, +expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
 
     const guildBankBalance = await token.balanceOf(guildBank)
-    assert.equal(+guildBankBalance, expectedGuildBankBalance, `Guild Bank token balance incorrect for ${token.address} with ${guildBank}`)
+    assert.equal(+guildBankBalance, +expectedGuildBankBalance, `Guild Bank token balance incorrect for ${token.address} with ${guildBank}`)
 
     const applicantBalance = await token.balanceOf(applicant)
-    assert.equal(+applicantBalance, expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
+    assert.equal(+applicantBalance, +expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
 
     const sponsorBalance = await token.balanceOf(sponsor)
-    assert.equal(+sponsorBalance, expectedSponsorBalance, `Sponsor token balance incorrect for ${token.address} with ${sponsor}`)
+    assert.equal(+sponsorBalance, +expectedSponsorBalance, `Sponsor token balance incorrect for ${token.address} with ${sponsor}`)
 
     const processorBalance = await token.balanceOf(processor)
-    assert.equal(+processorBalance, expectedProcessorBalance, `Processor token balance incorrect for ${token.address} with ${processor}`)
+    assert.equal(+processorBalance, +expectedProcessorBalance, `Processor token balance incorrect for ${token.address} with ${processor}`)
   }
 
   const verifyAllowance = async ({ token, owner, spender, expectedAllowance }) => {

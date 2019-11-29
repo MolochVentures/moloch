@@ -191,6 +191,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   const standardShareRequest = 100
   const standardTribute = 100
+  const summonerShares = 1
 
   let snapshotId
 
