@@ -463,8 +463,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     describe('guildBank.withdrawToken()', async () => {
-      // TODO switch to
+      // TODO switch proposals to use different tributeToken and paymentToken so we can test this scenario
+    })
+
+    describe('', async () => {
+
     })
 
   })
+
 })
