@@ -19,6 +19,17 @@ const { assert } = chai
 
 const BN = web3.utils.BN
 
+const {
+  verifyProposal,
+  verifyFlags,
+  verifyBalance,
+  verifyBalances,
+  verifyAllowance,
+  verifySubmitVote,
+  verifyProcessProposal,
+  verifyMember
+} = require('./test-utils')
+
 chai
   .use(require('chai-as-promised'))
   .should()
@@ -26,55 +37,6 @@ chai
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
-
-const revertMesages = {
-  molochConstructorSummonerCannotBe0: 'summoner cannot be 0',
-  molochConstructorPeriodDurationCannotBe0: '_periodDuration cannot be 0',
-  molochConstructorVotingPeriodLengthCannotBe0: '_votingPeriodLength cannot be 0',
-  molochConstructorVotingPeriodLengthExceedsLimit: '_votingPeriodLength exceeds limit',
-  molochConstructorGracePeriodLengthExceedsLimit: '_gracePeriodLength exceeds limit',
-  molochConstructorEmergencyExitWaitCannotBe0: '_emergencyExitWait cannot be 0',
-  molochConstructorDilutionBoundCannotBe0: '_dilutionBound cannot be 0',
-  molochConstructorDilutionBoundExceedsLimit: '_dilutionBound exceeds limit',
-  molochConstructorNeedAtLeastOneApprovedToken: 'need at least one approved token',
-  molochConstructorDepositCannotBeSmallerThanProcessingReward: '_proposalDeposit cannot be smaller than _processingReward',
-  molochConstructorApprovedTokenCannotBe0: '_approvedToken cannot be 0',
-  molochConstructorDuplicateApprovedToken: 'revert duplicate approved token',
-  submitProposalProposalMustHaveBeenProposed: 'proposal must have been proposed',
-  submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
-  submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
-  submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
-  submitWhitelistProposalMustProvideTokenAddress: 'must provide token address',
-  submitWhitelistProposalAlreadyHaveWhitelistedToken: 'can\'t already have whitelisted the token',
-  submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share',
-  sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
-  sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has been cancelled',
-  sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
-  sponsorProposalAlreadyProposedToKick: 'already proposed to kick',
-  sponsorProposalTooManySharesRequested: 'too many shares requested',
-  submitVoteProposalDoesNotExist: 'proposal does not exist',
-  submitVoteMustBeLessThan3: 'must be less than 3',
-  submitVoteVotingPeriodHasNotStarted: 'voting period has not started',
-  submitVoteVotingPeriodHasExpired: 'voting period has expired',
-  submitVoteMemberHasAlreadyVoted: 'member has already voted',
-  submitVoteVoteMustBeEitherYesOrNo: 'vote must be either Yes or No',
-  cancelProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
-  cancelProposalOnlyTheProposerCanCancel: 'only the proposer can cancel',
-  processProposalProposalDoesNotExist: 'proposal does not exist',
-  processProposalProposalIsNotReadyToBeProcessed: 'proposal is not ready to be processed',
-  processProposalProposalHasAlreadyBeenProcessed: 'proposal has already been processed',
-  processProposalPreviousProposalMustBeProcessed: 'previous proposal must be processed',
-  molochNotAMember: 'not a member',
-  molochRageQuitInsufficientShares: 'insufficient shares',
-  updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
-  updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members',
-  updateDelegateKeyCantOverwriteExistingDelegateKeys: 'cant overwrite existing delegate keys',
-  canRageQuitProposalDoesNotExist: 'proposal does not exist',
-  molochSafeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
-  molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
-  getMemberProposalVoteMemberDoesntExist: 'member doesn\'t exist',
-  getMemberProposalVoteProposalDoesntExist: 'proposal doesn\'t exist'
-}
 
 const SolRevert = 'VM Exception while processing transaction: revert'
 
@@ -127,7 +89,6 @@ async function moveForwardPeriods (periods) {
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
   let moloch, guildBank, tokenAlpha, tokenBeta
   let proposal1, proposal2, depositToken
-
 
   const firstProposalIndex = 0
   const secondProposalIndex = 1
@@ -233,6 +194,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -241,6 +203,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: 1,
@@ -253,6 +216,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
@@ -261,6 +225,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -280,6 +245,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
@@ -315,6 +281,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
@@ -323,6 +290,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
       await verifySubmitVote({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         memberAddress: summoner,
         expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1,
@@ -335,6 +303,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(secondProposalIndex, { from: processor })
 
       await verifyProcessProposal({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + proposal2.sharesRequested + summonerShares, // add the 1 the summoner has
@@ -343,6 +312,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyFlags({
+        moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, true, true, false, false, false]
       })
@@ -377,6 +347,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await verifyMember({
+        moloch: moloch,
         member: proposal2.applicant,
         expectedDelegateKey: proposal2.applicant,
         expectedShares: proposal2.sharesRequested,
@@ -394,6 +365,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       it('member shares reduced', async () => {
         await verifyMember({
+          moloch: moloch,
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: proposal1.sharesRequested - sharesToQuit,
@@ -403,7 +375,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         // started with 3 total shares - rage quitted 1 - so now 2
         const totalShares = await moloch.totalShares()
         assert.equal(+totalShares, summonerShares + proposal1.sharesRequested + proposal2.sharesRequested - sharesToQuit)
-        
+
         // we have 1e18 of Token Alpha and Token Beta - we are quitting 1 share of 3 in total
         // so the quitter should get a 1/3 of each token in the DAO
 
@@ -437,161 +409,4 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
   })
-
-  // VERIFY PROPOSAL
-  const verifyProposal = async (
-    {
-      proposal,
-      proposalIndex,
-      proposer,
-      sponsor = zeroAddress,
-      expectedStartingPeriod = 0,
-      expectedProposalCount = 0,
-      expectedProposalQueueLength = 0
-    }
-  ) => {
-    const proposalData = await moloch.proposals(proposalIndex)
-
-    const proposalCount = await moloch.proposalCount()
-    assert.equal(+proposalCount, expectedProposalCount)
-
-    const proposalQueueLength = await moloch.getProposalQueueLength()
-    assert.equal(+proposalQueueLength, expectedProposalQueueLength)
-
-    assert.equal(proposalData.applicant, proposal.applicant)
-    assert.equal(proposalData.proposer, proposer, 'proposers does not match')
-    assert.equal(proposalData.sponsor, sponsor, 'sponsor does not match')
-
-    assert.equal(proposalData.sharesRequested, proposal.sharesRequested, 'sharesRequested does not match')
-
-    assert.equal(proposalData.tributeOffered, proposal.tributeOffered, 'tributeOffered does not match')
-    assert.equal(proposalData.tributeToken, proposal.tributeToken, 'tributeToken does not match')
-
-    assert.equal(proposalData.paymentRequested, proposal.paymentRequested, 'paymentRequested does not match')
-    assert.equal(proposalData.paymentToken, proposal.paymentToken, 'paymentToken does not match')
-
-    assert.equal(+proposalData.startingPeriod, expectedStartingPeriod, 'startingPeriod does not match')
-    assert.equal(proposalData.yesVotes, 0, 'yesVotes does not match')
-    assert.equal(proposalData.noVotes, 0, 'noVotes does not match')
-    assert.equal(proposalData.details, proposal.details, 'details does not match')
-    assert.equal(proposalData.maxTotalSharesAtYesVote, 0, 'maxTotalSharesAtYesVote invalid')
-  }
-
-  const verifyFlags = async ({ proposalIndex, expectedFlags }) => {
-    const actualFlags = await moloch.getProposalFlags(proposalIndex)
-
-    // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-    assert.equal(actualFlags[0], expectedFlags[0], 'sponsored flag incorrect')
-    assert.equal(actualFlags[1], expectedFlags[1], 'processed flag incorrect')
-    assert.equal(actualFlags[2], expectedFlags[2], 'didPass flag incorrect')
-    assert.equal(actualFlags[3], expectedFlags[3], 'cancelled flag incorrect')
-    assert.equal(actualFlags[4], expectedFlags[4], 'whitelist flag incorrect')
-    assert.equal(actualFlags[5], expectedFlags[5], 'guildkick flag incorrect')
-  }
-
-  const verifyBalance = async ({ token, address, expectedBalance }) => {
-    const balance = await token.balanceOf(address)
-    assert.equal(+balance, expectedBalance, `token balance incorrect for ${token.address} with ${address}`)
-  }
-
-  const verifyBalances = async (
-    {
-      token,
-      moloch,
-      expectedMolochBalance,
-      guildBank,
-      expectedGuildBankBalance,
-      applicant,
-      expectedApplicantBalance,
-      sponsor,
-      expectedSponsorBalance,
-      processor,
-      expectedProcessorBalance
-    }
-  ) => {
-    const molochBalance = await token.balanceOf(moloch)
-    assert.equal(+molochBalance, +expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
-
-    const guildBankBalance = await token.balanceOf(guildBank)
-    assert.equal(+guildBankBalance, +expectedGuildBankBalance, `Guild Bank token balance incorrect for ${token.address} with ${guildBank}`)
-
-    const applicantBalance = await token.balanceOf(applicant)
-    assert.equal(+applicantBalance, +expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
-
-    const sponsorBalance = await token.balanceOf(sponsor)
-    assert.equal(+sponsorBalance, +expectedSponsorBalance, `Sponsor token balance incorrect for ${token.address} with ${sponsor}`)
-
-    const processorBalance = await token.balanceOf(processor)
-    assert.equal(+processorBalance, +expectedProcessorBalance, `Processor token balance incorrect for ${token.address} with ${processor}`)
-  }
-
-  const verifyAllowance = async ({ token, owner, spender, expectedAllowance }) => {
-    const allowance = await token.allowance(owner, spender)
-    assert.equal(+allowance, expectedAllowance, `allowance incorrect for ${token.address} owner ${owner} spender ${spender}`)
-  }
-
-  // VERIFY SUBMIT VOTE
-  const verifySubmitVote = async (
-    {
-      proposalIndex,
-      memberAddress,
-      expectedVote,
-      expectedMaxSharesAtYesVote = 0,
-      initialYesVotes = 0,
-      initialNoVotes = 0
-    }
-  ) => {
-    const proposalData = await moloch.proposals(proposalIndex)
-    assert.equal(+proposalData.yesVotes, initialYesVotes + (expectedVote === 1 ? 1 : 0))
-    assert.equal(+proposalData.noVotes, initialNoVotes + (expectedVote === 1 ? 0 : 1))
-    assert.equal(+proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
-
-    const memberVote = await moloch.getMemberProposalVote(memberAddress, proposalIndex)
-    assert.equal(+memberVote, expectedVote)
-  }
-
-  // VERIFY PROCESS PROPOSAL - note: doesnt check forced reset of delegate key
-  const verifyProcessProposal = async (
-    {
-      proposalIndex,
-      expectedYesVotes = 0,
-      expectedNoVotes = 0,
-      expectedTotalShares = 0,
-      expectedFinalTotalSharesRequested = 0,
-      expectedMaxSharesAtYesVote = 0
-    }
-  ) => {
-    // flags and proposal data
-    const proposalData = await moloch.proposals(proposalIndex)
-
-    assert.equal(+proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
-    assert.equal(+proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')
-    assert.equal(+proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote, 'total shares at yes vote incorrect')
-
-    const totalSharesRequested = await moloch.totalSharesRequested()
-    assert.equal(+totalSharesRequested, expectedFinalTotalSharesRequested, 'total shares requested incorrect')
-
-    const totalShares = await moloch.totalShares()
-    assert.equal(+totalShares, expectedTotalShares, 'total shares incorrect')
-  }
-
-  const verifyMember = async (
-    {
-      member,
-      expectedDelegateKey = zeroAddress,
-      expectedShares = 0,
-      expectedExists = true,
-      expectedHighestIndexYesVote = 0,
-      expectedMemberAddressByDelegateKey = zeroAddress
-    }
-  ) => {
-    const memberData = await moloch.members(member)
-    assert.equal(memberData.delegateKey, expectedDelegateKey, 'delegate key incorrect')
-    assert.equal(+memberData.shares, expectedShares, 'expected shares incorrect')
-    assert.equal(memberData.exists, expectedExists, 'exists incorrect')
-    assert.equal(memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
-
-    const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(expectedDelegateKey)
-    assert.equal(newMemberAddressByDelegateKey, expectedMemberAddressByDelegateKey, 'member address by delegate key incorrect')
-  }
 })
