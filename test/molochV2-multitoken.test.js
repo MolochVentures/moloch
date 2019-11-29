@@ -475,7 +475,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     describe('guildBank.withdrawToken()', async () => {
       // TODO switch proposals to use different tributeToken and paymentToken so we can test this scenario
-      it('require revert - fail to withdraw payment token', async function() {
+      it('require revert - fail to withdraw payment token with message', async function() {
         await moloch.processProposal(firstProposalIndex, { from: processor })
 
         // 2nd proposal for with token beta tribute
@@ -546,6 +546,79 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         await moloch.processProposal(thirdProposalIndex, { from: processor })
           .should.be.rejectedWith("token payment to applicant failed");
+      });
+
+      it('require revert - fail to withdraw payment token with no revert message', async function() {
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        // 2nd proposal for with token beta tribute
+        await fundAndApproveToMoloch({
+          token: tokenBeta,
+          to: proposal2.applicant,
+          from: creator,
+          value: proposal2.tributeOffered
+        })
+
+        await moloch.submitProposal(
+          proposal2.applicant,
+          proposal2.sharesRequested,
+          proposal2.tributeOffered,
+          proposal2.tributeToken,
+          proposal2.paymentRequested,
+          proposal2.paymentToken,
+          proposal2.details,
+          { from: proposal2.applicant }
+        )
+
+        await fundAndApproveToMoloch({
+          token: tokenAlpha,
+          to: summoner,
+          from: creator,
+          value: deploymentConfig.PROPOSAL_DEPOSIT
+        })
+
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        await moveForwardPeriods(1)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        // Force the transfer method on beta to revert
+        await tokenBeta.updateTransfersEnabled(false)
+
+        // 3rd proposal for with token alpha tribute, token beta payment
+        await moloch.submitProposal(
+          proposal3.applicant,
+          proposal3.sharesRequested,
+          proposal3.tributeOffered,
+          proposal3.tributeToken,
+          proposal3.paymentRequested,
+          proposal3.paymentToken,
+          proposal3.details,
+          { from: proposal2.applicant }
+        )
+
+        await fundAndApproveToMoloch({
+          token: tokenAlpha,
+          to: summoner,
+          from: creator,
+          value: deploymentConfig.PROPOSAL_DEPOSIT
+        })
+
+        await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+
+        await moveForwardPeriods(1)
+        await moloch.submitVote(thirdProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+        await moloch.processProposal(thirdProposalIndex, { from: processor })
+          .should.be.rejectedWith(SolRevert);
       });
     })
 
