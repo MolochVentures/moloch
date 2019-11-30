@@ -291,6 +291,7 @@ contract Moloch {
 
     function processProposal(uint256 proposalIndex) public {
         Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
+        require(!flags[4] && !require(flags[5], "must be vanilla proposal");
 
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
