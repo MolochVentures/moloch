@@ -290,12 +290,7 @@ contract Moloch {
     }
 
     function processProposal(uint256 proposalIndex) public {
-        require(proposalIndex < proposalQueue.length, "proposal does not exist");
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
-
-        require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
-        require(proposal.flags[1] == false, "proposal has already been processed");
-        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
+        Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
 
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
@@ -319,43 +314,33 @@ contract Moloch {
         }
 
         if (didPass) {
-
             proposal.flags[2] = true;
 
-            if (proposal.flags[4]) {
-               tokenWhitelist[address(proposal.tributeToken)] = true;
-               approvedTokens.push(proposal.tributeToken);
-
-            } else if (proposal.flags[5]) {
-                _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
+            if (members[proposal.applicant].exists) {
+                members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
             } else {
-                if (members[proposal.applicant].exists) {
-                    members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
-
-                } else {
-                    if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
-                        address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
-                        memberAddressByDelegateKey[memberToOverride] = memberToOverride;
-                        members[memberToOverride].delegateKey = memberToOverride;
-                    }
-
-                    members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
-                    memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
+                if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
+                    address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
+                    memberAddressByDelegateKey[memberToOverride] = memberToOverride;
+                    members[memberToOverride].delegateKey = memberToOverride;
                 }
 
-                totalShares = totalShares.add(proposal.sharesRequested);
-
-                require(
-                    proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
-                    "token transfer to guild bank failed"
-                );
-
-                require(
-                    guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
-                    "token payment to applicant failed"
-                );
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
+                memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
+
+            totalShares = totalShares.add(proposal.sharesRequested);
+
+            require(
+                proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
+                "token transfer to guild bank failed"
+            );
+
+            require(
+                guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
+                "token payment to applicant failed"
+            );
         } else {
             if (!emergencyProcessing) {
                 require(
@@ -365,8 +350,82 @@ contract Moloch {
             }
         }
 
+        require(
+            depositToken.transfer(msg.sender, processingReward),
+            "failed to send processing reward to msg.sender"
+        );
+
+        require(
+            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
+            "failed to return proposal deposit to sponsor"
+        );
+    }
+
+    function processWhitelistProposal(uint256 proposalIndex) public {
+        Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
+        require(flags[4], "must be a whitelist proposal");
+
+        proposal.flags[1] = true;
+        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+
+        bool didPass = proposal.yesVotes > proposal.noVotes;
+
+        bool emergencyProcessing = false;
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
+            emergencyProcessing = true;
+            didPass = false;
+        }
+
+        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
+            didPass = false;
+        }
+
+        if (didPass) {
+            proposal.flags[2] = true;
+
+            tokenWhitelist[address(proposal.tributeToken)] = true;
+            approvedTokens.push(proposal.tributeToken);
+        }
+
         if (proposal.flags[4]) {
             proposedToWhitelist[address(proposal.tributeToken)] = false;
+        }
+
+        require(
+            depositToken.transfer(msg.sender, processingReward),
+            "failed to send processing reward to msg.sender"
+        );
+
+        require(
+            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
+            "failed to return proposal deposit to sponsor"
+        );
+    }
+
+    function processGuildKickProposal(uint256 proposalIndex) public {
+        Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
+        require(flags[5], "must be a guild kick proposal");
+
+        proposal.flags[1] = true;
+        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+
+        bool didPass = proposal.yesVotes > proposal.noVotes;
+
+        bool emergencyProcessing = false;
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
+            emergencyProcessing = true;
+            didPass = false;
+        }
+
+        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
+            didPass = false;
+        }
+
+        if (didPass) {
+            proposal.flags[2] = true;
+
+            _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
+
         }
 
         if (proposal.flags[5]) {
@@ -382,6 +441,17 @@ contract Moloch {
             depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
             "failed to return proposal deposit to sponsor"
         );
+    }
+
+    function _validateProposalForProcessing(uint256 proposalIndex) internal returns (Proposal memory) {
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+
+        require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
+        require(proposal.flags[1] == false, "proposal has already been processed");
+        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
+
+        return proposal;
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {

@@ -6,14 +6,20 @@
 // - ragequit one less than too many tokens
 // - safeRagequit even when there are too many tokens to ragequit
 //   - might not work with simply 1 less b/c gas cost of providing token array
+
+
 // - processProposal after emergencyExitWait expires
 //   - [setup] -> break a whitelisted token in the guildbank on purpose
 //   - proposal after it in queue should be able to be processed immediately
 //   - broken tribute tokens must not be returned (check balance)
+
+// as mentioned have most of this covered but need a test to cover it all - BR TODO
+
+
 // - processProposal guildkick auto-fails b/c of token transfer restriction
 //   - proposal cannot complete due to transfer() returning false - DONE
 //   - proposal cannot complete due to transfer() reverting - DONE
-//   - proposal can still be processed after emergencyExitWait expires
+//   - proposal can still be processed after emergencyExitWait expires - BR TODO
 
 const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
 const chai = require('chai')
@@ -474,8 +480,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
     describe('guildBank.withdrawToken()', async () => {
-      // TODO switch proposals to use different tributeToken and paymentToken so we can test this scenario
-      it('require revert - fail to withdraw payment token with message', async function() {
+      it('require revert - fail to withdraw payment token with message', async function () {
         await moloch.processProposal(firstProposalIndex, { from: processor })
 
         // 2nd proposal for with token beta tribute
@@ -545,10 +550,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
         await moloch.processProposal(thirdProposalIndex, { from: processor })
-          .should.be.rejectedWith("token payment to applicant failed");
-      });
+          .should.be.rejectedWith('token payment to applicant failed')
+      })
 
-      it('require revert - fail to withdraw payment token with no revert message', async function() {
+      it('require revert - fail to withdraw payment token with no revert message', async function () {
         await moloch.processProposal(firstProposalIndex, { from: processor })
 
         // 2nd proposal for with token beta tribute
@@ -618,14 +623,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
         await moloch.processProposal(thirdProposalIndex, { from: processor })
-          .should.be.rejectedWith(SolRevert);
-      });
+          .should.be.rejectedWith(SolRevert)
+      })
     })
-
-    // describe('', async () => {
-    //
-    // })
-
   })
-
 })

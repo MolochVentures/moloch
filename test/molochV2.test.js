@@ -52,19 +52,6 @@
 //
 // cancelProposal
 // - returns the tribute tokens to the proposer
-//
-// New Edge Cases
-// - ragequit with multiple tokens in guildbank
-// - ragequit too many tokens (loop should run out of gas)
-// - ragequit one less than too many tokens
-// - safeRagequit even when there are too many tokens to ragequit
-//   - might not work with simply 1 less b/c gas cost of providing token array
-// - processProposal after emergencyExitWait expires
-//   - [setup] -> break a whitelisted token in the guildbank on purpose
-//   - proposal after it in queue should be able to be processed immediately
-//   - broken tribute tokens must not be returned (check balance)
-// - processProposal guildkick auto-fails b/c of token transfer restriction
-//   - proposal can still be processed after emergencyExitWait expires
 
 const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
 const chai = require('chai')
