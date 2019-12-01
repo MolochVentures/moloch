@@ -1599,6 +1599,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedProcessorBalance: 0
       })
 
+
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
       await verifyProcessProposal({
@@ -2113,7 +2114,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedProcessorBalance: 0
       })
 
-      await moloch.processProposal(firstProposalIndex, { from: processor })
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: processor })
 
       const newApprovedToken = await moloch.approvedTokens(1) // second token to be added
       assert.equal(newApprovedToken, newToken.address)
@@ -2239,7 +2240,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(secondProposalIndex, { from: applicant })
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
 
       // shares removed
       await verifyMember({
@@ -2980,7 +2981,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe('safeRageQuit', () => {
+  describe.skip('safeRageQuit', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,

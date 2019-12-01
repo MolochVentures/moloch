@@ -290,8 +290,9 @@ contract Moloch {
     }
 
     function processProposal(uint256 proposalIndex) public {
-        Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
-        require(!flags[4] && !require(flags[5], "must be vanilla proposal");
+        _validateProposalForProcessing(proposalIndex);
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+        require(!proposal.flags[4] && !proposal.flags[5], "must be a standard proposal");
 
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
@@ -351,20 +352,13 @@ contract Moloch {
             }
         }
 
-        require(
-            depositToken.transfer(msg.sender, processingReward),
-            "failed to send processing reward to msg.sender"
-        );
-
-        require(
-            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
-            "failed to return proposal deposit to sponsor"
-        );
+        _returnDeposit(proposal.sponsor);
     }
 
     function processWhitelistProposal(uint256 proposalIndex) public {
-        Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
-        require(flags[4], "must be a whitelist proposal");
+        _validateProposalForProcessing(proposalIndex);
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+        require(proposal.flags[4], "must be a whitelist proposal");
 
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
@@ -392,20 +386,13 @@ contract Moloch {
             proposedToWhitelist[address(proposal.tributeToken)] = false;
         }
 
-        require(
-            depositToken.transfer(msg.sender, processingReward),
-            "failed to send processing reward to msg.sender"
-        );
-
-        require(
-            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
-            "failed to return proposal deposit to sponsor"
-        );
+        _returnDeposit(proposal.sponsor);
     }
 
     function processGuildKickProposal(uint256 proposalIndex) public {
-        Proposal memory proposal = _validateProposalForProcessing(proposalIndex);
-        require(flags[5], "must be a guild kick proposal");
+        _validateProposalForProcessing(proposalIndex);
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+        require(proposal.flags[5], "must be a guild kick proposal");
 
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
@@ -433,42 +420,33 @@ contract Moloch {
             proposedToKick[proposal.applicant] = false;
         }
 
-        require(
-            depositToken.transfer(msg.sender, processingReward),
-            "failed to send processing reward to msg.sender"
-        );
-
-        require(
-            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
-            "failed to return proposal deposit to sponsor"
-        );
+        _returnDeposit(proposal.sponsor);
     }
 
-    function _validateProposalForProcessing(uint256 proposalIndex) internal returns (Proposal memory) {
+    function _validateProposalForProcessing(uint256 proposalIndex) internal {
         require(proposalIndex < proposalQueue.length, "proposal does not exist");
         Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
         require(proposal.flags[1] == false, "proposal has already been processed");
         require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
+    }
 
-        return proposal;
+    function _returnDeposit(address sponsor) internal {
+        require(
+            depositToken.transfer(msg.sender, processingReward),
+            "failed to send processing reward to msg.sender"
+        );
+
+        require(
+            depositToken.transfer(sponsor, proposalDeposit.sub(processingReward)),
+            "failed to return proposal deposit to sponsor"
+        );
+
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
         _ragequit(msg.sender, sharesToBurn, approvedTokens);
-    }
-
-    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
-        for (uint256 i=0; i < tokenList.length; i++) {
-            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
-
-            if (i > 0) {
-                require(tokenList[i] > tokenList[i-1], "token list must be unique and in ascending order");
-            }
-        }
-
-        _ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
     // TODO 'approvedTokens' was shadowing a global var. Added _ to local var. Please approve or remove or adjust.
