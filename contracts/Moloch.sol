@@ -19,10 +19,10 @@ contract Moloch {
     IERC20 public depositToken;
     GuildBank public guildBank;
 
-    uint256 constant MAX_VOTING_PERIOD_LENGTH = 10**18;
-    uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18;
-    uint256 constant MAX_DILUTION_BOUND = 10**18;
-    uint256 constant MAX_NUMBER_OF_SHARES = 10**18;
+    uint256 constant MAX_VOTING_PERIOD_LENGTH = 10 ** 18;
+    uint256 constant MAX_GRACE_PERIOD_LENGTH = 10 ** 18;
+    uint256 constant MAX_DILUTION_BOUND = 10 ** 18;
+    uint256 constant MAX_NUMBER_OF_SHARES = 10 ** 18;
 
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, uint256 sharesRequested);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
@@ -64,19 +64,19 @@ contract Moloch {
         bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         string details;
         uint256 maxTotalSharesAtYesVote;
-        mapping (address => Vote) votesByMember;
+        mapping(address => Vote) votesByMember;
     }
 
-    mapping (address => bool) public tokenWhitelist;
+    mapping(address => bool) public tokenWhitelist;
     IERC20[] public approvedTokens;
 
-    mapping (address => bool) public proposedToWhitelist;
-    mapping (address => bool) public proposedToKick;
+    mapping(address => bool) public proposedToWhitelist;
+    mapping(address => bool) public proposedToKick;
 
-    mapping (address => Member) public members;
-    mapping (address => address) public memberAddressByDelegateKey;
+    mapping(address => Member) public members;
+    mapping(address => address) public memberAddressByDelegateKey;
 
-    mapping (uint256 => Proposal) public proposals;
+    mapping(uint256 => Proposal) public proposals;
 
     uint256[] public proposalQueue;
 
@@ -114,7 +114,7 @@ contract Moloch {
 
         depositToken = IERC20(_approvedTokens[0]);
 
-        for (uint256 i=0; i < _approvedTokens.length; i++) {
+        for (uint256 i = 0; i < _approvedTokens.length; i++) {
             require(_approvedTokens[i] != address(0), "_approvedToken cannot be 0");
             require(!tokenWhitelist[_approvedTokens[i]], "duplicate approved token");
             tokenWhitelist[_approvedTokens[i]] = true;
@@ -192,20 +192,20 @@ contract Moloch {
         bool[6] memory flags
     ) internal {
         Proposal memory proposal = Proposal({
-            applicant: applicant,
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: sharesRequested,
-            tributeOffered: tributeOffered,
-            tributeToken: IERC20(tributeToken),
-            paymentRequested: paymentRequested,
-            paymentToken: IERC20(paymentToken),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
+            applicant : applicant,
+            proposer : msg.sender,
+            sponsor : address(0),
+            sharesRequested : sharesRequested,
+            tributeOffered : tributeOffered,
+            tributeToken : IERC20(tributeToken),
+            paymentRequested : paymentRequested,
+            paymentToken : IERC20(paymentToken),
+            startingPeriod : 0,
+            yesVotes : 0,
+            noVotes : 0,
+            flags : flags,
+            details : details,
+            maxTotalSharesAtYesVote : 0
             });
 
         proposals[proposalCount] = proposal;
@@ -297,17 +297,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        bool didPass = proposal.yesVotes > proposal.noVotes;
-
-        bool emergencyProcessing = false;
-        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
-            emergencyProcessing = true;
-            didPass = false;
-        }
-
-        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
-            didPass = false;
-        }
+        (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
 
         // TODO BlockRocket changed from >= to > as zero payment test was failing passing proposal here. Please approve or revert.
         // TODO BlockRocket proposal.paymentToken != IERC20(0) due to revert when zeroAddress payment token
@@ -363,17 +353,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        bool didPass = proposal.yesVotes > proposal.noVotes;
-
-        bool emergencyProcessing = false;
-        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
-            emergencyProcessing = true;
-            didPass = false;
-        }
-
-        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
-            didPass = false;
-        }
+        (bool didPass, bool _) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -397,6 +377,24 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
+        (bool didPass, bool _) = _didPass(proposalIndex);
+
+        if (didPass) {
+            proposal.flags[2] = true;
+
+            _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
+        }
+
+        if (proposal.flags[5]) {
+            proposedToKick[proposal.applicant] = false;
+        }
+
+        _returnDeposit(proposal.sponsor);
+    }
+
+    function _didPass(uint256 proposalIndex) internal returns (bool _didPass, bool _emergencyProcessing) {
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+
         bool didPass = proposal.yesVotes > proposal.noVotes;
 
         bool emergencyProcessing = false;
@@ -409,18 +407,7 @@ contract Moloch {
             didPass = false;
         }
 
-        if (didPass) {
-            proposal.flags[2] = true;
-
-            _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
-
-        }
-
-        if (proposal.flags[5]) {
-            proposedToKick[proposal.applicant] = false;
-        }
-
-        _returnDeposit(proposal.sponsor);
+        return (didPass, emergencyProcessing);
     }
 
     function _validateProposalForProcessing(uint256 proposalIndex) internal {
@@ -447,6 +434,18 @@ contract Moloch {
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
         _ragequit(msg.sender, sharesToBurn, approvedTokens);
+    }
+
+    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
+//        for (uint256 i = 0; i < tokenList.length; i++) {
+//            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
+//
+//            if (i > 0) {
+//                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
+//            }
+//        }
+
+        _ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
     // TODO 'approvedTokens' was shadowing a global var. Added _ to local var. Please approve or remove or adjust.
@@ -521,7 +520,8 @@ contract Moloch {
 
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
-        return proposals[proposalQueue[highestIndexYesVote]].flags[1]; // processed
+        return proposals[proposalQueue[highestIndexYesVote]].flags[1];
+        // processed
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {

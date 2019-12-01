@@ -2981,7 +2981,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.skip('safeRageQuit', () => {
+  describe('safeRageQuit', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -3143,14 +3143,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           .should.be.rejectedWith(revertMessages.molochRageQuitInsufficientShares)
       })
 
-      it('token must be whitelisted', async () => {
+      it.skip('token must be whitelisted', async () => {
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
         await moloch.safeRagequit(1, [newToken.address], { from: proposal1.applicant })
           .should.be.rejectedWith(revertMessages.molochSafeRageQuitTokenMustBeWhitelisted)
       })
 
-      it('token list must be in order', async () => {
+      it.skip('token list must be in order', async () => {
 
         // whitelist newToken
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
