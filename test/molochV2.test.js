@@ -1618,7 +1618,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
         expectedMaxSharesAtYesVote: 1
       })
@@ -2003,7 +2003,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
         expectedMaxSharesAtYesVote: 1
       })
@@ -2269,7 +2269,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: proposal1.sharesRequested + 1 // FIXME - check is this right? Should be 1?
+        expectedMaxSharesAtYesVote: proposal1.sharesRequested + summonerShares
       })
 
       await verifyFlags({
@@ -2512,7 +2512,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
         expectedMaxSharesAtYesVote: 1
       })
@@ -2638,7 +2638,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: (proposal1.sharesRequested + 1) - 68, // add the 1 the summoner, minus the 68 rage quit
+        expectedTotalShares: (proposal1.sharesRequested + summonerShares) - 68, // add the 1 the summoner, minus the 68 rage quit
         expectedFinalTotalSharesRequested: 0,
         expectedMaxSharesAtYesVote: 101
       })
@@ -2831,7 +2831,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
         expectedMaxSharesAtYesVote: 1
       })
@@ -2917,7 +2917,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         const totalShares = await moloch.totalShares()
         // your remaining shares plus the summoners 1 share
-        assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + 1)
+        assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + summonerShares)
       })
 
       it('emits event', async () => {
@@ -3046,7 +3046,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: proposal1.sharesRequested + 1, // add the 1 the summoner has
+        expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedFinalTotalSharesRequested: 0,
         expectedMaxSharesAtYesVote: 1
       })
@@ -3132,7 +3132,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         const totalShares = await moloch.totalShares()
         // your remaining shares plus the summoners 1 share
-        assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + 1)
+        assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + summonerShares)
       })
 
       it('emits event', async () => {
@@ -3166,6 +3166,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         // whitelist newToken
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
         const proposer = proposal1.applicant
         const whitelistProposal = {
           applicant: zeroAddress,
