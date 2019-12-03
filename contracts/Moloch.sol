@@ -33,10 +33,11 @@ contract Moloch {
     // ***************
     // EVENTS
     // ***************
-    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, uint256 sharesRequested);
-    event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
-    event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, address tokenToWhitelist, address memberToKick, uint256 paymentRequested, address paymentToken);
+    event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
+    event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
+    event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
+    event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256[] tokenList);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
@@ -210,10 +211,11 @@ contract Moloch {
         });
 
         proposals[proposalCount] = proposal; // save proposal by its id
-        proposalCount += 1; // increment proposal counter
 
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, address(0), address(0), paymentRequested, paymentToken);
+   
+        proposalCount += 1; // increment proposal counter
     }
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
@@ -243,10 +245,11 @@ contract Moloch {
 
 
         proposals[proposalCount] = proposal; // save proposal by its id
-        proposalCount += 1; // increment proposal counter
+        
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, address(0), 0, address(0), 0, tokenToWhitelist, address(0), 0, address(0));
 
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        proposalCount += 1; // increment proposal counter
     }
 
     function submitGuildKickProposal(address memberToKick, string memory details) public {
@@ -274,10 +277,11 @@ contract Moloch {
         });
 
         proposals[proposalCount] = proposal; // save proposal by its id
-        proposalCount += 1; // increment proposal counter
 
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, address(0), 0, address(0), 0, address(0), memberToKick, 0, address(0));
+
+        proposalCount += 1; // increment proposal counter
     }
 
     function sponsorProposal(uint256 proposalId) public onlyDelegate {
@@ -322,8 +326,9 @@ contract Moloch {
         // ... and append it to the queue by its id
         proposalQueue.push(proposalId);
 
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        uint256 proposalQueueIndex = proposalQueue.length.sub(1);
+        emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueueIndex, startingPeriod);
+
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -481,7 +486,7 @@ contract Moloch {
             "Moloch::processProposal - failed to return proposal deposit to sponsor"
         );
 
-        // TODO emit ProcessProposal()
+        emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, proposal.tokenTribute, proposal.sharesRequested, didPass);
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
@@ -521,7 +526,12 @@ contract Moloch {
             "Moloch::ragequit - withdrawal of tokens from guildBank failed"
         );
 
-        emit Ragequit(msg.sender, sharesToBurn);
+        address[approvedTokens.length] memory tokenList;
+        for (uint256 i=0; i < approvedTokens.length; i++) {
+            tokenList.push(address(approvedTokens[i]));
+        };
+        emit Ragequit(msg.sender, sharesToBurn, tokenList);
+    
     }
 
     function cancelProposal(uint256 proposalId) public {
