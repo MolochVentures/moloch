@@ -36,7 +36,7 @@ contract Moloch {
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, address tokenToWhitelist, address memberToKick, uint256 paymentRequested, address paymentToken);
     event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
     event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
+    event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, address tributeToken, uint256 sharesRequested, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256[] tokenList);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -486,7 +486,8 @@ contract Moloch {
             "Moloch::processProposal - failed to return proposal deposit to sponsor"
         );
 
-        emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, proposal.tokenTribute, proposal.sharesRequested, didPass);
+        emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, proposal.tributeOffered, address(proposal.tributeToken), proposal.sharesRequested, didPass);
+    
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
