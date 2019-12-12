@@ -229,15 +229,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     const guildBankAddress = await moloch.guildBank()
     guildBank = await GuildBank.at(guildBankAddress)
 
-<<<<<<< HEAD:test/molochV2.js
-    depositToken = await moloch.depositToken()
-
-    // TODO this seems redundant with the firstWhitelistedToken constructor test
-    assert.equal(depositToken, tokenAlpha.address)
-=======
     const depositTokenAddress = await moloch.depositToken()
     assert.equal(depositTokenAddress, tokenAlpha.address)
->>>>>>> c146c166f483bb1ea3a60892e75456fe2c59299e:test/molochV2.test.js
 
     depositToken = tokenAlpha
   })
@@ -850,7 +843,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         paymentToken: zeroAddress,
         details: 'whitelist me!'
       }
-      
+
       await moloch.submitWhitelistProposal(
         whitelistProposal.tributeToken,
         whitelistProposal.details,
@@ -880,7 +873,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const { logs } = emittedLogs
       const log = logs[0]
       const { delegateKey, memberAddress, proposalIndex, proposalQueueIndex, startingPeriod} = log.args
-      
+
       assert.equal(log.event, 'SponsorProposal')
 
       assert.equal(delegateKey, summoner)
@@ -888,7 +881,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(proposalIndex, 0)
       assert.equal(proposalQueueIndex, 0)
       assert.equal(startingPeriod, 1)
-   
+
     })
 
     it('happy path - sponsor add token to whitelist', async () => {
@@ -1680,7 +1673,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalQueueIndex, memberAddress, tributeOffered, tributeToken, sharesRequested, didPass } = log.args
-     
+
       assert.equal(log.event, 'ProcessProposal')
       assert.equal(proposalQueueIndex, 0)
       assert.equal(log.args.applicant, proposal1.applicant)
@@ -3281,7 +3274,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         // your remaining shares plus the summoners 1 share
         assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + summonerShares)
       })
-      
+
       it('emits Ragequit event', async () => {
         const log = emittedLogs[0]
         const { memberAddress, sharesToBurn, tokenList } = log.args
