@@ -28,7 +28,7 @@ start_ganache() {
     export RUNNING_COVERAGE=true
     node_modules/.bin/ganache-cli-coverage --emitFreeLogs true --allowUnlimitedContractSize true --gasLimit 0xfffffffffff --port "$ganache_port" -m "fetch local valve black attend double eye excite planet primary install allow" > /dev/null &
   else
-    node_modules/.bin/ganache-cli -l 9500000 --port "$ganache_port" -m "fetch local valve black attend double eye excite planet primary install allow" > /dev/null &
+    node_modules/.bin/ganache-cli -l 99900000  --allowUnlimitedContractSize true --port "$ganache_port" -m "fetch local valve black attend double eye excite planet primary install allow" > /dev/null &
   fi
 
   ganache_pid=$!

@@ -24,10 +24,11 @@ contract Moloch {
     uint256 constant MAX_DILUTION_BOUND = 10 ** 18;
     uint256 constant MAX_NUMBER_OF_SHARES = 10 ** 18;
 
-    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, uint256 sharesRequested);
-    event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
-    event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, uint256 paymentRequested, address paymentToken);
+    event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
+    event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
+    event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, address tributeToken, uint256 sharesRequested, bool didPass);
+    event Ragequit(address indexed memberAddress, uint256 sharesToBurn, address[] tokenList);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
@@ -209,6 +210,8 @@ contract Moloch {
             });
 
         proposals[proposalCount] = proposal;
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
         proposalCount += 1;
     }
 
@@ -246,6 +249,7 @@ contract Moloch {
         proposal.flags[0] = true;
 
         proposalQueue.push(proposalId);
+        emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -422,6 +426,7 @@ contract Moloch {
             "failed to return proposal deposit to sponsor"
         );
 
+        // emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, proposal.tributeOffered, address(proposal.tributeToken), proposal.sharesRequested, didPass);
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
@@ -457,7 +462,11 @@ contract Moloch {
             "withdrawal of tokens from guildBank failed"
         );
 
-        emit Ragequit(msg.sender, sharesToBurn);
+        address[] memory tokenList = new address[](_approvedTokens.length);
+        for (uint256 i=0; i < _approvedTokens.length; i++) {
+            tokenList[i] = address(approvedTokens[i]);
+        }
+        emit Ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
     function cancelProposal(uint256 proposalId) public {
