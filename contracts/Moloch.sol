@@ -215,21 +215,17 @@ contract Moloch {
     function sponsorProposal(uint256 proposalId) public onlyDelegate {
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
 
-        // TODO changed from memory to storage by BlockRocket. Please approve
         Proposal storage proposal = proposals[proposalId];
 
-        // TODO BlockRocket edit. Ensure proposer is no address zero - discussed with Ameen
         require(proposal.proposer != address(0), 'proposal must have been proposed');
 
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
 
         if (proposal.flags[4]) {
-            // TODO BlockRocket added message. Please approve or remove.
             require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
             proposedToWhitelist[address(proposal.tributeToken)] = true;
         } else if (proposal.flags[5]) {
-            // TODO BlockRocket added message. Please approve or remove.
             require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
         } else {
@@ -247,7 +243,6 @@ contract Moloch {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         proposal.sponsor = memberAddress;
 
-        // TODO BlockRocket added this missing flag on sponsor success. Please approve or remove.
         proposal.flags[0] = true;
 
         proposalQueue.push(proposalId);
@@ -263,7 +258,6 @@ contract Moloch {
         require(uintVote < 3, "must be less than 3");
         Vote vote = Vote(uintVote);
 
-        // require(proposal.flags[0], "proposal has not been sponsored"); // TODO BlockRocket - unreachable require? Please approve or remove.
         require(getCurrentPeriod() >= proposal.startingPeriod, "voting period has not started");
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "proposal voting period has expired");
         require(proposal.votesByMember[memberAddress] == Vote.Null, "member has already voted");
@@ -299,8 +293,6 @@ contract Moloch {
 
         (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
 
-        // TODO BlockRocket changed from >= to > as zero payment test was failing passing proposal here. Please approve or revert.
-        // TODO BlockRocket proposal.paymentToken != IERC20(0) due to revert when zeroAddress payment token
         if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
@@ -437,22 +429,20 @@ contract Moloch {
     }
 
     function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
-//        for (uint256 i = 0; i < tokenList.length; i++) {
-//            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
-//
-//            if (i > 0) {
-//                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
-//            }
-//        }
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
+
+            if (i > 0) {
+                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
+            }
+        }
 
         _ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    // TODO 'approvedTokens' was shadowing a global var. Added _ to local var. Please approve or remove or adjust.
     function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
-        // FIXME this means the person being kicked must call processProposal!?
         Member storage member = members[memberAddress];
 
         require(member.shares >= sharesToBurn, "insufficient shares");
@@ -513,7 +503,6 @@ contract Moloch {
         return proposalQueue.length;
     }
 
-    // TODO added by BlockRocket. Please approve or remove. Used in tests to pull flag arrays for equality.
     function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
         return proposals[proposalIndex].flags;
     }
@@ -521,7 +510,6 @@ contract Moloch {
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[highestIndexYesVote]].flags[1];
-        // processed
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
