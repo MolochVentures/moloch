@@ -64,6 +64,7 @@ const revertMessages = {
   processWhitelistProposalMustBeAWhitelistProposal: 'must be a whitelist proposal',
   processGuildKickProposalMustBeAGuildKickProposal: 'must be a guild kick proposal',
   notAMember: 'not a member',
+  notAShareholder: 'not a shareholder',
   rageQuitInsufficientShares: 'insufficient shares',
   rageQuitInsufficientLoot: 'insufficient loot',
   rageQuitUntilHighestIndex: 'cannot ragequit until highest index proposal member voted YES on is processed',
@@ -145,7 +146,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   const standardShareRequest = 100
   const standardLootRequest = 73
-  const standardTribute = 81
+  const standardTribute = 80
   const summonerShares = 1
 
   let snapshotId
@@ -3260,6 +3261,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         const totalShares = await moloch.totalShares()
         assert.equal(totalShares, 1)
+
+        const totalLoot = await moloch.totalLoot()
+        assert.equal(totalLoot, 0)
       })
 
       it.skip('emits Ragequit event', async () => {
@@ -3945,6 +3949,237 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('failure - proposal does not exist', async () => {
       await moloch.getMemberProposalVote(summoner, invalidPropsalIndex)
         .should.be.rejectedWith(revertMessages.getMemberProposalVoteProposalDoesntExist)
+    })
+  })
+
+  describe('as a member with solely loot and no shares...', () => {
+    beforeEach(async () => {
+      proposal1.sharesRequested = 0 // NO SHARES
+      proposal1.lootRequested = 1 // 1 LOOT (ragequit = 50% w/ 1 summoner share)
+
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      // submit
+      const proposer = proposal1.applicant
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      memberVote = await moloch.getMemberProposalVote(summoner, firstProposalIndex)
+      assert.equal(memberVote, 1)
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyMember({
+        moloch: moloch,
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant, // important for testing delegate key functions
+        expectedShares: 0, // check 0 shares
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: proposal1.applicant // important for testing delegate key functions
+      })
+    })
+
+    it('can still ragequit (onlyMember)', async () => {
+      const initialGuildBankBalance = new BN(proposal1.tributeOffered)
+      const initialTotalSharesAndLoot = new BN(proposal1.lootRequested + proposal1.sharesRequested + 1)
+      const tokensToRageQuit = initialGuildBankBalance.mul(new BN(proposal1.lootRequested)).div(initialTotalSharesAndLoot)
+
+      await moloch.ragequit(0, proposal1.lootRequested, { from: proposal1.applicant })
+
+      await verifyMember({
+        moloch: moloch,
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: 0,
+        expectedLoot: 0,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: 0,
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: initialGuildBankBalance.sub(tokensToRageQuit),
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: tokensToRageQuit,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
+        processor: processor,
+        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+      })
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, 1)
+
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(totalLoot, 0)
+    })
+
+    it('unable to update delegateKey (onlyShareholder)', async () => {
+      await moloch.updateDelegateKey(applicant2, { from: proposal1.applicant })
+      .should.be.rejectedWith(revertMessages.notAShareholder)
+    })
+
+    it('unable to use delegate key to sponsor (onlyDelegate)', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await verifyProposal({
+        moloch: moloch,
+        proposal: proposal1,
+        proposalIndex: secondProposalIndex,
+        proposer: proposal1.applicant,
+        sponsor: zeroAddress,
+        expectedStartingPeriod: 0,
+        expectedProposalCount: 2,
+        expectedProposalQueueLength: 1
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [false, false, false, false, false, false]
+      })
+
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: proposal1.applicant })
+        .should.be.rejectedWith('not a delegate')
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      // should still work - testing to make sure nothing is wrong with the proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      await verifyProposal({
+        moloch: moloch,
+        proposal: proposal1,
+        proposalIndex: secondProposalIndex,
+        proposer: proposal1.applicant,
+        sponsor: summoner,
+        expectedStartingPeriod: 72, // 1 + 70 + 1
+        expectedProposalCount: 2,
+        expectedProposalQueueLength: 2
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+    })
+
+    it('unable to use delegate key to vote (onlyDelegate)', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      await verifyProposal({
+        moloch: moloch,
+        proposal: proposal1,
+        proposalIndex: secondProposalIndex,
+        proposer: proposal1.applicant,
+        sponsor: summoner,
+        expectedStartingPeriod: 72, // 1 + 70 + 1
+        expectedProposalCount: 2,
+        expectedProposalQueueLength: 2
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+
+      await moveForwardPeriods(1)
+
+      await moloch.submitVote(secondProposalIndex, yes, { from: proposal1.applicant })
+        .should.be.rejectedWith('not a delegate')
+
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        memberAddress: summoner,
+        expectedVote: yes,
+        expectedMaxSharesAndLootAtYesVote: 1 + proposal1.sharesRequested + proposal1.lootRequested
+      })
     })
   })
 })
