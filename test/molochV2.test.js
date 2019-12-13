@@ -194,6 +194,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     proposal2 = {
       applicant: applicant2,
       sharesRequested: 50,
+      lootRequested: 25,
       tributeOffered: 50,
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
@@ -1426,6 +1427,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitProposal(
           proposal2.applicant,
           proposal2.sharesRequested,
+          proposal2.lootRequested,
           proposal2.tributeOffered,
           proposal2.tributeToken,
           proposal2.paymentRequested,
@@ -1602,10 +1604,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const emittedLogs = await moloch.processProposal(firstProposalIndex, { from: processor })
       const { logs } = emittedLogs
       const log = logs[0]
-      const { proposalQueueIndex, proposalId, didPass } = log.args
+      const { proposalIndex, proposalId, didPass } = log.args
 
       assert.equal(log.event, 'ProcessProposal')
-      assert.equal(proposalQueueIndex, 0)
+      assert.equal(proposalIndex, 0)
       assert.equal(proposalId, 0)
       assert.equal(didPass, true)
     })
@@ -1683,7 +1685,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
-        expectedFinalTotalSharesRequested: 0,
+        expectedTotalLoot: proposal1.lootRequested,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -1797,7 +1800,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 0,
         expectedNoVotes: 1,
         expectedTotalShares: 1, // just the summoner still in
-        expectedFinalTotalSharesRequested: 0,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 0
       })
 
@@ -2072,7 +2075,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
-        expectedFinalTotalSharesRequested: 0,
+        expectedTotalLoot: proposal1.lootRequested,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2204,7 +2208,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
-        expectedFinalTotalSharesRequested: 0,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2231,9 +2235,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // Verify process proposal event
       const { logs } = emittedLogs
       const log = logs[0]
-      const { proposalQueueIndex, proposalId, didPass } = log.args
+      const { proposalIndex, proposalId, didPass } = log.args
       assert.equal(log.event, 'ProcessProposal')
-      assert.equal(proposalQueueIndex, 0)
+      assert.equal(proposalIndex, 0)
       assert.equal(proposalId, 0)
       assert.equal(didPass, true)
     })
@@ -2346,8 +2350,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
-        expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAndLootAtYesVote: proposal1.sharesRequested + summonerShares
+        expectedFinalTotalSharesAndLootRequested: 0,
+        expectedMaxSharesAndLootAtYesVote: proposal1.sharesRequested + summonerShares + proposal1.lootRequested
       })
 
       await verifyFlags({
@@ -2359,9 +2363,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // Verify process proposal event
       const { logs } = emittedLogs
       const log = logs[1] // ragequit event is at logs[0]
-      const { proposalQueueIndex, proposalId, didPass } = log.args
+      const { proposalIndex, proposalId, didPass } = log.args
       assert.equal(log.event, 'ProcessProposal')
-      assert.equal(proposalQueueIndex, secondProposalIndex)
+      assert.equal(proposalIndex, secondProposalIndex)
       assert.equal(proposalId, 1)
       assert.equal(didPass, true)
     })
@@ -2439,7 +2443,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1,
-        expectedFinalTotalSharesRequested: 0,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2603,7 +2607,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
-        expectedFinalTotalSharesRequested: 0,
+        expectedTotalLoot: proposal1.lootRequested,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2716,12 +2721,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       /////////////////////////////////////////////////////////////
 
       const proposalData = await moloch.proposals(secondProposalIndex)
-      assert.equal(+proposalData.maxTotalSharesAtYesVote, 101)
+      assert.equal(+proposalData.maxTotalSharesAndLootAtYesVote, 174)
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.ragequit(68, { from: proposal1.applicant })
+      await moloch.ragequit(100, 20, { from: proposal1.applicant }) // 120 total
 
       await moloch.processProposal(secondProposalIndex, { from: processor })
 
@@ -2729,9 +2734,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
-        expectedTotalShares: (proposal1.sharesRequested + summonerShares) - 68, // add the 1 the summoner, minus the 68 rage quit
-        expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAndLootAtYesVote: 101
+        expectedTotalShares: (proposal1.sharesRequested + summonerShares) - 100, // add the 1 the summoner, minus the 68 rage quit
+        expectedTotalLoot: proposal1.lootRequested - 20,
+        expectedFinalTotalSharesAndLootRequested: 0,
+        expectedMaxSharesAndLootAtYesVote: 174
       })
 
       // Ensure didPass=false and processed=True
@@ -2884,6 +2890,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitProposal(
         applicant,
         proposal1.sharesRequested,
+        proposal1.lootRequested,
         proposal1.tributeOffered,
         proposal1.tributeToken,
         proposal1.paymentRequested,
@@ -2961,7 +2968,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         proposalIndex: firstProposalIndex,
         memberAddress: summoner,
-        expectedMaxSharesAtYesVote: 1,
+        expectedMaxSharesAndLootAtYesVote: 1,
         expectedVote: yes
       })
 
@@ -2971,7 +2978,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit only as whitelisting has no tribute
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit solely as whitelisting has no tribute
         guildBank: guildBank.address,
         expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
@@ -3043,7 +3050,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedTotalLoot: proposal1.lootRequested,
-        expectedFinalTotalSharesRequested: 0,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -3267,7 +3274,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
-        expectedFinalTotalSharesRequested: 0,
+        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 

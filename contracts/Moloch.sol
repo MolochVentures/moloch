@@ -541,7 +541,7 @@ contract Moloch {
     function cancelProposal(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
-        require(msg.sender == proposal.proposer, "only the proposer can cancel");
+        require(msg.sender == proposal.proposer, "solely the proposer can cancel");
 
         proposal.flags[3] = true;
 
