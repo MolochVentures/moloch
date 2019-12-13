@@ -391,7 +391,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool _) = _didPass(proposalIndex);
+        (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -418,7 +418,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool _) = _didPass(proposalIndex);
+        (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -510,11 +510,11 @@ contract Moloch {
             "withdrawal of tokens from guildBank failed"
         );
 
-        address[] memory tokenList = new address[](tokenList.length);
-        for (uint256 i=0; i < tokenList.length; i++) {
-            tokenList[i] = address(approvedTokens[i]);
+        address[] memory eventTokenList = new address[](tokenList.length);
+        for (uint256 i=0; i < eventTokenList.length; i++) {
+            eventTokenList[i] = address(approvedTokens[i]);
         }
-        emit Ragequit(msg.sender, sharesToBurn, tokenList);
+        emit Ragequit(msg.sender, sharesToBurn, eventTokenList);
     }
 
     function cancelProposal(uint256 proposalId) public {

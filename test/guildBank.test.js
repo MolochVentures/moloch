@@ -8,7 +8,7 @@ chai
   .use(require('chai-as-promised'))
   .should()
 
-const GuildBankTest = artifacts.require('./GuildBank')
+const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
 
 const deploymentConfig = {
@@ -38,7 +38,7 @@ contract('GuildBank', ([creator, shareHolder, random, ...otherAccounts]) => {
       await Token.new(deploymentConfig.TOKEN_SUPPLY),
     ]
 
-    guildBank = await GuildBankTest.new()
+    guildBank = await GuildBank.new()
 
     tokenAlpha = tokens[0]
     await tokens[0].transfer(guildBank.address, 1000, fromCreator)
