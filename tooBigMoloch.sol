@@ -24,6 +24,15 @@ contract Moloch {
     uint256 constant MAX_DILUTION_BOUND = 10 ** 18;
     uint256 constant MAX_NUMBER_OF_SHARES = 10 ** 18;
 
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, uint256 paymentRequested, address paymentToken);
+    event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
+    event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
+    event ProcessProposal(uint256 indexed proposalQueueIndex, uint256 indexed proposalId, bool didPass);
+    event Ragequit(address indexed memberAddress, uint256 sharesToBurn, address[] tokenList);
+    event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
+    event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
+    event SummonComplete(address indexed summoner, uint256 shares);
+
     uint256 public proposalCount;
     uint256 public totalShares;
     uint256 public totalSharesRequested;
@@ -128,6 +137,8 @@ contract Moloch {
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
+
+        emit SummonComplete(summoner, 1);
     }
 
     function submitProposal(
@@ -200,6 +211,7 @@ contract Moloch {
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
         proposalCount += 1;
     }
 
@@ -237,6 +249,7 @@ contract Moloch {
         proposal.flags[0] = true;
 
         proposalQueue.push(proposalId);
+        emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
@@ -270,6 +283,8 @@ contract Moloch {
         } else if (vote == Vote.No) {
             proposal.noVotes = proposal.noVotes.add(member.shares);
         }
+
+        emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
     function processProposal(uint256 proposalIndex) public {
@@ -327,6 +342,8 @@ contract Moloch {
         }
 
         _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function processWhitelistProposal(uint256 proposalIndex) public {
@@ -352,6 +369,8 @@ contract Moloch {
         proposedToWhitelist[address(proposal.tributeToken)] = false;
 
         _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function processGuildKickProposal(uint256 proposalIndex) public {
@@ -376,6 +395,8 @@ contract Moloch {
         proposedToKick[proposal.applicant] = false;
 
         _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
@@ -421,6 +442,18 @@ contract Moloch {
         _ragequit(msg.sender, sharesToBurn, approvedTokens);
     }
 
+    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
+
+            if (i > 0) {
+                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
+            }
+        }
+
+        _ragequit(msg.sender, sharesToBurn, tokenList);
+    }
+
     function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
         uint256 initialTotalShares = totalShares;
 
@@ -442,6 +475,38 @@ contract Moloch {
         for (uint256 i=0; i < _approvedTokens.length; i++) {
             tokenList[i] = address(approvedTokens[i]);
         }
+        emit Ragequit(msg.sender, sharesToBurn, tokenList);
+    }
+
+    function cancelProposal(uint256 proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
+        require(!proposal.flags[0], "proposal has already been sponsored");
+        require(msg.sender == proposal.proposer, "only the proposer can cancel");
+
+        proposal.flags[3] = true;
+
+        require(
+            proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
+            "failed to return tribute to proposer"
+        );
+
+        emit CancelProposal(proposalId, msg.sender);
+    }
+
+    function updateDelegateKey(address newDelegateKey) public onlyMember {
+        require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
+
+        if (newDelegateKey != msg.sender) {
+            require(!members[newDelegateKey].exists, "cant overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cant overwrite existing delegate keys");
+        }
+
+        Member storage member = members[msg.sender];
+        memberAddressByDelegateKey[member.delegateKey] = address(0);
+        memberAddressByDelegateKey[newDelegateKey] = msg.sender;
+        member.delegateKey = newDelegateKey;
+
+        emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
