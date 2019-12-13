@@ -33,9 +33,9 @@ contract Moloch {
     // ***************
     // EVENTS
     // ***************
-    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, uint256 sharesRequested);
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
+    event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -45,8 +45,9 @@ contract Moloch {
     // INTERNAL ACCOUNTING
     // *******************
     uint256 public proposalCount = 0; // total proposals submitted
-    uint256 public totalSharesAndLoot = 0; // total shares across all members
-    uint256 public totalSharesAndLootRequested = 0; // total shares that have been requested in unprocessed proposals
+    uint256 public totalShares = 0; // total shares across all members
+    uint256 public totalLoot = 0; // total loot across all members
+    uint256 public totalSharesAndLootRequested = 0; // total shares and loot that have been requested in unprocessed proposals (only used to prevent overflows)
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -77,7 +78,7 @@ contract Moloch {
         uint256 noVotes; // the total number of NO votes for this proposal
         bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
-        uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
+        uint256 maxTotalSharesAndLootAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         mapping(address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
@@ -149,7 +150,7 @@ contract Moloch {
 
         members[summoner] = Member(summoner, 1, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
-        totalSharesAndLoot = 1;
+        totalShares = 1;
 
         emit SummonComplete(summoner, 1);
     }
@@ -178,7 +179,7 @@ contract Moloch {
 
         bool[6] memory flags;
 
-        _submitProposal(applicant, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
+        _submitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
     }
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
@@ -188,7 +189,7 @@ contract Moloch {
         bool[6] memory flags;
         flags[4] = true;
 
-        _submitProposal(address(0), 0, 0, tokenToWhitelist, 0, address(0), details, flags);
+        _submitProposal(address(0), 0, 0, 0, tokenToWhitelist, 0, address(0), details, flags);
     }
 
     function submitGuildKickProposal(address memberToKick, string memory details) public {
@@ -197,12 +198,13 @@ contract Moloch {
         bool[6] memory flags;
         flags[5] = true;
 
-        _submitProposal(memberToKick, 0, 0, address(0), 0, address(0), details, flags);
+        _submitProposal(memberToKick, 0, 0, 0, address(0), 0, address(0), details, flags);
     }
 
     function _submitProposal(
         address applicant,
         uint256 sharesRequested,
+        uint256 lootRequested,
         uint256 tributeOffered,
         address tributeToken,
         uint256 paymentRequested,
@@ -215,6 +217,7 @@ contract Moloch {
             proposer : msg.sender,
             sponsor : address(0),
             sharesRequested : sharesRequested,
+            lootRequested : lootRequested,
             tributeOffered : tributeOffered,
             tributeToken : IERC20(tributeToken),
             paymentRequested : paymentRequested,
@@ -224,12 +227,12 @@ contract Moloch {
             noVotes : 0,
             flags : flags,
             details : details,
-            maxTotalSharesAtYesVote : 0
+            maxTotalSharesAndLootAtYesVote : 0
         });
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];
-        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken);
         proposalCount += 1;
     }
 
@@ -244,18 +247,23 @@ contract Moloch {
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
 
+        // whitelist proposal
         if (proposal.flags[4]) {
             require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
             proposedToWhitelist[address(proposal.tributeToken)] = true;
+
+        // guild kick proposal
         } else if (proposal.flags[5]) {
             require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
+
+        // standard proposal
         } else {
             // Make sure we won't run into overflows when doing calculations with shares.
-            // Note that totalSharesAndLoot + totalSharesAndLootRequested + sharesRequested is an upper bound
-            // on the number of shares that can exist until this proposal has been processed.
-            require(totalSharesAndLoot.add(totalSharesAndLootRequested).add(proposal.sharesRequested).add(proposal.lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
-            totalSharesAndLootRequested = totalSharesAndLootRequested.add(proposal.sharesRequested);
+            // Note that totalShares + totalLoot + totalSharesAndLootRequested + sharesRequested + lootRequested is an upper bound
+            // on the number of shares + loot that can exist until this proposal has been processed.
+            require(totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested).add(totalSharesAndLootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
+            totalSharesAndLootRequested = totalSharesAndLootRequested.add(proposal.sharesRequested).add(proposal.lootRequested);
         }
 
         // compute startingPeriod for proposal
@@ -302,8 +310,8 @@ contract Moloch {
             }
 
             // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
-            if (totalSharesAndLoot > proposal.maxTotalSharesAtYesVote) {
-                proposal.maxTotalSharesAtYesVote = totalSharesAndLoot;
+            if (totalShares.add(totalLoot) > proposal.maxTotalSharesAndLootAtYesVote) {
+                proposal.maxTotalSharesAndLootAtYesVote = totalShares.add(totalLoot);
             }
 
         } else if (vote == Vote.No) {
@@ -448,7 +456,7 @@ contract Moloch {
         }
 
         // Make the proposal fail if the dilutionBound is exceeded
-        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
+        if ((totalShares.add(totalLoot)).mul(dilutionBound) < proposal.maxTotalSharesAndLootAtYesVote) {
             didPass = false;
         }
 
@@ -494,7 +502,7 @@ contract Moloch {
     }
 
     function _ragequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
-        uint256 initialTotalSharesAndLoot = totalSharesAndLoot;
+        uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
 
@@ -508,12 +516,12 @@ contract Moloch {
         // burn shares and loot
         member.shares = member.shares.sub(sharesToBurn);
         member.loot = member.loot.sub(lootToBurn);
-        totalSharesAndLoot = totalSharesAndLoot.sub(sharesAndLootToBurn);
-
+        totalShares = totalShares.sub(sharesToBurn);
+        totalLoot = totalLoot.sub(lootToBurn);
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, _approvedTokens),
+            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, _approvedTokens),
             "withdrawal of tokens from guildBank failed"
         );
 
