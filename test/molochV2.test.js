@@ -1385,29 +1385,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.submitVoteMustBeLessThan3)
     })
 
-    // TODO require(proposal.flags[0], "proposal has not been sponsored"); can not be reached because of this: require(proposalIndex < proposalQueue.length, "proposal does not exist");
-    it.skip('require fail - proposal has not been sponsored', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
-
-      // proposal 1
-      await moloch.submitProposal(
-        proposal1.applicant,
-        proposal1.sharesRequested,
-        proposal1.tributeOffered,
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      // no sponsor made
-      await moloch
-        .submitVote(secondProposalIndex, yes, { from: summoner })
-        .should.be.rejectedWith('proposal has not been sponsored')
-    })
-
     it('require fail - voting period has not started', async () => {
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
         .should.be.rejectedWith(revertMessages.submitVoteVotingPeriodHasNotStarted)
@@ -1659,15 +1636,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const emittedLogs  = await moloch.processProposal(firstProposalIndex, { from: processor })
       const { logs } = emittedLogs
       const log = logs[0]
-      const { proposalQueueIndex, memberAddress, tributeOffered, tributeToken, sharesRequested, didPass } = log.args
+      const { proposalQueueIndex, proposalId, didPass } = log.args
 
       assert.equal(log.event, 'ProcessProposal')
       assert.equal(proposalQueueIndex, 0)
-      assert.equal(log.args.applicant, proposal1.applicant)
-      assert.equal(memberAddress, proposer)
-      assert.equal(tributeOffered, proposal1.tributeOffered)
-      assert.equal(tributeToken, proposal1.tributeToken)
-      assert.equal(sharesRequested, proposal1.sharesRequested)
+      assert.equal(proposalId, 0)
       assert.equal(didPass, true)
     })
 
@@ -2251,7 +2224,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedProcessorBalance: 0
       })
 
-      await moloch.processWhitelistProposal(firstProposalIndex, { from: processor })
+      const emittedLogs = await moloch.processWhitelistProposal(firstProposalIndex, { from: processor })
 
       const newApprovedToken = await moloch.approvedTokens(1) // second token to be added
       assert.equal(newApprovedToken, newToken.address)
@@ -2284,6 +2257,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         processor: processor,
         expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
       })
+
+      // Verify process proposal event
+      const { logs } = emittedLogs
+      const log = logs[0]
+      const { proposalQueueIndex, proposalId, didPass } = log.args
+      assert.equal(log.event, 'ProcessProposal')
+      assert.equal(proposalQueueIndex, 0)
+      assert.equal(proposalId, 0)
+      assert.equal(didPass, true)
     })
 
     it('happy path - kick member', async () => {
@@ -2377,7 +2359,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+      const emittedLogs = await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
 
       // shares removed
       await verifyMember({
@@ -2402,6 +2384,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: secondProposalIndex,
         expectedFlags: [true, true, true, false, false, true]
       })
+
+      // Verify process proposal event
+      const { logs } = emittedLogs
+      const log = logs[1] // ragequit event is at logs[0]
+      const { proposalQueueIndex, proposalId, didPass } = log.args
+      assert.equal(log.event, 'ProcessProposal')
+      assert.equal(proposalQueueIndex, secondProposalIndex)
+      assert.equal(proposalId, 1)
+      assert.equal(didPass, true)
     })
 
     it('edge case - emergency processing', async () => {
@@ -3273,7 +3264,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    describe('require fail - ', () => {
+    describe.only('require fail - ', () => {
       it('not a member', async () => {
         await moloch.safeRagequit(1, [proposal1.tributeToken], { from: nonMemberAccount })
           .should.be.rejectedWith(revertMessages.molochNotAMember)
@@ -3284,14 +3275,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           .should.be.rejectedWith(revertMessages.molochRageQuitInsufficientShares)
       })
 
-      it.skip('token must be whitelisted', async () => {
+      it('token must be whitelisted', async () => {
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
         await moloch.safeRagequit(1, [newToken.address], { from: proposal1.applicant })
           .should.be.rejectedWith(revertMessages.molochSafeRageQuitTokenMustBeWhitelisted)
       })
 
-      it.skip('token list must be in order', async () => {
+      it('token list must be in order', async () => {
 
         // whitelist newToken
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
@@ -3328,7 +3319,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
         await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-        await moloch.processProposal(secondProposalIndex, { from: summoner })
+        await moloch.processWhitelistProposal(secondProposalIndex, { from: summoner })
 
         // correct order
         await moloch.safeRagequit(1, [tokenAlpha.address, newToken.address], { from: proposal1.applicant })

@@ -27,7 +27,7 @@ contract Moloch {
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, uint256 paymentRequested, address paymentToken);
     event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
     event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, address tributeToken, uint256 sharesRequested, bool didPass);
+    event ProcessProposal(uint256 indexed proposalQueueIndex, uint256 indexed proposalId, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, address[] tokenList);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -289,7 +289,10 @@ contract Moloch {
 
     function processProposal(uint256 proposalIndex) public {
         _validateProposalForProcessing(proposalIndex);
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+
+        uint256 proposalId = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
+
         require(!proposal.flags[4] && !proposal.flags[5], "must be a standard proposal");
 
         proposal.flags[1] = true;
@@ -339,11 +342,16 @@ contract Moloch {
         }
 
         _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function processWhitelistProposal(uint256 proposalIndex) public {
         _validateProposalForProcessing(proposalIndex);
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+
+        uint256 proposalId = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
+
         require(proposal.flags[4], "must be a whitelist proposal");
 
         proposal.flags[1] = true;
@@ -358,16 +366,19 @@ contract Moloch {
             approvedTokens.push(proposal.tributeToken);
         }
 
-        if (proposal.flags[4]) {
-            proposedToWhitelist[address(proposal.tributeToken)] = false;
-        }
+        proposedToWhitelist[address(proposal.tributeToken)] = false;
 
         _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function processGuildKickProposal(uint256 proposalIndex) public {
         _validateProposalForProcessing(proposalIndex);
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+
+        uint256 proposalId = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
+
         require(proposal.flags[5], "must be a guild kick proposal");
 
         proposal.flags[1] = true;
@@ -381,19 +392,19 @@ contract Moloch {
             _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
         }
 
-        if (proposal.flags[5]) {
-            proposedToKick[proposal.applicant] = false;
-        }
+        proposedToKick[proposal.applicant] = false;
 
         _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function _didPass(uint256 proposalIndex) internal returns (bool _didPass, bool _emergencyProcessing) {
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+    function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
+        Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
-        bool didPass = proposal.yesVotes > proposal.noVotes;
+        didPass = proposal.yesVotes > proposal.noVotes;
 
-        bool emergencyProcessing = false;
+        emergencyProcessing = false;
         if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
             emergencyProcessing = true;
             didPass = false;
@@ -406,9 +417,9 @@ contract Moloch {
         return (didPass, emergencyProcessing);
     }
 
-    function _validateProposalForProcessing(uint256 proposalIndex) internal {
+    function _validateProposalForProcessing(uint256 proposalIndex) internal view {
         require(proposalIndex < proposalQueue.length, "proposal does not exist");
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+        Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
         require(proposal.flags[1] == false, "proposal has already been processed");
@@ -425,8 +436,6 @@ contract Moloch {
             depositToken.transfer(sponsor, proposalDeposit.sub(processingReward)),
             "failed to return proposal deposit to sponsor"
         );
-
-        // emit ProcessProposal(proposalIndex, proposal.applicant, proposal.proposer, proposal.tributeOffered, address(proposal.tributeToken), proposal.sharesRequested, didPass);
     }
 
     function ragequit(uint256 sharesToBurn) public onlyMember {
