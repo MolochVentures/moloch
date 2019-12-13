@@ -1,58 +1,3 @@
-// v2 test spec
-//
-// Process
-// 0. Read the Guide
-//  - https://github.com/MolochVentures/moloch/blob/master/test/README.md DONE
-// 1. Remove obviated code
-// 2. Update tests in logical order (constructor, submitProposal, etc..)
-//  - update test code based on changelog to get each test passing
-// 3. Add tests for new functions
-// 4. Add tests for new edge cases
-//
-// Cleanup
-// - remove abort tests
-// - update to new proposal mapping data structure
-// - update to new proposal.flags data structure
-// - update to using a base token instead of default moloch.approvedToken
-// - update to deposit token for proposal deposits instead of approvedToken
-//
-// New Functions
-// - sponsorProposal
-// - submitWhitelistProposal
-// - submitGuildKickProposal
-// - safeRagequit
-// - cancelProposal
-//
-// submitProposal
-// - update verifySubmitProposal to simply check that proposal is saved
-// - test all requires, modifiers, and code paths (whitelist, guild kick)
-//
-// sponsorProposal
-// - copy verifySubmitProposal code to verifySponsorProposal to do the rest
-// - test all requires, modifiers, and code paths (whitelist, guild kick)
-//
-// submitWhitelistProposal
-// - check that proposal data are saved properly
-//
-// submitGuildKickProposal
-// - check that proposal data are saved properly
-//
-// processProposal
-// - passing proposal auto-fails if guildbank doesn't have $$ for a payment
-//   - proposal sends payment otherwise
-// - return funds to proposer, not applicant
-// - guild kick ragequits on behalf of a user
-//   - updates proposedToKick (for both successs & failure)
-// - token whitelist adds token to whitelist
-//   - updates proposedToWhitelist (for both successs & failure)
-//
-// safeRagequit
-// - works only for approved tokens, ragequits the correct amounts
-//   - e.g. airdrop a non-whitelisted token on to guildbank, then try
-//
-// cancelProposal
-// - returns the tribute tokens to the proposer
-
 const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
 const chai = require('chai')
 const { assert } = chai
@@ -115,6 +60,8 @@ const revertMessages = {
   processProposalProposalIsNotReadyToBeProcessed: 'proposal is not ready to be processed',
   processProposalProposalHasAlreadyBeenProcessed: 'proposal has already been processed',
   processProposalPreviousProposalMustBeProcessed: 'previous proposal must be processed',
+  processWhitelistProposalMustBeAWhitelistProposal: 'must be a whitelist proposal',
+  processGuildKickProposalMustBeAGuildKickProposal: 'must be a guild kick proposal',
   molochNotAMember: 'not a member',
   molochRageQuitInsufficientShares: 'insufficient shares',
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
@@ -859,7 +806,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const emittedLogs = await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
       const { logs } = emittedLogs
       const log = logs[0]
-      const { delegateKey, memberAddress, proposalIndex, proposalQueueIndex, startingPeriod} = log.args
+      const { delegateKey, memberAddress, proposalIndex, proposalQueueIndex, startingPeriod } = log.args
 
       assert.equal(log.event, 'SponsorProposal')
 
@@ -1633,7 +1580,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedProcessorBalance: 0
       })
 
-      const emittedLogs  = await moloch.processProposal(firstProposalIndex, { from: processor })
+      const emittedLogs = await moloch.processProposal(firstProposalIndex, { from: processor })
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalQueueIndex, proposalId, didPass } = log.args
@@ -1708,7 +1655,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         processor: processor,
         expectedProcessorBalance: 0
       })
-
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
@@ -2892,6 +2838,120 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.processProposalPreviousProposalMustBeProcessed)
     })
 
+    it('require fail  - must be a whitelist proposal', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: applicant })
+        .should.be.rejectedWith(revertMessages.processWhitelistProposalMustBeAWhitelistProposal)
+    })
+
+    it('require fail  - must be a guild kick proposal', async () => {
+      const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      // submit whitelist proposal
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!',
+        flags: [true, true, true, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, true, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        memberAddress: summoner,
+        expectedMaxSharesAtYesVote: 1,
+        expectedVote: yes
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit only as whitelisting has no tribute
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: 0,
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance,
+        processor: processor,
+        expectedProcessorBalance: 0
+      })
+
+      await moloch.processGuildKickProposal(firstProposalIndex, { from: applicant })
+        .should.be.rejectedWith(revertMessages.processGuildKickProposalMustBeAGuildKickProposal)
+    })
   })
 
   describe('rageQuit', () => {
