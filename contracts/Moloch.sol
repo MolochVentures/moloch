@@ -96,8 +96,12 @@ contract Moloch {
     uint256[] public proposalQueue;
 
     modifier onlyMember {
-        require(members[msg.sender].shares > 0, "not a member");
+        require(members[msg.sender].shares > 0 || members[msg.sender].loot > 0, "not a member");
         _;
+    }
+
+    modifier onlyShareholder {
+        require(members[msg.sender].shares > 0, "not a shareholder");
     }
 
     modifier onlyDelegate {
@@ -543,7 +547,7 @@ contract Moloch {
         emit CancelProposal(proposalId, msg.sender);
     }
 
-    function updateDelegateKey(address newDelegateKey) public onlyMember {
+    function updateDelegateKey(address newDelegateKey) public onlyShareholder {
         require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
 
         // skip checks if member is setting the delegate key to their member address
