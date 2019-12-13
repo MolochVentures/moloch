@@ -81,6 +81,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   const no = 2
 
   const standardShareRequest = 1
+  const standardLootRequest = 10
   const standardTribute = _1e18
   const summonerShares = 1
 
@@ -122,6 +123,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     proposal1 = {
       applicant: applicant1,
       sharesRequested: standardShareRequest,
+      lootRequested: standardLootRequest,
       tributeOffered: standardTribute,
       tributeToken: tokenAlpha.address,
       paymentRequested: 0,
@@ -132,6 +134,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     proposal2 = {
       applicant: applicant2,
       sharesRequested: standardShareRequest,
+      lootRequested: standardLootRequest,
       tributeOffered: standardTribute,
       tributeToken: tokenBeta.address,
       paymentRequested: 0,
@@ -142,6 +145,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     proposal3 = {
       applicant: applicant2,
       sharesRequested: 0,
+      lootRequested: 0,
       tributeOffered: 0,
       tributeToken: tokenAlpha.address,
       paymentRequested: 10,
@@ -167,6 +171,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitProposal(
         proposal1.applicant,
         proposal1.sharesRequested,
+        proposal1.lootRequested,
         proposal1.tributeOffered,
         proposal1.tributeToken,
         proposal1.paymentRequested,
@@ -211,6 +216,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
 
@@ -225,6 +231,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitProposal(
         proposal2.applicant,
         proposal2.sharesRequested,
+        proposal2.lootRequested,
         proposal2.tributeOffered,
         proposal2.tributeToken,
         proposal2.paymentRequested,
@@ -284,6 +291,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         member: proposal2.applicant,
         expectedDelegateKey: proposal2.applicant,
         expectedShares: proposal2.sharesRequested,
+        expectedLoot: proposal2.lootRequested,
         expectedMemberAddressByDelegateKey: proposal2.applicant
       })
     })
@@ -291,9 +299,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     describe('happy path - ', () => {
       const sharesToQuit = new BN('1') // all
       let initialShares
+      let initialLoot
       beforeEach(async () => {
         initialShares = await moloch.totalShares()
-        await moloch.ragequit(sharesToQuit, { from: proposal1.applicant })
+        initialLoot = await moloch.totalLoot()
+        await moloch.ragequit(sharesToQuit, 0, { from: proposal1.applicant })
       })
 
       it('member shares reduced', async () => {
@@ -302,6 +312,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: proposal1.sharesRequested - sharesToQuit,
+          expectedLoot: proposal1.lootRequested,
           expectedMemberAddressByDelegateKey: proposal1.applicant
         })
 
@@ -309,17 +320,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         const totalShares = await moloch.totalShares()
         assert.equal(+totalShares, summonerShares + proposal1.sharesRequested + proposal2.sharesRequested - sharesToQuit)
 
-        // we have 1e18 of Token Alpha and Token Beta - we are quitting 1 share of 3 in total
-        // so the quitter should get a 1/3 of each token in the DAO
-
+        // balances should be calculated correctly regardless of shares/loot requested in proposals 1-2
         await verifyBalances({
           token: depositToken,
           moloch: moloch.address,
           expectedMolochBalance: 0,
           guildBank: guildBank.address,
-          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares)),
+          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
           applicant: proposal1.applicant,
-          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares),
+          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)),
           sponsor: summoner,
           expectedSponsorBalance: ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
           processor: processor,
@@ -331,9 +340,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           moloch: moloch.address,
           expectedMolochBalance: 0,
           guildBank: guildBank.address,
-          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares)),
+          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
           applicant: proposal1.applicant,
-          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares),
+          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)),
           sponsor: summoner,
           expectedSponsorBalance: 0,
           processor: processor,
@@ -357,6 +366,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitProposal(
         proposal1.applicant,
         proposal1.sharesRequested,
+        proposal1.lootRequested,
         proposal1.tributeOffered,
         proposal1.tributeToken,
         proposal1.paymentRequested,
@@ -413,10 +423,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           member: proposal1.applicant,
           expectedDelegateKey: zeroAddress,
           expectedShares: 0,
+          expectedLoot: 0,
           expectedMemberAddressByDelegateKey: zeroAddress,
           expectedExists: false
         })
-
       })
 
       it('require fail - reverts with reason because token transfer fails', async () => {
@@ -449,10 +459,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           member: proposal1.applicant,
           expectedDelegateKey: zeroAddress,
           expectedShares: 0,
+          expectedLoot: 0,
           expectedMemberAddressByDelegateKey: zeroAddress,
           expectedExists: false
         })
-
       })
     })
 
@@ -471,6 +481,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitProposal(
           proposal2.applicant,
           proposal2.sharesRequested,
+          proposal2.lootRequested,
           proposal2.tributeOffered,
           proposal2.tributeToken,
           proposal2.paymentRequested,
@@ -503,6 +514,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitProposal(
           proposal3.applicant,
           proposal3.sharesRequested,
+          proposal3.lootRequested,
           proposal3.tributeOffered,
           proposal3.tributeToken,
           proposal3.paymentRequested,
@@ -544,6 +556,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitProposal(
           proposal2.applicant,
           proposal2.sharesRequested,
+          proposal2.lootRequested,
           proposal2.tributeOffered,
           proposal2.tributeToken,
           proposal2.paymentRequested,
@@ -576,6 +589,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moloch.submitProposal(
           proposal3.applicant,
           proposal3.sharesRequested,
+          proposal3.lootRequested,
           proposal3.tributeOffered,
           proposal3.tributeToken,
           proposal3.paymentRequested,
@@ -619,6 +633,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitProposal(
         proposal2.applicant,
         proposal2.sharesRequested,
+        proposal2.lootRequested,
         proposal2.tributeOffered,
         proposal2.tributeToken,
         proposal2.paymentRequested,
@@ -654,7 +669,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         member: proposal2.applicant,
         expectedExists: false,
-        expectedShares: 0
+        expectedShares: 0,
+        expectedLoot: 0
       })
 
       await verifyBalances({
@@ -704,7 +720,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: 1,
         expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAtYesVote: 1
+        expectedMaxSharesAndLootAtYesVote: 1
       })
 
       await verifyFlags({
@@ -748,7 +764,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         moloch: moloch,
         member: proposal2.applicant,
         expectedExists: false,
-        expectedShares: 0
+        expectedShares: 0,
+        expectedLoot: 0
       })
 
       // next proposal should be work as expected
@@ -762,6 +779,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitProposal(
         proposal1.applicant,
         proposal1.sharesRequested,
+        proposal1.lootRequested,
         proposal1.tributeOffered,
         proposal1.tributeToken,
         proposal1.paymentRequested,
@@ -806,6 +824,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         member: proposal1.applicant,
         expectedDelegateKey: proposal1.applicant,
         expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
     })
