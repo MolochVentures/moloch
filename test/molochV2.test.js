@@ -41,7 +41,7 @@ const revertMessages = {
   submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
   submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
   submitWhitelistProposalMustProvideTokenAddress: 'must provide token address',
-  submitWhitelistProposalAlreadyHaveWhitelistedToken: 'can\'t already have whitelisted the token',
+  submitWhitelistProposalAlreadyHaveWhitelistedToken: 'cannot already have whitelisted the token',
   submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share',
   sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
   sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has been cancelled',
@@ -60,18 +60,20 @@ const revertMessages = {
   processProposalProposalIsNotReadyToBeProcessed: 'proposal is not ready to be processed',
   processProposalProposalHasAlreadyBeenProcessed: 'proposal has already been processed',
   processProposalPreviousProposalMustBeProcessed: 'previous proposal must be processed',
+  processProposalMustBeAStandardProposal: 'must be a standard proposal',
   processWhitelistProposalMustBeAWhitelistProposal: 'must be a whitelist proposal',
   processGuildKickProposalMustBeAGuildKickProposal: 'must be a guild kick proposal',
-  molochNotAMember: 'not a member',
-  molochRageQuitInsufficientShares: 'insufficient shares',
+  notAMember: 'not a member',
+  rageQuitInsufficientShares: 'insufficient shares',
+  rageQuitUntilHighestIndex: 'cannot ragequit until highest index proposal member voted YES on is processed',
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
-  updateDelegateKeyCantOverwriteExistingMembers: 'cant overwrite existing members',
-  updateDelegateKeyCantOverwriteExistingDelegateKeys: 'cant overwrite existing delegate keys',
+  updateDelegateKeyCantOverwriteExistingMembers: 'cannot overwrite existing members',
+  updateDelegateKeyCantOverwriteExistingDelegateKeys: 'cannot overwrite existing delegate keys',
   canRageQuitProposalDoesNotExist: 'proposal does not exist',
-  molochSafeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
-  molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
-  getMemberProposalVoteMemberDoesntExist: 'member doesn\'t exist',
-  getMemberProposalVoteProposalDoesntExist: 'proposal doesn\'t exist',
+  safeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
+  safeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
+  getMemberProposalVoteMemberDoesntExist: 'member does not exist',
+  getMemberProposalVoteProposalDoesntExist: 'proposal does not exist',
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -2214,7 +2216,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(didPass, true)
     })
 
-    it('happy path - kick member', async () => {
+    it('happy path - guild kick member', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -2713,12 +2715,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it('require fail  - proposal does not exist', async () => {
+    it('require fail - proposal does not exist', async () => {
       await moloch.processProposal(invalidPropsalIndex, { from: processor })
         .should.be.rejectedWith(revertMessages.processProposalProposalDoesNotExist)
     })
 
-    it('require fail  - proposal is not ready to be processed', async () => {
+    it('require fail - proposal is not ready to be processed', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -2753,7 +2755,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.processProposalProposalIsNotReadyToBeProcessed)
     })
 
-    it('require fail  - proposal has already been processed', async () => {
+    it('require fail - proposal has already been processed', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
 
@@ -2790,7 +2792,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.processProposalProposalHasAlreadyBeenProcessed)
     })
 
-    it('require fail  - previous proposal must be processed', async () => {
+    it('require fail - previous proposal must be processed', async () => {
       await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered * 2, { from: creator })
       await tokenAlpha.approve(moloch.address, proposal1.tributeOffered * 2, { from: proposal1.applicant })
 
@@ -2838,7 +2840,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.processProposalPreviousProposalMustBeProcessed)
     })
 
-    it('require fail  - must be a whitelist proposal', async () => {
+    it('require fail - must be a whitelist proposal', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -2885,7 +2887,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.processWhitelistProposalMustBeAWhitelistProposal)
     })
 
-    it('require fail  - must be a guild kick proposal', async () => {
+    it('require fail - must be a guild kick proposal', async () => {
       const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
       // submit whitelist proposal
@@ -2951,6 +2953,142 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.processGuildKickProposal(firstProposalIndex, { from: applicant })
         .should.be.rejectedWith(revertMessages.processGuildKickProposalMustBeAGuildKickProposal)
+    })
+
+    it('require fail - must be a standard process not a whitelist proposal', async () => {
+      const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      // submit whitelist proposal
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!',
+        flags: [true, true, true, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, true, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        memberAddress: summoner,
+        expectedMaxSharesAtYesVote: 1,
+        expectedVote: yes
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit only as whitelisting has no tribute
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: 0,
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance,
+        processor: processor,
+        expectedProcessorBalance: 0
+      })
+
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+        .should.be.rejectedWith(revertMessages.processProposalMustBeAStandardProposal)
+    })
+
+    it('require fail - must be a standard process not a guild kick proposal', async () => {
+      const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      // submit whitelist proposal
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!',
+        flags: [true, true, true, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, true, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        memberAddress: summoner,
+        expectedMaxSharesAtYesVote: 1,
+        expectedVote: yes
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit only as whitelisting has no tribute
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: 0,
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance,
+        processor: processor,
+        expectedProcessorBalance: 0
+      })
+
+      await moloch.processProposal(firstProposalIndex, { from: applicant })
+        .should.be.rejectedWith(revertMessages.processProposalMustBeAStandardProposal)
     })
   })
 
@@ -3110,12 +3248,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     describe('require fail - ', () => {
       it('not a member', async () => {
         await moloch.ragequit(1, { from: nonMemberAccount })
-          .should.be.rejectedWith(revertMessages.molochNotAMember)
+          .should.be.rejectedWith(revertMessages.notAMember)
       })
 
       it('requesting more shares than you own', async () => {
         await moloch.ragequit(proposal1.sharesRequested + 1, { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMessages.molochRageQuitInsufficientShares)
+          .should.be.rejectedWith(revertMessages.rageQuitInsufficientShares)
       })
 
       describe('when a proposal is in flight', () => {
@@ -3165,7 +3303,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         it('unable to quit when proposal in flight', async () => {
           await moloch.ragequit(secondProposalIndex, { from: summoner })
-            .should.be.rejectedWith('cant ragequit until highest index proposal member voted YES on is processed')
+            .should.be.rejectedWith(revertMessages.rageQuitUntilHighestIndex)
         })
       })
     })
@@ -3327,19 +3465,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     describe('require fail - ', () => {
       it('not a member', async () => {
         await moloch.safeRagequit(1, [proposal1.tributeToken], { from: nonMemberAccount })
-          .should.be.rejectedWith(revertMessages.molochNotAMember)
+          .should.be.rejectedWith(revertMessages.notAMember)
       })
 
       it('requesting more shares than you own', async () => {
         await moloch.safeRagequit(proposal1.sharesRequested + 1, [proposal1.tributeToken], { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMessages.molochRageQuitInsufficientShares)
+          .should.be.rejectedWith(revertMessages.rageQuitInsufficientShares)
       })
 
       it('token must be whitelisted', async () => {
         const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
 
         await moloch.safeRagequit(1, [newToken.address], { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMessages.molochSafeRageQuitTokenMustBeWhitelisted)
+          .should.be.rejectedWith(revertMessages.safeRageQuitTokenMustBeWhitelisted)
       })
 
       it('token list must be in order', async () => {
@@ -3386,7 +3524,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         // incorrect order
         await moloch.safeRagequit(1, [newToken.address, tokenAlpha.address], { from: proposal1.applicant })
-          .should.be.rejectedWith(revertMessages.molochSafeRageQuitTokenListMustBeUniqueAndInAscendingOrder)
+          .should.be.rejectedWith(revertMessages.safeRageQuitTokenListMustBeUniqueAndInAscendingOrder)
       })
 
       describe('when a proposal is in flight', () => {
@@ -3436,7 +3574,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
         it('unable to quit when proposal in flight', async () => {
           await moloch.safeRagequit(secondProposalIndex, [proposal1.tributeToken], { from: summoner })
-            .should.be.rejectedWith('cant ragequit until highest index proposal member voted YES on is processed')
+            .should.be.rejectedWith(revertMessages.rageQuitUntilHighestIndex)
         })
       })
     })
