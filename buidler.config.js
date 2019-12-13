@@ -10,6 +10,7 @@ const ROPSTEN_PRIVATE_KEY = ''
 module.exports = {
   networks: {
     develop: {
+      url: 'http://localhost:8545',
       deployedContracts: {
         moloch: '',
         pool: ''
@@ -37,6 +38,9 @@ module.exports = {
   },
   solc: {
     version: '0.5.3',
-    evmVersion: 'byzantium'
+    evmVersion: 'constantinople',
+    optimizer: {
+      enabled: true
+    }
   }
 }

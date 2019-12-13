@@ -1,8 +1,8 @@
 pragma solidity ^0.5.2;
 
-import "./oz/SafeMath.sol";
-import "./oz/IERC20.sol";
-import "./oz/ERC20.sol";
+import "../oz/SafeMath.sol";
+import "../oz/IERC20.sol";
+import "../oz/ERC20.sol";
 
 /**
  * @dev Optional functions from the ERC20 standard.
@@ -70,7 +70,7 @@ interface IClaimsToken {
 	 * @param fundsWithdrawn contains the amount of funds that were withdrawn
 	 */
 	event FundsWithdrawn(address indexed by, uint256 fundsWithdrawn);
-	
+
 	/**
 	 * @dev Withdraws available funds for user.
 	 */
@@ -93,7 +93,7 @@ interface IClaimsToken {
 contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 
 	using SafeMath for uint256;
-	
+
 	// cumulative funds received by this contract
 	uint256 public receivedFunds;
 	// cumulative funds received which were already processed for distribution - by user
@@ -102,8 +102,8 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 	mapping (address => uint256) public claimedFunds;
 
 
-	constructor(address _owner) 
-		public 
+	constructor(address _owner)
+		public
 		ERC20Detailed("ClaimsToken", "CST", 18)
 	{
 		_mint(_owner, 10000 * (10 ** uint256(18)));
@@ -111,9 +111,9 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 		receivedFunds = 0;
 	}
 
-	/** 
+	/**
 	 * @dev Transfer token to a specified address.
-	 * Claims funds for both parties, whereby the amount of tokens withdrawn 
+	 * Claims funds for both parties, whereby the amount of tokens withdrawn
 	 * is inherited by the new token owner.
 	 * @param _to The address to transfer to
 	 * @param _value The amount to be transferred
@@ -151,10 +151,10 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 	 * @dev Get cumulative funds received by ClaimsToken.
 	 * @return A uint256 representing the total funds received by ClaimsToken
 	 */
-	function totalReceivedFunds() 
-		external 
-		view 
-		returns (uint256) 
+	function totalReceivedFunds()
+		external
+		view
+		returns (uint256)
 	{
 		return receivedFunds;
 	}
@@ -167,17 +167,17 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 	function availableFunds(address _forAddress)
 		public
 		view
-		returns (uint256) 
+		returns (uint256)
 	{
 		return _calcUnprocessedFunds(_forAddress).add(claimedFunds[_forAddress]);
 	}
 
 	/**
-	 * @dev Increments cumulative received funds by new received funds. 
+	 * @dev Increments cumulative received funds by new received funds.
 	 * Called when ClaimsToken receives funds.
 	 * @param _value Amount of tokens / Ether received
 	 */
-	function _registerFunds(uint256 _value) 
+	function _registerFunds(uint256 _value)
 		internal
 	{
 		receivedFunds = receivedFunds.add(_value);
@@ -187,10 +187,10 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 	 * @dev Returns payout for a user which can be withdrawn or claimed.
 	 * @param _forAddress Address of ClaimsToken holder
 	 */
-	function _calcUnprocessedFunds(address _forAddress) 
-		internal 
+	function _calcUnprocessedFunds(address _forAddress)
+		internal
 		view
-		returns (uint256) 
+		returns (uint256)
 	{
 		uint256 newReceivedFunds = receivedFunds.sub(processedFunds[_forAddress]);
 		return balanceOf(_forAddress).mul(newReceivedFunds).div(totalSupply());
@@ -209,12 +209,12 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 
 	/**
 	 * @dev Sets claimed but not yet withdrawn funds to 0,
-	 * marks total received funds as processed and 
+	 * marks total received funds as processed and
 	 * returns the withdrawable amount for a user.
 	 * @return A uint256 representing the withdrawable funds
 	 */
-	function _prepareWithdraw() 
-		internal 
+	function _prepareWithdraw()
+		internal
 		returns (uint256)
 	{
 		uint256 withdrawableFunds = availableFunds(msg.sender);
@@ -228,7 +228,7 @@ contract ClaimsToken is IClaimsToken, ERC20, ERC20Detailed {
 
 contract ClaimsTokenERC20Extension is IClaimsToken, ClaimsToken {
 
-	// token that ClaimsToken takes in custodianship 
+	// token that ClaimsToken takes in custodianship
 	IERC20 public fundsToken;
 
 	modifier onlyFundsToken () {
@@ -236,8 +236,8 @@ contract ClaimsTokenERC20Extension is IClaimsToken, ClaimsToken {
 		_;
 	}
 
-	constructor(address _owner, IERC20 _fundsToken) 
-		public 
+	constructor(address _owner, IERC20 _fundsToken)
+		public
 		ClaimsToken(_owner)
 	{
 		require(address(_fundsToken) != address(0));
@@ -248,14 +248,14 @@ contract ClaimsTokenERC20Extension is IClaimsToken, ClaimsToken {
 	/**
 	 * @dev Withdraws available funds for user.
 	 */
-	function withdrawFunds() 
-		external 
-		payable 
+	function withdrawFunds()
+		external
+		payable
 	{
 		require(msg.value == 0, "");
 
 		uint256 withdrawableFunds = _prepareWithdraw();
-		
+
 		require(fundsToken.transfer(msg.sender, withdrawableFunds), "TRANSFER_FAILED");
 	}
 
@@ -265,8 +265,8 @@ contract ClaimsTokenERC20Extension is IClaimsToken, ClaimsToken {
 	 * @param _sender Sender of tokens
 	 * @param _value Amount of tokens
 	 */
-	function tokenFallback(address _sender, uint256 _value, bytes memory) 
-		public 
+	function tokenFallback(address _sender, uint256 _value, bytes memory)
+		public
 		onlyFundsToken()
 	{
 		if (_value > 0) {
