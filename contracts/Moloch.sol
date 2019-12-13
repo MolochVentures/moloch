@@ -1,5 +1,3 @@
-// v2 + loot
-
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
@@ -9,19 +7,19 @@ import "./GuildBank.sol";
 contract Moloch {
     using SafeMath for uint256;
 
-    // ****************
-    // GLOBAL CONSTANTS
-    // ****************
+    /***************
+    GLOBAL CONSTANTS
+    ***************/
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
-    uint256 public emergencyExitWait; // default = 35 periods (7 days) - if proposal has not been processed after this time, its logic will be skipped
+    uint256 public emergencyExitWait; // default = 35 periods (7 days)
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    IERC20 public depositToken; // reference to the deposit token
+    IERC20 public depositToken; // deposit token contract reference; default = wETH
     GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
@@ -65,61 +63,47 @@ contract Moloch {
     }
 
     struct Proposal {
-        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals
-        address proposer; // whoever submitted the proposal (can be non-member)
-        address sponsor; // the member who sponsored the proposal
+        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals (doubles as guild kick target for gkick proposals)
+        address proposer; // the account that submitted the proposal (can be non-member)
+        address sponsor; // the member that sponsored the proposal (moving it into the queue)
         uint256 sharesRequested; // the # of shares the applicant is requesting
         uint256 lootRequested; // the amount of loot the applicant is requesting
         uint256 tributeOffered; // amount of tokens offered as tribute
-        IERC20 tributeToken; // token being offered as tribute
-        uint256 paymentRequested; // the payments requested for each applicant
-        IERC20 paymentToken; // token to send payment in
+        IERC20 tributeToken; // tribute token contract reference
+        uint256 paymentRequested; // amount of tokens requested as payment
+        IERC20 paymentToken; // payment token contract reference
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
         bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-        // 0. sponsored - true only if the proposal has been submitted by a member
-        // 1. processed - true only if the proposal has been processed
-        // 2. didPass - true only if the proposal passed
-        // 3. cancelled - true only if the proposer called cancelProposal before a member sponsored the proposal
-        // 4. whitelist - true only if this is a whitelist proposal, NOTE - tributeToken is target of whitelist
-        // 5. guildkick - true only if this is a guild kick proposal, NOTE - applicant is target of guild kick
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
         uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
-        mapping (address => Vote) votesByMember; // the votes on this proposal by each member
+        mapping(address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
-    mapping (address => bool) public tokenWhitelist;
+    mapping(address => bool) public tokenWhitelist;
     IERC20[] public approvedTokens;
 
-    mapping (address => bool) public proposedToWhitelist; // true if a token has been proposed to the whitelist (to avoid duplicate whitelist proposals)
-    mapping (address => bool) public proposedToKick; // true if a member has been proposed to be kicked (to avoid duplicate guild kick proposals)
+    mapping(address => bool) public proposedToWhitelist;
+    mapping(address => bool) public proposedToKick;
 
-    mapping (address => Member) public members;
-    mapping (address => address) public memberAddressByDelegateKey;
+    mapping(address => Member) public members;
+    mapping(address => address) public memberAddressByDelegateKey;
 
-    // proposals by ID
-    mapping (uint256 => Proposal) public proposals;
+    mapping(uint256 => Proposal) public proposals;
 
-    // the queue of proposals (only store a reference by the proposal id)
     uint256[] public proposalQueue;
 
-    // *********
-    // MODIFIERS
-    // *********
     modifier onlyMember {
-        require(members[msg.sender].shares > 0, "Moloch::onlyMember - not a member");
+        require(members[msg.sender].shares > 0, "not a member");
         _;
     }
 
     modifier onlyDelegate {
-        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "Moloch::onlyDelegate - not a delegate");
+        require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "not a delegate");
         _;
     }
 
-    // *********
-    // FUNCTIONS
-    // *********
     constructor(
         address summoner,
         address[] memory _approvedTokens,
@@ -131,23 +115,22 @@ contract Moloch {
         uint256 _dilutionBound,
         uint256 _processingReward
     ) public {
-        require(summoner != address(0), "Moloch::constructor - summoner cannot be 0");
-        require(_periodDuration > 0, "Moloch::constructor - _periodDuration cannot be 0");
-        require(_votingPeriodLength > 0, "Moloch::constructor - _votingPeriodLength cannot be 0");
-        require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "Moloch::constructor - _votingPeriodLength exceeds limit");
-        require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "Moloch::constructor - _gracePeriodLength exceeds limit");
-        require(_emergencyExitWait > 0, "Moloch::constructor - _emergencyExitWait cannot be 0");
-        require(_dilutionBound > 0, "Moloch::constructor - _dilutionBound cannot be 0");
-        require(_dilutionBound <= MAX_DILUTION_BOUND, "Moloch::constructor - _dilutionBound exceeds limit");
-        require(_approvedTokens.length > 0, "Moloch::constructor - need at least one approved token");
-        require(_proposalDeposit >= _processingReward, "Moloch::constructor - _proposalDeposit cannot be smaller than _processingReward");
+        require(summoner != address(0), "summoner cannot be 0");
+        require(_periodDuration > 0, "_periodDuration cannot be 0");
+        require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
+        require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
+        require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
+        require(_emergencyExitWait > 0, "_emergencyExitWait cannot be 0");
+        require(_dilutionBound > 0, "_dilutionBound cannot be 0");
+        require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
+        require(_approvedTokens.length > 0, "need at least one approved token");
+        require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
 
-        // first approved token is the deposit token
         depositToken = IERC20(_approvedTokens[0]);
 
-        for (uint256 i=0; i < _approvedTokens.length; i++) {
-            require(_approvedTokens[i] != address(0), "Moloch::constructor - _approvedToken cannot be 0");
-            require(!tokenWhitelist[_approvedTokens[i]], "Moloch::constructor - duplicate approved token");
+        for (uint256 i = 0; i < _approvedTokens.length; i++) {
+            require(_approvedTokens[i] != address(0), "_approvedToken cannot be 0");
+            require(!tokenWhitelist[_approvedTokens[i]], "duplicate approved token");
             tokenWhitelist[_approvedTokens[i]] = true;
             approvedTokens.push(IERC20(_approvedTokens[i]));
         }
@@ -171,10 +154,9 @@ contract Moloch {
         emit SummonComplete(summoner, 1);
     }
 
-    // ******************
-    // PROPOSAL FUNCTIONS
-    // ******************
-
+    /*****************
+    PROPOSAL FUNCTIONS
+    *****************/
     function submitProposal(
         address applicant,
         uint256 sharesRequested,
@@ -185,134 +167,94 @@ contract Moloch {
         address paymentToken,
         string memory details
     )
-        public
+    public
     {
-        require(tokenWhitelist[tributeToken], "Moloch::submitProposal - tributeToken is not whitelisted");
-        require(tokenWhitelist[paymentToken], "Moloch::submitProposal - payment is not whitelisted");
-        require(applicant != address(0), "Moloch::submitProposal - applicant cannot be 0");
+        require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
+        require(tokenWhitelist[paymentToken], "payment is not whitelisted");
+        require(applicant != address(0), "applicant cannot be 0");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "Moloch::submitProposal - tribute token transfer failed");
+        require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
 
         bool[6] memory flags;
 
-        // create proposal...
-        Proposal memory proposal = Proposal({
-            applicant: applicant,
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: sharesRequested,
-            lootRequested: lootRequested,
-            tributeOffered: tributeOffered,
-            tributeToken: IERC20(tributeToken),
-            paymentRequested: paymentRequested,
-            paymentToken: IERC20(paymentToken),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
-
-        proposals[proposalCount] = proposal; // save proposal by its id
-        proposalCount += 1; // increment proposal counter
-
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        _submitProposal(applicant, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
     }
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
-        require(tokenToWhitelist != address(0), "Moloch::submitWhitelistProposal - must provide token address");
-        require(!tokenWhitelist[tokenToWhitelist], "Moloch::submitWhitelistProposal - can't already have whitelisted the token");
+        require(tokenToWhitelist != address(0), "must provide token address");
+        require(!tokenWhitelist[tokenToWhitelist], "can't already have whitelisted the token");
 
         bool[6] memory flags;
-        flags[4] = true; // whitelist proposal = true
+        flags[4] = true;
 
-        // create proposal ...
-        Proposal memory proposal = Proposal({
-            applicant: address(0),
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: 0,
-            lootRequested: 0,
-            tributeOffered: 0,
-            tributeToken: IERC20(tokenToWhitelist), // tributeToken = tokenToWhitelist
-            paymentRequested: 0,
-            paymentToken: IERC20(address(0)),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
-        });
-
-
-        proposals[proposalCount] = proposal; // save proposal by its id
-        proposalCount += 1; // increment proposal counter
-
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        _submitProposal(address(0), 0, 0, tokenToWhitelist, 0, address(0), details, flags);
     }
 
     function submitGuildKickProposal(address memberToKick, string memory details) public {
-        require(members[memberToKick].shares > 0, "Moloch::submitGuildKickProposal - member must have at least one share");
+        require(members[memberToKick].shares > 0, "member must have at least one share");
 
         bool[6] memory flags;
-        flags[5] = true; // guild kick proposal = true
+        flags[5] = true;
 
-        // create proposal ...
+        _submitProposal(memberToKick, 0, 0, address(0), 0, address(0), details, flags);
+    }
+
+    function _submitProposal(
+        address applicant,
+        uint256 sharesRequested,
+        uint256 tributeOffered,
+        address tributeToken,
+        uint256 paymentRequested,
+        address paymentToken,
+        string memory details,
+        bool[6] memory flags
+    ) internal {
         Proposal memory proposal = Proposal({
-            applicant: memberToKick, // applicant = memberToKick
-            proposer: msg.sender,
-            sponsor: address(0),
-            sharesRequested: 0,
-            lootRequested: 0,
-            tributeOffered: 0,
-            tributeToken: IERC20(address(0)),
-            paymentRequested: 0,
-            paymentToken: IERC20(address(0)),
-            startingPeriod: 0,
-            yesVotes: 0,
-            noVotes: 0,
-            flags: flags,
-            details: details,
-            maxTotalSharesAtYesVote: 0
+            applicant : applicant,
+            proposer : msg.sender,
+            sponsor : address(0),
+            sharesRequested : sharesRequested,
+            tributeOffered : tributeOffered,
+            tributeToken : IERC20(tributeToken),
+            paymentRequested : paymentRequested,
+            paymentToken : IERC20(paymentToken),
+            startingPeriod : 0,
+            yesVotes : 0,
+            noVotes : 0,
+            flags : flags,
+            details : details,
+            maxTotalSharesAtYesVote : 0
         });
 
-        proposals[proposalCount] = proposal; // save proposal by its id
-        proposalCount += 1; // increment proposal counter
-
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // TODO emit SubmitProposal(proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        proposals[proposalCount] = proposal;
+        address memberAddress = memberAddressByDelegateKey[msg.sender];
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
+        proposalCount += 1;
     }
 
     function sponsorProposal(uint256 proposalId) public onlyDelegate {
-        // collect proposal deposit from proposer and store it in the Moloch until the proposal is processed
-        require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "Moloch::submitProposal - proposal deposit token transfer failed");
+        // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
+        require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
 
-        Proposal memory proposal = proposals[proposalId];
+        Proposal storage proposal = proposals[proposalId];
 
-        require(!proposal.flags[0], "Moloch::sponsorProposal - proposal has already been sponsored");
-        require(!proposal.flags[3], "Moloch::sponsorProposal - proposal has been cancelled");
+        require(proposal.proposer != address(0), 'proposal must have been proposed');
 
-        // token whitelist proposal
+        require(!proposal.flags[0], "proposal has already been sponsored");
+        require(!proposal.flags[3], "proposal has been cancelled");
+
         if (proposal.flags[4]) {
-            require(!proposedToWhitelist[address(proposal.tributeToken)]); // already an active proposal to whitelist this token
+            require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
             proposedToWhitelist[address(proposal.tributeToken)] = true;
-
-        // gkick proposal
         } else if (proposal.flags[5]) {
-            require(!proposedToKick[proposal.applicant]); // already an active proposal to kick this member
+            require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
-
-        // standard proposal
         } else {
             // Make sure we won't run into overflows when doing calculations with shares.
             // Note that totalSharesAndLoot + totalSharesAndLootRequested + sharesRequested is an upper bound
             // on the number of shares that can exist until this proposal has been processed.
-            require(totalSharesAndLoot.add(totalSharesAndLootRequested).add(proposal.sharesRequested).add(proposal.lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "Moloch::submitProposal - too many shares requested");
+            require(totalSharesAndLoot.add(totalSharesAndLootRequested).add(proposal.sharesRequested).add(proposal.lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
             totalSharesAndLootRequested = totalSharesAndLootRequested.add(proposal.sharesRequested);
         }
 
@@ -327,33 +269,30 @@ contract Moloch {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         proposal.sponsor = memberAddress;
 
-        // ... and append it to the queue by its id
-        proposalQueue.push(proposalId);
+        proposal.flags[0] = true;
 
-        // uint256 proposalIndex = proposalQueue.length.sub(1);
-        // emit SponsorProposal(proposalId, proposalIndex, msg.sender, memberAddress, applicant, tributeOffered, sharesRequested);
+        // append proposal to the queue
+        proposalQueue.push(proposalId);
+        emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         Member storage member = members[memberAddress];
 
-        require(proposalIndex < proposalQueue.length, "Moloch::submitVote - proposal does not exist");
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
         Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
 
-        require(uintVote < 3, "Moloch::submitVote - uintVote must be less than 3");
+        require(uintVote < 3, "must be less than 3");
         Vote vote = Vote(uintVote);
 
-        require(proposal.flags[0], "Moloch::submitVote - proposal has not been sponsored");
-        require(getCurrentPeriod() >= proposal.startingPeriod, "Moloch::submitVote - voting period has not started");
-        require(!hasVotingPeriodExpired(proposal.startingPeriod), "Moloch::submitVote - proposal voting period has expired");
-        require(proposal.votesByMember[memberAddress] == Vote.Null, "Moloch::submitVote - member has already voted on this proposal");
-        require(vote == Vote.Yes || vote == Vote.No, "Moloch::submitVote - vote must be either Yes or No");
+        require(getCurrentPeriod() >= proposal.startingPeriod, "voting period has not started");
+        require(!hasVotingPeriodExpired(proposal.startingPeriod), "proposal voting period has expired");
+        require(proposal.votesByMember[memberAddress] == Vote.Null, "member has already voted");
+        require(vote == Vote.Yes || vote == Vote.No, "vote must be either Yes or No");
 
-        // store vote
         proposal.votesByMember[memberAddress] = vote;
 
-        // count vote
         if (vote == Vote.Yes) {
             proposal.yesVotes = proposal.yesVotes.add(member.shares);
 
@@ -375,122 +314,166 @@ contract Moloch {
     }
 
     function processProposal(uint256 proposalIndex) public {
-        require(proposalIndex < proposalQueue.length, "Moloch::processProposal - proposal does not exist");
-        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
+        _validateProposalForProcessing(proposalIndex);
 
-        require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "Moloch::processProposal - proposal is not ready to be processed");
-        require(proposal.flags[1] == false, "Moloch::processProposal - proposal has already been processed");
-        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "Moloch::processProposal - previous proposal must be processed");
+        uint256 proposalId = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
+
+        require(!proposal.flags[4] && !proposal.flags[5], "must be a standard proposal");
 
         proposal.flags[1] = true;
         totalSharesAndLootRequested = totalSharesAndLootRequested.sub(proposal.sharesRequested.add(proposal.lootRequested));
 
-        bool didPass = proposal.yesVotes > proposal.noVotes;
+        (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
 
-        // If emergencyExitWait has passed from when this proposal *should* have been able to be processed, skip all effects
-        bool emergencyProcessing = false;
+        if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
+            didPass = false;
+        }
+
+        // PROPOSAL PASSED
+        if (didPass) {
+            proposal.flags[2] = true;
+
+            // if the applicant is already a member, add to their existing shares
+            if (members[proposal.applicant].exists) {
+                members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
+
+            // the applicant is a new member, create a new record for them
+            } else {
+                // if the applicant address is already taken by a member's delegateKey, reset it to their member address
+                if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
+                    address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
+                    memberAddressByDelegateKey[memberToOverride] = memberToOverride;
+                    members[memberToOverride].delegateKey = memberToOverride;
+                }
+
+                // use applicant address as delegateKey by default
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
+                memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
+            }
+
+            // mint new shares
+            totalShares = totalShares.add(proposal.sharesRequested);
+
+            require(
+                proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
+                "token transfer to guild bank failed"
+            );
+
+            require(
+                guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
+                "token payment to applicant failed"
+            );
+
+
+        // PROPOSAL FAILED
+        } else {
+            // return all tokens to the applicant (skip if emergency processing)
+            if (!emergencyProcessing) {
+                require(
+                    proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
+                    "failing vote token transfer failed"
+                );
+            }
+        }
+
+        _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
+    }
+
+    function processWhitelistProposal(uint256 proposalIndex) public {
+        _validateProposalForProcessing(proposalIndex);
+
+        uint256 proposalId = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
+
+        require(proposal.flags[4], "must be a whitelist proposal");
+
+        proposal.flags[1] = true;
+        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+
+        (bool didPass, bool _) = _didPass(proposalIndex);
+
+        if (didPass) {
+            proposal.flags[2] = true;
+
+            tokenWhitelist[address(proposal.tributeToken)] = true;
+            approvedTokens.push(proposal.tributeToken);
+        }
+
+        proposedToWhitelist[address(proposal.tributeToken)] = false;
+
+        _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
+    }
+
+    function processGuildKickProposal(uint256 proposalIndex) public {
+        _validateProposalForProcessing(proposalIndex);
+
+        uint256 proposalId = proposalQueue[proposalIndex];
+        Proposal storage proposal = proposals[proposalId];
+
+        require(proposal.flags[5], "must be a guild kick proposal");
+
+        proposal.flags[1] = true;
+        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+
+        (bool didPass, bool _) = _didPass(proposalIndex);
+
+        if (didPass) {
+            proposal.flags[2] = true;
+
+            _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
+        }
+
+        proposedToKick[proposal.applicant] = false;
+
+        _returnDeposit(proposal.sponsor);
+
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
+    }
+
+    function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
+        Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
+
+        didPass = proposal.yesVotes > proposal.noVotes;
+
+        // Make the proposal fail (and skip returning tribute) if emergencyExitWait is exceeded
+        emergencyProcessing = false;
         if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
             emergencyProcessing = true;
             didPass = false;
         }
 
         // Make the proposal fail if the dilutionBound is exceeded
-        if (totalSharesAndLoot.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
+        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
             didPass = false;
         }
 
-        // Make sure there is enough tokens for payments, or auto-fail
-        if (proposal.paymentRequested >= proposal.paymentToken.balanceOf(address(guildBank))) {
-            didPass = false;
-        }
+        return (didPass, emergencyProcessing);
+    }
 
-        // PROPOSAL PASSED
-        if (didPass) {
+    function _validateProposalForProcessing(uint256 proposalIndex) internal view {
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
+        Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
-            proposal.flags[2] = true; // didPass = true
+        require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
+        require(proposal.flags[1] == false, "proposal has already been processed");
+        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
+    }
 
-            // whitelist proposal passed, add token to whitelist
-            if (proposal.flags[4]) {
-               tokenWhitelist[address(proposal.tributeToken)] = true;
-               approvedTokens.push(proposal.tributeToken);
-
-            // guild kick proposal passed, ragequit 100% of the member's shares
-            // NOTE - if any approvedToken is broken gkicks will fail and get stuck here (until emergency processing)
-            } else if (proposal.flags[5]) {
-                _ragequit(members[proposal.applicant].shares, members[proposal.applicant].loot, approvedTokens);
-
-            // standard proposal passed, collect tribute, send payment, mint shares
-            } else {
-                // if the applicant is already a member, add to their existing shares
-                if (members[proposal.applicant].exists) {
-                    members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
-                    members[proposal.applicant].loot = members[proposal.applicant].loot.add(proposal.lootRequested);
-
-                // the applicant is a new member, create a new record for them
-                } else {
-                    // if the applicant address is already taken by a member's delegateKey, reset it to their member address
-                    if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
-                        address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
-                        memberAddressByDelegateKey[memberToOverride] = memberToOverride;
-                        members[memberToOverride].delegateKey = memberToOverride;
-                    }
-
-                    // use applicant address as delegateKey by default
-                    members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0);
-                    memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
-                }
-
-                // mint new shares
-                totalSharesAndLoot = totalSharesAndLoot.add(proposal.sharesRequested).add(proposal.lootRequested);
-
-                // transfer tribute tokens to guild bank
-                require(
-                    proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
-                    "Moloch::processProposal - token transfer to guild bank failed"
-                );
-
-                // transfer payment tokens to applicant
-                require(
-                    guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
-                    "Moloch::processProposal - token payment to applicant failed"
-                );
-            }
-
-        // PROPOSAL FAILED
-        } else {
-            // Don't return applicant tokens if we are in emergency processing - likely the tokens are broken
-            if (!emergencyProcessing) {
-                // return all tokens to the proposer
-                require(
-                    proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
-                    "Moloch::processProposal - failing vote token transfer failed"
-                );
-            }
-        }
-
-        // if token whitelist proposal, remove token from tokens proposed to whitelist
-        if (proposal.flags[4]) {
-            proposedToWhitelist[address(proposal.tributeToken)] = false;
-        }
-
-        // if guild kick proposal, remove member from list of members proposed to be kicked
-        if (proposal.flags[5]) {
-            proposedToKick[proposal.applicant] = false;
-        }
-
-        // send msg.sender the processingReward
+    function _returnDeposit(address sponsor) internal {
         require(
             depositToken.transfer(msg.sender, processingReward),
-            "Moloch::processProposal - failed to send processing reward to msg.sender"
+            "failed to send processing reward to msg.sender"
         );
 
-        // return deposit to sponsor (subtract processing reward)
         require(
-            depositToken.transfer(proposal.sponsor, proposalDeposit.sub(processingReward)),
-            "Moloch::processProposal - failed to return proposal deposit to sponsor"
+            depositToken.transfer(sponsor, proposalDeposit.sub(processingReward)),
+            "failed to return proposal deposit to sponsor"
         );
-
-        // TODO emit ProcessProposal()
     }
 
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public onlyMember {
@@ -500,11 +483,10 @@ contract Moloch {
     function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
         for (uint256 i=0; i < tokenList.length; i++) {
-            require(tokenWhitelist[address(tokenList[i])], "Moloch::safeRequit - token must be whitelisted");
+            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
 
-            // check token uniqueness - for every token address after the first, enforce ascending lexical order
             if (i > 0) {
-                require(tokenList[i] > tokenList[i-1], "Moloch::safeRagequit - tokenList must be unique and in ascending order");
+                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
             }
         }
 
@@ -514,12 +496,12 @@ contract Moloch {
     function _ragequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
         uint256 initialTotalSharesAndLoot = totalSharesAndLoot;
 
-        Member storage member = members[msg.sender];
+        Member storage member = members[memberAddress];
 
-        require(member.shares >= sharesToBurn, "Moloch::ragequit - insufficient shares");
-        require(member.loot >= lootToBurn, "Moloch::ragequit - insufficient loot");
+        require(member.shares >= sharesToBurn, "insufficient shares");
+        require(member.loot >= lootToBurn, "insufficient loot");
 
-        require(canRagequit(member.highestIndexYesVote), "Moloch::ragequit - cant ragequit until highest index proposal member voted YES on is processed");
+        require(canRagequit(member.highestIndexYesVote), "cant ragequit until highest index proposal member voted YES on is processed");
 
         uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);
 
@@ -531,35 +513,40 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(msg.sender, sharesToBurn, initialTotalSharesAndLoot, approvedTokens),
-            "Moloch::ragequit - withdrawal of tokens from guildBank failed"
+            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, _approvedTokens),
+            "withdrawal of tokens from guildBank failed"
         );
 
-        // emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
+        // TODO remove this? we emit events in guildbank withdraw
+        address[] memory tokenList = new address[](_approvedTokens.length);
+        for (uint256 i=0; i < _approvedTokens.length; i++) {
+            tokenList[i] = address(approvedTokens[i]);
+        }
+        emit Ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
     function cancelProposal(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
-        require(!proposal.flags[0], "Moloch::cancelProposal - proposal has already been sponsored");
-        require(msg.sender == proposal.proposer, "Moloch::cancelProposal - only the proposer can cancel");
+        require(!proposal.flags[0], "proposal has already been sponsored");
+        require(msg.sender == proposal.proposer, "only the proposer can cancel");
 
-        proposal.flags[3] = true; // cancelled
+        proposal.flags[3] = true;
 
         require(
             proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
-            "Moloch::processProposal - failed to return tribute to proposer"
+            "failed to return tribute to proposer"
         );
 
         emit CancelProposal(proposalId, msg.sender);
     }
 
     function updateDelegateKey(address newDelegateKey) public onlyMember {
-        require(newDelegateKey != address(0), "Moloch::updateDelegateKey - newDelegateKey cannot be 0");
+        require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
 
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
-            require(!members[newDelegateKey].exists, "Moloch::updateDelegateKey - cant overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "Moloch::updateDelegateKey - cant overwrite existing delegate keys");
+            require(!members[newDelegateKey].exists, "cant overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cant overwrite existing delegate keys");
         }
 
         Member storage member = members[msg.sender];
@@ -570,10 +557,9 @@ contract Moloch {
         emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
-    // ****************
-    // GETTER FUNCTIONS
-    // ****************
-
+    /***************
+    GETTER FUNCTIONS
+    ***************/
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
         return x >= y ? x : y;
     }
@@ -586,10 +572,14 @@ contract Moloch {
         return proposalQueue.length;
     }
 
+    function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
+        return proposals[proposalIndex].flags;
+    }
+
     // can only ragequit if the latest proposal you voted YES on has been processed
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
-        require(highestIndexYesVote < proposalQueue.length, "Moloch::canRagequit - proposal does not exist");
-        return proposals[proposalQueue[highestIndexYesVote]].flags[1]; // processed
+        require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
+        return proposals[proposalQueue[highestIndexYesVote]].flags[1];
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
@@ -597,8 +587,8 @@ contract Moloch {
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
-        require(members[memberAddress].exists, "Moloch::getMemberProposalVote - member doesn't exist");
-        require(proposalIndex < proposalQueue.length, "Moloch::getMemberProposalVote - proposal doesn't exist");
+        require(members[memberAddress].exists, "member doesn't exist");
+        require(proposalIndex < proposalQueue.length, "proposal doesn't exist");
         return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
     }
 }
