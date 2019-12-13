@@ -33,9 +33,9 @@ contract Moloch {
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
 
-    uint256 public proposalCount = 0;
-    uint256 public totalShares = 0;
-    uint256 public totalSharesRequested = 0;
+    uint256 public proposalCount;
+    uint256 public totalShares;
+    uint256 public totalSharesRequested;
 
     enum Vote {
         Null,
@@ -207,7 +207,7 @@ contract Moloch {
             flags : flags,
             details : details,
             maxTotalSharesAtYesVote : 0
-            });
+        });
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];

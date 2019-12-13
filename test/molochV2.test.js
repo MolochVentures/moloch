@@ -3264,7 +3264,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    describe.only('require fail - ', () => {
+    describe('require fail - ', () => {
       it('not a member', async () => {
         await moloch.safeRagequit(1, [proposal1.tributeToken], { from: nonMemberAccount })
           .should.be.rejectedWith(revertMessages.molochNotAMember)
