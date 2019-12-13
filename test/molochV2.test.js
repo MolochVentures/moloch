@@ -3472,7 +3472,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       let emittedLogs
 
       beforeEach(async () => {
-        const { logs } = await moloch.safeRagequit(proposal1.sharesRequested, [proposal1.tributeToken], { from: proposal1.applicant })
+        const { logs } = await moloch.safeRagequit(proposal1.sharesRequested, proposal1.lootRequested, [proposal1.tributeToken], { from: proposal1.applicant })
         emittedLogs = logs
       })
 
@@ -3482,11 +3482,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: 0,
+          expectedLoot: 0,
           expectedMemberAddressByDelegateKey: proposal1.applicant
         })
 
         const totalShares = await moloch.totalShares()
         assert.equal(totalShares, 1)
+
+        const totalLoot = await moloch.totalLoot()
+        assert.equal(totalLoot, 0)
       })
 
       it.skip('emits Ragequit event', async () => {
@@ -3506,7 +3510,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       beforeEach(async () => {
         partialRageQuitShares = 20
-        const { logs } = await moloch.safeRagequit(partialRageQuitShares, [proposal1.tributeToken], { from: proposal1.applicant })
+        const { logs } = await moloch.safeRagequit(partialRageQuitShares, 0, [proposal1.tributeToken], { from: proposal1.applicant })
         emittedLogs = logs
       })
 
@@ -3516,12 +3520,48 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           member: proposal1.applicant,
           expectedDelegateKey: proposal1.applicant,
           expectedShares: proposal1.sharesRequested - partialRageQuitShares,
+          expectedLoot: proposal1.lootRequested,
           expectedMemberAddressByDelegateKey: proposal1.applicant
         })
 
         const totalShares = await moloch.totalShares()
         // your remaining shares plus the summoners 1 share
         assert.equal(totalShares, (proposal1.sharesRequested - partialRageQuitShares) + summonerShares)
+
+        const totalLoot = await moloch.totalLoot()
+        assert.equal(totalLoot, proposal1.lootRequested)
+      })
+
+      it.skip('emits Ragequit event', async () => {
+        const log = emittedLogs[0]
+        const { memberAddress, sharesToBurn, tokenList } = log.args
+        assert.equal(log.event, 'Ragequit')
+        assert.equal(memberAddress, proposal1.applicant)
+        assert.equal(+sharesToBurn, partialRageQuitShares)
+        assert.deepEqual(tokenList, [tokenAlpha.address])
+      })
+    })
+
+    describe('partial loot', () => {
+      it('member shares reduced', async () => {
+        const partialRageQuitLoot = 0
+        await moloch.safeRagequit(0, partialRageQuitLoot, [proposal1.tributeToken], { from: proposal1.applicant })
+
+        await verifyMember({
+          moloch: moloch,
+          member: proposal1.applicant,
+          expectedDelegateKey: proposal1.applicant,
+          expectedShares: proposal1.sharesRequested,
+          expectedLoot: proposal1.lootRequested - partialRageQuitLoot,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
+
+        const totalShares = await moloch.totalShares()
+        // your remaining shares plus the summoners 1 share
+        assert.equal(totalShares, proposal1.sharesRequested + summonerShares)
+
+        const totalLoot = await moloch.totalLoot()
+        assert.equal(totalLoot, proposal1.lootRequested - partialRageQuitLoot)
       })
 
       it.skip('emits Ragequit event', async () => {
