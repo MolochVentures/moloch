@@ -412,7 +412,7 @@ contract Moloch {
 
         proposal.flags[1] = true;
 
-        (bool didPass, bool _) = _didPass(proposalIndex);
+        (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -438,7 +438,7 @@ contract Moloch {
 
         proposal.flags[1] = true;
 
-        (bool didPass, bool _) = _didPass(proposalIndex);
+        (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
