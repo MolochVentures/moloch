@@ -19,17 +19,17 @@ contract GuildBank  {
 
     event Withdrawal(address indexed receiver, address indexed tokenAddress, uint256 amount);
 
-    function withdraw(address _receiver, uint256 _shares, uint256 _totalShares, IERC20[] memory _approvedTokens) public onlyOwner returns (bool) {
-        for (uint256 i = 0; i < _approvedTokens.length; i++) {
-            uint256 amount = _approvedTokens[i].balanceOf(address(this)).mul(_shares).div(_totalShares);
-            emit Withdrawal(_receiver, address(_approvedTokens[i]), amount);
-            require(_approvedTokens[i].transfer(_receiver, amount));
+    function withdraw(address receiver, uint256 shares, uint256 totalShares, IERC20[] memory approvedTokens) public onlyOwner returns (bool) {
+        for (uint256 i = 0; i < approvedTokens.length; i++) {
+            uint256 amount = approvedTokens[i].balanceOf(address(this)).mul(shares).div(totalShares);
+            emit Withdrawal(receiver, address(approvedTokens[i]), amount);
+            require(approvedTokens[i].transfer(receiver, amount));
         }
         return true;
     }
 
-    function withdrawToken(IERC20 _token, address _receiver, uint256 _amount) public onlyOwner returns (bool) {
-        emit Withdrawal(_receiver, address(_token), _amount);
-        return _token.transfer(_receiver, _amount);
+    function withdrawToken(IERC20 token, address receiver, uint256 amount) public onlyOwner returns (bool) {
+        emit Withdrawal(receiver, address(token), amount);
+        return token.transfer(receiver, amount);
     }
 }

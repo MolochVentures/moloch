@@ -104,7 +104,7 @@ contract Moloch {
     }
 
     constructor(
-        address _summoner,
+        address summoner,
         address[] memory _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
@@ -114,7 +114,7 @@ contract Moloch {
         uint256 _dilutionBound,
         uint256 _processingReward
     ) public {
-        require(_summoner != address(0), "summoner cannot be 0");
+        require(summoner != address(0), "summoner cannot be 0");
         require(_periodDuration > 0, "_periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
@@ -146,96 +146,96 @@ contract Moloch {
 
         summoningTime = now;
 
-        members[_summoner] = Member(_summoner, 1, true, 0);
-        memberAddressByDelegateKey[_summoner] = _summoner;
+        members[summoner] = Member(summoner, 1, true, 0);
+        memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
 
-        emit SummonComplete(_summoner, 1);
+        emit SummonComplete(summoner, 1);
     }
 
     /*****************
     PROPOSAL FUNCTIONS
     *****************/
     function submitProposal(
-        address _applicant,
-        uint256 _sharesRequested,
-        uint256 _tributeOffered,
-        address _tributeToken,
-        uint256 _paymentRequested,
-        address _paymentToken,
+        address applicant,
+        uint256 sharesRequested,
+        uint256 tributeOffered,
+        address tributeToken,
+        uint256 paymentRequested,
+        address paymentToken,
         string memory details
     )
     public
     {
-        require(tokenWhitelist[_tributeToken], "tributeToken is not whitelisted");
-        require(tokenWhitelist[_paymentToken], "payment is not whitelisted");
-        require(_applicant != address(0), "applicant cannot be 0");
+        require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
+        require(tokenWhitelist[paymentToken], "payment is not whitelisted");
+        require(applicant != address(0), "applicant cannot be 0");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
-        require(IERC20(_tributeToken).transferFrom(msg.sender, address(this), _tributeOffered), "tribute token transfer failed");
+        require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
 
         bool[6] memory flags;
 
-        _submitProposal(_applicant, _sharesRequested, _tributeOffered, _tributeToken, _paymentRequested, _paymentToken, details, flags);
+        _submitProposal(applicant, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
     }
 
-    function submitWhitelistProposal(address _tokenToWhitelist, string memory _details) public {
-        require(_tokenToWhitelist != address(0), "must provide token address");
-        require(!tokenWhitelist[_tokenToWhitelist], "can't already have whitelisted the token");
+    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
+        require(tokenToWhitelist != address(0), "must provide token address");
+        require(!tokenWhitelist[tokenToWhitelist], "can't already have whitelisted the token");
 
         bool[6] memory flags;
         flags[4] = true;
 
-        _submitProposal(address(0), 0, 0, _tokenToWhitelist, 0, address(0), _details, flags);
+        _submitProposal(address(0), 0, 0, tokenToWhitelist, 0, address(0), details, flags);
     }
 
-    function submitGuildKickProposal(address _memberToKick, string memory _details) public {
-        require(members[_memberToKick].shares > 0, "member must have at least one share");
+    function submitGuildKickProposal(address memberToKick, string memory details) public {
+        require(members[memberToKick].shares > 0, "member must have at least one share");
 
         bool[6] memory flags;
         flags[5] = true;
 
-        _submitProposal(_memberToKick, 0, 0, address(0), 0, address(0), _details, flags);
+        _submitProposal(memberToKick, 0, 0, address(0), 0, address(0), details, flags);
     }
 
     function _submitProposal(
-        address _applicant,
-        uint256 _sharesRequested,
-        uint256 _tributeOffered,
-        address _tributeToken,
-        uint256 _paymentRequested,
-        address _paymentToken,
-        string memory _details,
-        bool[6] memory _flags
+        address applicant,
+        uint256 sharesRequested,
+        uint256 tributeOffered,
+        address tributeToken,
+        uint256 paymentRequested,
+        address paymentToken,
+        string memory details,
+        bool[6] memory flags
     ) internal {
         Proposal memory proposal = Proposal({
-            applicant : _applicant,
+            applicant : applicant,
             proposer : msg.sender,
             sponsor : address(0),
-            sharesRequested : _sharesRequested,
-            tributeOffered : _tributeOffered,
-            tributeToken : IERC20(_tributeToken),
-            paymentRequested : _paymentRequested,
-            paymentToken : IERC20(_paymentToken),
+            sharesRequested : sharesRequested,
+            tributeOffered : tributeOffered,
+            tributeToken : IERC20(tributeToken),
+            paymentRequested : paymentRequested,
+            paymentToken : IERC20(paymentToken),
             startingPeriod : 0,
             yesVotes : 0,
             noVotes : 0,
-            flags : _flags,
-            details : _details,
+            flags : flags,
+            details : details,
             maxTotalSharesAtYesVote : 0
         });
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];
-        emit SubmitProposal(proposalCount, msg.sender, memberAddress, _applicant, _tributeOffered, _tributeToken, _sharesRequested, _paymentRequested, _paymentToken);
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
         proposalCount += 1;
     }
 
-    function sponsorProposal(uint256 _proposalId) public onlyDelegate {
+    function sponsorProposal(uint256 proposalId) public onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
 
-        Proposal storage proposal = proposals[_proposalId];
+        Proposal storage proposal = proposals[proposalId];
 
         require(proposal.proposer != address(0), 'proposal must have been proposed');
 
@@ -270,19 +270,19 @@ contract Moloch {
         proposal.flags[0] = true;
 
         // append proposal to the queue
-        proposalQueue.push(_proposalId);
-        emit SponsorProposal(msg.sender, memberAddress, _proposalId, proposalQueue.length.sub(1), startingPeriod);
+        proposalQueue.push(proposalId);
+        emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
 
-    function submitVote(uint256 _proposalIndex, uint8 _uintVote) public onlyDelegate {
+    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         Member storage member = members[memberAddress];
 
-        require(_proposalIndex < proposalQueue.length, "proposal does not exist");
-        Proposal storage proposal = proposals[proposalQueue[_proposalIndex]];
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
+        Proposal storage proposal = proposals[proposalQueue[proposalIndex]];
 
-        require(_uintVote < 3, "must be less than 3");
-        Vote vote = Vote(_uintVote);
+        require(uintVote < 3, "must be less than 3");
+        Vote vote = Vote(uintVote);
 
         require(getCurrentPeriod() >= proposal.startingPeriod, "voting period has not started");
         require(!hasVotingPeriodExpired(proposal.startingPeriod), "proposal voting period has expired");
@@ -295,8 +295,8 @@ contract Moloch {
             proposal.yesVotes = proposal.yesVotes.add(member.shares);
 
             // set highest index (latest) yes vote - must be processed for member to ragequit
-            if (_proposalIndex > member.highestIndexYesVote) {
-                member.highestIndexYesVote = _proposalIndex;
+            if (proposalIndex > member.highestIndexYesVote) {
+                member.highestIndexYesVote = proposalIndex;
             }
 
             // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
@@ -308,13 +308,13 @@ contract Moloch {
             proposal.noVotes = proposal.noVotes.add(member.shares);
         }
 
-        emit SubmitVote(_proposalIndex, msg.sender, memberAddress, _uintVote);
+        emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
-    function processProposal(uint256 _proposalIndex) public {
-        _validateProposalForProcessing(_proposalIndex);
+    function processProposal(uint256 proposalIndex) public {
+        _validateProposalForProcessing(proposalIndex);
 
-        uint256 proposalId = proposalQueue[_proposalIndex];
+        uint256 proposalId = proposalQueue[proposalIndex];
         Proposal storage proposal = proposals[proposalId];
 
         require(!proposal.flags[4] && !proposal.flags[5], "must be a standard proposal");
@@ -322,7 +322,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool emergencyProcessing) = _didPass(_proposalIndex);
+        (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
 
         if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
@@ -377,13 +377,13 @@ contract Moloch {
 
         _returnDeposit(proposal.sponsor);
 
-        emit ProcessProposal(_proposalIndex, proposalId, didPass);
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function processWhitelistProposal(uint256 _proposalIndex) public {
-        _validateProposalForProcessing(_proposalIndex);
+    function processWhitelistProposal(uint256 proposalIndex) public {
+        _validateProposalForProcessing(proposalIndex);
 
-        uint256 proposalId = proposalQueue[_proposalIndex];
+        uint256 proposalId = proposalQueue[proposalIndex];
         Proposal storage proposal = proposals[proposalId];
 
         require(proposal.flags[4], "must be a whitelist proposal");
@@ -391,7 +391,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool _) = _didPass(_proposalIndex);
+        (bool didPass, bool _) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -404,13 +404,13 @@ contract Moloch {
 
         _returnDeposit(proposal.sponsor);
 
-        emit ProcessProposal(_proposalIndex, proposalId, didPass);
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function processGuildKickProposal(uint256 _proposalIndex) public {
-        _validateProposalForProcessing(_proposalIndex);
+    function processGuildKickProposal(uint256 proposalIndex) public {
+        _validateProposalForProcessing(proposalIndex);
 
-        uint256 proposalId = proposalQueue[_proposalIndex];
+        uint256 proposalId = proposalQueue[proposalIndex];
         Proposal storage proposal = proposals[proposalId];
 
         require(proposal.flags[5], "must be a guild kick proposal");
@@ -418,7 +418,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool _) = _didPass(_proposalIndex);
+        (bool didPass, bool _) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -430,11 +430,11 @@ contract Moloch {
 
         _returnDeposit(proposal.sponsor);
 
-        emit ProcessProposal(_proposalIndex, proposalId, didPass);
+        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function _didPass(uint256 _proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
-        Proposal memory proposal = proposals[proposalQueue[_proposalIndex]];
+    function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
+        Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         didPass = proposal.yesVotes > proposal.noVotes;
 
@@ -453,72 +453,72 @@ contract Moloch {
         return (didPass, emergencyProcessing);
     }
 
-    function _validateProposalForProcessing(uint256 _proposalIndex) internal view {
-        require(_proposalIndex < proposalQueue.length, "proposal does not exist");
-        Proposal memory proposal = proposals[proposalQueue[_proposalIndex]];
+    function _validateProposalForProcessing(uint256 proposalIndex) internal view {
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
+        Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         require(getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength), "proposal is not ready to be processed");
         require(proposal.flags[1] == false, "proposal has already been processed");
-        require(_proposalIndex == 0 || proposals[proposalQueue[_proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
+        require(proposalIndex == 0 || proposals[proposalQueue[proposalIndex.sub(1)]].flags[1], "previous proposal must be processed");
     }
 
-    function _returnDeposit(address _sponsor) internal {
+    function _returnDeposit(address sponsor) internal {
         require(
             depositToken.transfer(msg.sender, processingReward),
             "failed to send processing reward to msg.sender"
         );
 
         require(
-            depositToken.transfer(_sponsor, proposalDeposit.sub(processingReward)),
+            depositToken.transfer(sponsor, proposalDeposit.sub(processingReward)),
             "failed to return proposal deposit to sponsor"
         );
     }
 
-    function ragequit(uint256 _sharesToBurn) public onlyMember {
-        _ragequit(msg.sender, _sharesToBurn, approvedTokens);
+    function ragequit(uint256 sharesToBurn) public onlyMember {
+        _ragequit(msg.sender, sharesToBurn, approvedTokens);
     }
 
     // provide a list of tokens to withdraw (in case guild bank has broken tokens)
-    function safeRagequit(uint256 _sharesToBurn, IERC20[] memory _tokenList) public onlyMember {
-        for (uint256 i = 0; i < _tokenList.length; i++) {
-            require(tokenWhitelist[address(_tokenList[i])], "token must be whitelisted");
+    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
 
             if (i > 0) {
-                require(_tokenList[i] > _tokenList[i - 1], "token list must be unique and in ascending order");
+                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
             }
         }
 
-        _ragequit(msg.sender, _sharesToBurn, _tokenList);
+        _ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    function _ragequit(address _memberAddress, uint256 _sharesToBurn, IERC20[] memory _approvedTokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory tokenList) internal {
         uint256 initialTotalShares = totalShares;
 
-        Member storage member = members[_memberAddress];
+        Member storage member = members[memberAddress];
 
-        require(member.shares >= _sharesToBurn, "insufficient shares");
+        require(member.shares >= sharesToBurn, "insufficient shares");
 
         require(canRagequit(member.highestIndexYesVote), "cant ragequit until highest index proposal member voted YES on is processed");
 
         // burn shares
-        member.shares = member.shares.sub(_sharesToBurn);
-        totalShares = totalShares.sub(_sharesToBurn);
+        member.shares = member.shares.sub(sharesToBurn);
+        totalShares = totalShares.sub(sharesToBurn);
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(_memberAddress, _sharesToBurn, initialTotalShares, _approvedTokens),
+            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, tokenList),
             "withdrawal of tokens from guildBank failed"
         );
 
-        address[] memory tokenList = new address[](_approvedTokens.length);
-        for (uint256 i=0; i < _approvedTokens.length; i++) {
+        address[] memory tokenList = new address[](tokenList.length);
+        for (uint256 i=0; i < tokenList.length; i++) {
             tokenList[i] = address(approvedTokens[i]);
         }
-        emit Ragequit(msg.sender, _sharesToBurn, tokenList);
+        emit Ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    function cancelProposal(uint256 _proposalId) public {
-        Proposal storage proposal = proposals[_proposalId];
+    function cancelProposal(uint256 proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(msg.sender == proposal.proposer, "only the proposer can cancel");
 
@@ -529,24 +529,24 @@ contract Moloch {
             "failed to return tribute to proposer"
         );
 
-        emit CancelProposal(_proposalId, msg.sender);
+        emit CancelProposal(proposalId, msg.sender);
     }
 
-    function updateDelegateKey(address _newDelegateKey) public onlyMember {
-        require(_newDelegateKey != address(0), "newDelegateKey cannot be 0");
+    function updateDelegateKey(address newDelegateKey) public onlyMember {
+        require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
 
         // skip checks if member is setting the delegate key to their member address
-        if (_newDelegateKey != msg.sender) {
-            require(!members[_newDelegateKey].exists, "cant overwrite existing members");
-            require(!members[memberAddressByDelegateKey[_newDelegateKey]].exists, "cant overwrite existing delegate keys");
+        if (newDelegateKey != msg.sender) {
+            require(!members[newDelegateKey].exists, "cant overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cant overwrite existing delegate keys");
         }
 
         Member storage member = members[msg.sender];
         memberAddressByDelegateKey[member.delegateKey] = address(0);
-        memberAddressByDelegateKey[_newDelegateKey] = msg.sender;
-        member.delegateKey = _newDelegateKey;
+        memberAddressByDelegateKey[newDelegateKey] = msg.sender;
+        member.delegateKey = newDelegateKey;
 
-        emit UpdateDelegateKey(msg.sender, _newDelegateKey);
+        emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
     /***************
@@ -564,23 +564,23 @@ contract Moloch {
         return proposalQueue.length;
     }
 
-    function getProposalFlags(uint256 _proposalIndex) public view returns (bool[6] memory) {
-        return proposals[_proposalIndex].flags;
+    function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
+        return proposals[proposalIndex].flags;
     }
 
     // can only ragequit if the latest proposal you voted YES on has been processed
-    function canRagequit(uint256 _highestIndexYesVote) public view returns (bool) {
-        require(_highestIndexYesVote < proposalQueue.length, "proposal does not exist");
-        return proposals[proposalQueue[_highestIndexYesVote]].flags[1];
+    function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
+        require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
+        return proposals[proposalQueue[highestIndexYesVote]].flags[1];
     }
 
-    function hasVotingPeriodExpired(uint256 _startingPeriod) public view returns (bool) {
-        return getCurrentPeriod() >= _startingPeriod.add(votingPeriodLength);
+    function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
+        return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
     }
 
-    function getMemberProposalVote(address _memberAddress, uint256 _proposalIndex) public view returns (Vote) {
-        require(members[_memberAddress].exists, "member doesn't exist");
-        require(_proposalIndex < proposalQueue.length, "proposal doesn't exist");
-        return proposals[proposalQueue[_proposalIndex]].votesByMember[_memberAddress];
+    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
+        require(members[memberAddress].exists, "member doesn't exist");
+        require(proposalIndex < proposalQueue.length, "proposal doesn't exist");
+        return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
     }
 }
