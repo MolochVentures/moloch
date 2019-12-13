@@ -391,7 +391,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool _) = _didPass(proposalIndex);
+        (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -418,7 +418,7 @@ contract Moloch {
         proposal.flags[1] = true;
         totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
-        (bool didPass, bool _) = _didPass(proposalIndex);
+        (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
@@ -491,7 +491,7 @@ contract Moloch {
         _ragequit(msg.sender, sharesToBurn, tokenList);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory _approvedTokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory tokenList) internal {
         uint256 initialTotalShares = totalShares;
 
         Member storage member = members[memberAddress];
@@ -506,15 +506,15 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, _approvedTokens),
+            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, tokenList),
             "withdrawal of tokens from guildBank failed"
         );
 
-        address[] memory tokenList = new address[](_approvedTokens.length);
-        for (uint256 i=0; i < _approvedTokens.length; i++) {
-            tokenList[i] = address(approvedTokens[i]);
+        address[] memory eventTokenList = new address[](tokenList.length);
+        for (uint256 i=0; i < eventTokenList.length; i++) {
+            eventTokenList[i] = address(approvedTokens[i]);
         }
-        emit Ragequit(msg.sender, sharesToBurn, tokenList);
+        emit Ragequit(msg.sender, sharesToBurn, eventTokenList);
     }
 
     function cancelProposal(uint256 proposalId) public {

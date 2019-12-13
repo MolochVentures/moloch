@@ -1,26 +1,3 @@
-// v2 test spec
-
-// New Edge Cases
-// - ragequit with multiple tokens in guildbank - DONE
-// - ragequit too many tokens (loop should run out of gas)
-// - ragequit one less than too many tokens
-// - safeRagequit even when there are too many tokens to ragequit
-//   - might not work with simply 1 less b/c gas cost of providing token array
-
-
-// - processProposal after emergencyExitWait expires
-//   - [setup] -> break a whitelisted token in the guildbank on purpose
-//   - proposal after it in queue should be able to be processed immediately
-//   - broken tribute tokens must not be returned (check balance)
-
-// as mentioned have most of this covered but need a test to cover it all - BR TODO
-
-
-// - processProposal guildkick auto-fails b/c of token transfer restriction
-//   - proposal cannot complete due to transfer() returning false - DONE
-//   - proposal cannot complete due to transfer() reverting - DONE
-//   - proposal can still be processed after emergencyExitWait expires - BR TODO
-
 const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
 const chai = require('chai')
 const { assert } = chai
