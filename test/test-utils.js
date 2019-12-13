@@ -144,13 +144,13 @@ const verifyProcessProposal = async (
   assert.equal(+totalLoot, expectedTotalLoot, 'total loot incorrect')
 }
 
-// TODO verify member loot amount
 const verifyMember = async (
   {
     moloch,
     member,
     expectedDelegateKey = zeroAddress,
     expectedShares = 0,
+    expectedLoot = 0,
     expectedExists = true,
     expectedHighestIndexYesVote = 0,
     expectedMemberAddressByDelegateKey = zeroAddress
@@ -159,6 +159,7 @@ const verifyMember = async (
   const memberData = await moloch.members(member)
   assert.equal(memberData.delegateKey, expectedDelegateKey, 'delegate key incorrect')
   assert.equal(+memberData.shares, expectedShares, 'expected shares incorrect')
+  assert.equal(+memberData.loot, expectedLoot, 'expected loot incorrect')
   assert.equal(memberData.exists, expectedExists, 'exists incorrect')
   assert.equal(memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
 

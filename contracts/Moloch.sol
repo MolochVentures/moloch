@@ -194,7 +194,7 @@ contract Moloch {
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
         require(tokenToWhitelist != address(0), "must provide token address");
-        require(!tokenWhitelist[tokenToWhitelist], "can't already have whitelisted the token");
+        require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
 
         bool[6] memory flags;
         flags[4] = true;
@@ -519,7 +519,7 @@ contract Moloch {
         require(member.shares >= sharesToBurn, "insufficient shares");
         require(member.loot >= lootToBurn, "insufficient loot");
 
-        require(canRagequit(member.highestIndexYesVote), "cant ragequit until highest index proposal member voted YES on is processed");
+        require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
 
         uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);
 
@@ -558,8 +558,8 @@ contract Moloch {
 
         // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
-            require(!members[newDelegateKey].exists, "cant overwrite existing members");
-            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cant overwrite existing delegate keys");
+            require(!members[newDelegateKey].exists, "cannot overwrite existing members");
+            require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cannot overwrite existing delegate keys");
         }
 
         Member storage member = members[msg.sender];
@@ -600,8 +600,8 @@ contract Moloch {
     }
 
     function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
-        require(members[memberAddress].exists, "member doesn't exist");
-        require(proposalIndex < proposalQueue.length, "proposal doesn't exist");
+        require(members[memberAddress].exists, "member does not exist");
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
     }
 }
