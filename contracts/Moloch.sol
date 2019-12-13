@@ -36,7 +36,7 @@ contract Moloch {
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, uint256 sharesRequested);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
     event ProcessProposal(uint256 indexed proposalIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, uint256 sharesRequested, bool didPass);
-    event Ragequit(address indexed memberAddress, uint256 sharesToBurn);
+    event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
@@ -517,12 +517,7 @@ contract Moloch {
             "withdrawal of tokens from guildBank failed"
         );
 
-        // TODO remove this? we emit events in guildbank withdraw
-        address[] memory tokenList = new address[](_approvedTokens.length);
-        for (uint256 i=0; i < _approvedTokens.length; i++) {
-            tokenList[i] = address(approvedTokens[i]);
-        }
-        emit Ragequit(msg.sender, sharesToBurn, tokenList);
+        emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
     }
 
     function cancelProposal(uint256 proposalId) public {
