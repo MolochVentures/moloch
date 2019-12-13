@@ -60,6 +60,8 @@ const revertMessages = {
   processProposalProposalIsNotReadyToBeProcessed: 'proposal is not ready to be processed',
   processProposalProposalHasAlreadyBeenProcessed: 'proposal has already been processed',
   processProposalPreviousProposalMustBeProcessed: 'previous proposal must be processed',
+  processWhitelistProposalMustBeAWhitelistProposal: 'must be a whitelist proposal',
+  processGuildKickProposalMustBeAGuildKickProposal: 'must be a guild kick proposal',
   molochNotAMember: 'not a member',
   molochRageQuitInsufficientShares: 'insufficient shares',
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
@@ -804,7 +806,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const emittedLogs = await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
       const { logs } = emittedLogs
       const log = logs[0]
-      const { delegateKey, memberAddress, proposalIndex, proposalQueueIndex, startingPeriod} = log.args
+      const { delegateKey, memberAddress, proposalIndex, proposalQueueIndex, startingPeriod } = log.args
 
       assert.equal(log.event, 'SponsorProposal')
 
@@ -1578,7 +1580,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedProcessorBalance: 0
       })
 
-      const emittedLogs  = await moloch.processProposal(firstProposalIndex, { from: processor })
+      const emittedLogs = await moloch.processProposal(firstProposalIndex, { from: processor })
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalQueueIndex, proposalId, didPass } = log.args
@@ -1653,7 +1655,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         processor: processor,
         expectedProcessorBalance: 0
       })
-
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
 
@@ -2837,6 +2838,120 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.processProposalPreviousProposalMustBeProcessed)
     })
 
+    it('require fail  - must be a whitelist proposal', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, false, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: applicant })
+        .should.be.rejectedWith(revertMessages.processWhitelistProposalMustBeAWhitelistProposal)
+    })
+
+    it('require fail  - must be a guild kick proposal', async () => {
+      const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      // submit whitelist proposal
+      const proposer = proposal1.applicant
+      const whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!',
+        flags: [true, true, true, false, true, false] // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
+      }
+
+      await moloch.submitWhitelistProposal(
+        whitelistProposal.tributeToken,
+        whitelistProposal.details,
+        { from: proposer }
+      )
+
+      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
+
+      // sponsor
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, true, false]
+      })
+
+      // vote
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await verifySubmitVote({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        memberAddress: summoner,
+        expectedMaxSharesAtYesVote: 1,
+        expectedVote: yes
+      })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit only as whitelisting has no tribute
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: 0,
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance,
+        processor: processor,
+        expectedProcessorBalance: 0
+      })
+
+      await moloch.processGuildKickProposal(firstProposalIndex, { from: applicant })
+        .should.be.rejectedWith(revertMessages.processGuildKickProposalMustBeAGuildKickProposal)
+    })
   })
 
   describe('rageQuit', () => {
