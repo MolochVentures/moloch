@@ -33,9 +33,14 @@ contract Moloch {
     // ***************
     // EVENTS
     // ***************
+    // TODO
+    // - OCD the variable orders
+    // - update process proposal
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken);
+    event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
     event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
+    // event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, address tributeToken, uint256 sharesRequested, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -102,6 +107,7 @@ contract Moloch {
 
     modifier onlyShareholder {
         require(members[msg.sender].shares > 0, "not a shareholder");
+        _;
     }
 
     modifier onlyDelegate {
@@ -152,7 +158,7 @@ contract Moloch {
 
         summoningTime = now;
 
-        members[summoner] = Member(summoner, 1, true, 0);
+        members[summoner] = Member(summoner, 1, 0, true, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
 
@@ -346,9 +352,10 @@ contract Moloch {
         if (didPass) {
             proposal.flags[2] = true;
 
-            // if the applicant is already a member, add to their existing shares
+            // if the applicant is already a member, add to their existing shares & loot
             if (members[proposal.applicant].exists) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
+                members[proposal.applicant].loot = members[proposal.applicant].loot.add(proposal.lootRequested);
 
             // the applicant is a new member, create a new record for them
             } else {
@@ -360,12 +367,13 @@ contract Moloch {
                 }
 
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
-            // mint new shares
+            // mint new shares & loot
             totalShares = totalShares.add(proposal.sharesRequested);
+            totalLoot = totalLoot.add(proposal.lootRequested);
 
             require(
                 proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
@@ -403,7 +411,6 @@ contract Moloch {
         require(proposal.flags[4], "must be a whitelist proposal");
 
         proposal.flags[1] = true;
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
         (bool didPass, bool _) = _didPass(proposalIndex);
 
@@ -430,14 +437,13 @@ contract Moloch {
         require(proposal.flags[5], "must be a guild kick proposal");
 
         proposal.flags[1] = true;
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
 
         (bool didPass, bool _) = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true;
 
-            _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
+            _ragequit(proposal.applicant, members[proposal.applicant].shares, members[proposal.applicant].loot, approvedTokens);
         }
 
         proposedToKick[proposal.applicant] = false;
@@ -489,7 +495,7 @@ contract Moloch {
     }
 
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public onlyMember {
-        _ragequit(sharesToBurn, lootToBurn, approvedTokens);
+        _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
     }
 
     function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public onlyMember {
@@ -502,10 +508,10 @@ contract Moloch {
             }
         }
 
-        _ragequit(sharesToBurn, lootToBurn, tokenList);
+        _ragequit(msg.sender, sharesToBurn, lootToBurn, tokenList);
     }
 
-    function _ragequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
         uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
@@ -525,7 +531,7 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, _approvedTokens),
+            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, approvedTokens),
             "withdrawal of tokens from guildBank failed"
         );
 
