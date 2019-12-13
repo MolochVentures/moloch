@@ -7,23 +7,32 @@ import "./GuildBank.sol";
 contract Moloch {
     using SafeMath for uint256;
 
-    uint256 public periodDuration;
-    uint256 public votingPeriodLength;
-    uint256 public gracePeriodLength;
-    uint256 public emergencyExitWait;
-    uint256 public proposalDeposit;
-    uint256 public dilutionBound;
-    uint256 public processingReward;
-    uint256 public summoningTime;
+    /***************
+    GLOBAL CONSTANTS
+    ***************/
+    uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
+    uint256 public votingPeriodLength; // default = 35 periods (7 days)
+    uint256 public gracePeriodLength; // default = 35 periods (7 days)
+    uint256 public emergencyExitWait; // default = 35 periods (7 days)
+    uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
+    uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
+    uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
+    uint256 public summoningTime; // needed to determine the current period
 
-    IERC20 public depositToken;
-    GuildBank public guildBank;
+    IERC20 public depositToken; // deposit token contract reference; default = wETH
+    GuildBank public guildBank; // guild bank contract reference
 
+    // HARD-CODED LIMITS
+    // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
+    // with periods or shares, yet big enough to not limit reasonable use cases.
     uint256 constant MAX_VOTING_PERIOD_LENGTH = 10 ** 18;
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10 ** 18;
     uint256 constant MAX_DILUTION_BOUND = 10 ** 18;
     uint256 constant MAX_NUMBER_OF_SHARES = 10 ** 18;
 
+    /***************
+    EVENTS
+    ***************/
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, uint256 paymentRequested, address paymentToken);
     event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
     event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
@@ -33,39 +42,42 @@ contract Moloch {
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
 
-    uint256 public proposalCount;
-    uint256 public totalShares;
-    uint256 public totalSharesRequested;
+    /******************
+    INTERNAL ACCOUNTING
+    ******************/
+    uint256 public proposalCount = 0; // the total # of proposals submitted (includes those not yet sponsored)
+    uint256 public totalShares = 0; // total shares across all members
+    uint256 public totalSharesRequested = 0; // total shares that have been requested in unprocessed proposals
 
     enum Vote {
-        Null,
+        Null, // default value, counted as abstention
         Yes,
         No
     }
 
     struct Member {
-        address delegateKey;
-        uint256 shares;
-        bool exists;
-        uint256 highestIndexYesVote;
+        address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
+        uint256 shares; // the # of shares assigned to this member
+        bool exists; // always true once a member has been created
+        uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
     struct Proposal {
-        address applicant;
-        address proposer;
-        address sponsor;
-        uint256 sharesRequested;
-        uint256 tributeOffered;
-        IERC20 tributeToken;
-        uint256 paymentRequested;
-        IERC20 paymentToken;
-        uint256 startingPeriod;
-        uint256 yesVotes;
-        uint256 noVotes;
+        address applicant; // the applicant who wishes to become a member - this key will be used for withdrawals (doubles as guild kick target for gkick proposals)
+        address proposer; // the account that submitted the proposal (can be non-member)
+        address sponsor; // the member that sponsored the proposal (moving it into the queue)
+        uint256 sharesRequested; // the # of shares the applicant is requesting
+        uint256 tributeOffered; // amount of tokens offered as tribute
+        IERC20 tributeToken; // tribute token contract reference
+        uint256 paymentRequested; // amount of tokens requested as payment
+        IERC20 paymentToken; // payment token contract reference
+        uint256 startingPeriod; // the period in which voting can start for this proposal
+        uint256 yesVotes; // the total number of YES votes for this proposal
+        uint256 noVotes; // the total number of NO votes for this proposal
         bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-        string details;
-        uint256 maxTotalSharesAtYesVote;
-        mapping(address => Vote) votesByMember;
+        string details; // proposal details - could be IPFS hash, plaintext, or JSON
+        uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
+        mapping(address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
     mapping(address => bool) public tokenWhitelist;
@@ -141,6 +153,9 @@ contract Moloch {
         emit SummonComplete(summoner, 1);
     }
 
+    /*****************
+    PROPOSAL FUNCTIONS
+    *****************/
     function submitProposal(
         address applicant,
         uint256 sharesRequested,
@@ -156,6 +171,7 @@ contract Moloch {
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
 
+        // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
 
         bool[6] memory flags;
@@ -216,6 +232,7 @@ contract Moloch {
     }
 
     function sponsorProposal(uint256 proposalId) public onlyDelegate {
+        // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
 
         Proposal storage proposal = proposals[proposalId];
@@ -232,10 +249,14 @@ contract Moloch {
             require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
         } else {
+            // Make sure we won't run into overflows when doing calculations with shares.
+            // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
+            // on the number of shares that can exist until this proposal has been processed.
             require(totalShares.add(totalSharesRequested).add(proposal.sharesRequested) <= MAX_NUMBER_OF_SHARES, "too many shares requested");
             totalSharesRequested = totalSharesRequested.add(proposal.sharesRequested);
         }
 
+        // compute startingPeriod for proposal
         uint256 startingPeriod = max(
             getCurrentPeriod(),
             proposalQueue.length == 0 ? 0 : proposals[proposalQueue[proposalQueue.length.sub(1)]].startingPeriod
@@ -248,6 +269,7 @@ contract Moloch {
 
         proposal.flags[0] = true;
 
+        // append proposal to the queue
         proposalQueue.push(proposalId);
         emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
@@ -272,10 +294,12 @@ contract Moloch {
         if (vote == Vote.Yes) {
             proposal.yesVotes = proposal.yesVotes.add(member.shares);
 
+            // set highest index (latest) yes vote - must be processed for member to ragequit
             if (proposalIndex > member.highestIndexYesVote) {
                 member.highestIndexYesVote = proposalIndex;
             }
 
+            // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
             if (totalShares > proposal.maxTotalSharesAtYesVote) {
                 proposal.maxTotalSharesAtYesVote = totalShares;
             }
@@ -304,23 +328,29 @@ contract Moloch {
             didPass = false;
         }
 
+        // PROPOSAL PASSED
         if (didPass) {
             proposal.flags[2] = true;
 
+            // if the applicant is already a member, add to their existing shares
             if (members[proposal.applicant].exists) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
 
+            // the applicant is a new member, create a new record for them
             } else {
+                // if the applicant address is already taken by a member's delegateKey, reset it to their member address
                 if (members[memberAddressByDelegateKey[proposal.applicant]].exists) {
                     address memberToOverride = memberAddressByDelegateKey[proposal.applicant];
                     memberAddressByDelegateKey[memberToOverride] = memberToOverride;
                     members[memberToOverride].delegateKey = memberToOverride;
                 }
 
+                // use applicant address as delegateKey by default
                 members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
+            // mint new shares
             totalShares = totalShares.add(proposal.sharesRequested);
 
             require(
@@ -332,7 +362,11 @@ contract Moloch {
                 guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
                 "token payment to applicant failed"
             );
+
+
+        // PROPOSAL FAILED
         } else {
+            // return all tokens to the applicant (skip if emergency processing)
             if (!emergencyProcessing) {
                 require(
                     proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
@@ -404,12 +438,14 @@ contract Moloch {
 
         didPass = proposal.yesVotes > proposal.noVotes;
 
+        // Make the proposal fail (and skip returning tribute) if emergencyExitWait is exceeded
         emergencyProcessing = false;
         if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
             emergencyProcessing = true;
             didPass = false;
         }
 
+        // Make the proposal fail if the dilutionBound is exceeded
         if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
             didPass = false;
         }
@@ -442,6 +478,7 @@ contract Moloch {
         _ragequit(msg.sender, sharesToBurn, approvedTokens);
     }
 
+    // provide a list of tokens to withdraw (in case guild bank has broken tokens)
     function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
         for (uint256 i = 0; i < tokenList.length; i++) {
             require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
@@ -463,9 +500,11 @@ contract Moloch {
 
         require(canRagequit(member.highestIndexYesVote), "cant ragequit until highest index proposal member voted YES on is processed");
 
+        // burn shares
         member.shares = member.shares.sub(sharesToBurn);
         totalShares = totalShares.sub(sharesToBurn);
 
+        // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
             guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, _approvedTokens),
             "withdrawal of tokens from guildBank failed"
@@ -496,6 +535,7 @@ contract Moloch {
     function updateDelegateKey(address newDelegateKey) public onlyMember {
         require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
 
+        // skip checks if member is setting the delegate key to their member address
         if (newDelegateKey != msg.sender) {
             require(!members[newDelegateKey].exists, "cant overwrite existing members");
             require(!members[memberAddressByDelegateKey[newDelegateKey]].exists, "cant overwrite existing delegate keys");
@@ -509,6 +549,9 @@ contract Moloch {
         emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
+    /***************
+    GETTER FUNCTIONS
+    ***************/
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
         return x >= y ? x : y;
     }
@@ -525,6 +568,7 @@ contract Moloch {
         return proposals[proposalIndex].flags;
     }
 
+    // can only ragequit if the latest proposal you voted YES on has been processed
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[highestIndexYesVote]].flags[1];
