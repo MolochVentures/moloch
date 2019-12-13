@@ -25,7 +25,7 @@
     "truffle-flattener": "^1.4.2"
   },
   "scripts": {
-    "compile": "buidler compile",
+    "compile": "node_modules/.bin/buidler compile",
     "test": "bash scripts/test.sh",
     "gcli": "ganache-cli -l 8000000 -m \"fetch local valve black attend double eye excite planet primary install allow\"",
     "lint:tests": "eslint test/*.js",

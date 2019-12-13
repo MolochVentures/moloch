@@ -511,7 +511,7 @@ contract Moloch {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, tokenList);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory approvedTokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) internal {
         uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
@@ -531,7 +531,7 @@ contract Moloch {
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, approvedTokens),
+            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, tokenList),
             "withdrawal of tokens from guildBank failed"
         );
 
