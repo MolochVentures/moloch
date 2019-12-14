@@ -17,7 +17,7 @@ const verifyProposal = async (
   {
     moloch,
     proposal,
-    proposalIndex,
+    proposalId,
     proposer,
     sponsor = zeroAddress,
     expectedStartingPeriod = 0,
@@ -25,7 +25,7 @@ const verifyProposal = async (
     expectedProposalQueueLength = 0
   }
 ) => {
-  const proposalData = await moloch.proposals(proposalIndex)
+  const proposalData = await moloch.proposals(proposalId)
 
   const proposalCount = await moloch.proposalCount()
   assert.equal(+proposalCount, expectedProposalCount)
@@ -52,8 +52,8 @@ const verifyProposal = async (
   assert.equal(proposalData.maxTotalSharesAndLootAtYesVote, 0, 'maxTotalSharesAndLootAtYesVote invalid')
 }
 
-const verifyFlags = async ({ moloch, proposalIndex, expectedFlags }) => {
-  const actualFlags = await moloch.getProposalFlags(proposalIndex)
+const verifyFlags = async ({ moloch, proposalId, expectedFlags }) => {
+  const actualFlags = await moloch.getProposalFlags(proposalId)
 
   // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
   assert.equal(actualFlags[0], expectedFlags[0], 'sponsored flag incorrect')
@@ -106,7 +106,9 @@ const verifySubmitVote = async (
     initialNoVotes = 0
   }
 ) => {
-  const proposalData = await moloch.proposals(proposalIndex)
+  const proposalId = await moloch.proposalQueue(proposalIndex)
+  const proposalData = await moloch.proposals(proposalId)
+
   assert.equal(+proposalData.yesVotes, initialYesVotes + (expectedVote === 1 ? 1 : 0))
   assert.equal(+proposalData.noVotes, initialNoVotes + (expectedVote === 1 ? 0 : 1))
   assert.equal(+proposalData.maxTotalSharesAndLootAtYesVote, expectedMaxSharesAndLootAtYesVote)
@@ -128,7 +130,8 @@ const verifyProcessProposal = async (
   }
 ) => {
   // flags and proposal data
-  const proposalData = await moloch.proposals(proposalIndex)
+  const proposalId = await moloch.proposalQueue(proposalIndex)
+  const proposalData = await moloch.proposals(proposalId)
 
   assert.equal(+proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
   assert.equal(+proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')

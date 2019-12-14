@@ -654,7 +654,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await verifyFlags({
         moloch: moloch,
-        proposalIndex: firstProposalIndex,
+        proposalId: firstProposalIndex,
         expectedFlags: [true, false, false, false, false, false]
       })
 
@@ -725,7 +725,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await verifyFlags({
         moloch: moloch,
-        proposalIndex: firstProposalIndex,
+        proposalId: firstProposalIndex,
         expectedFlags: [true, true, false, false, false, false] // didPass is false
       })
 

@@ -588,8 +588,8 @@ contract Moloch {
         return proposalQueue.length;
     }
 
-    function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
-        return proposals[proposalIndex].flags;
+    function getProposalFlags(uint256 proposalId) public view returns (bool[6] memory) {
+        return proposals[proposalId].flags;
     }
 
     // can only ragequit if the latest proposal you voted YES on has been processed
