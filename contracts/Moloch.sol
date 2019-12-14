@@ -177,9 +177,7 @@ contract Moloch {
         uint256 paymentRequested,
         address paymentToken,
         string memory details
-    )
-    public
-    {
+    ) public returns (uint256 proposalId) {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
@@ -190,9 +188,10 @@ contract Moloch {
         bool[6] memory flags;
 
         _submitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
+        return proposalCount - 1; // return proposalId - contracts calling submit might want it
     }
 
-    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
+    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public returns (uint256 proposalId) {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
 
@@ -200,15 +199,17 @@ contract Moloch {
         flags[4] = true;
 
         _submitProposal(address(0), 0, 0, 0, tokenToWhitelist, 0, address(0), details, flags);
+        return proposalCount - 1;
     }
 
-    function submitGuildKickProposal(address memberToKick, string memory details) public {
+    function submitGuildKickProposal(address memberToKick, string memory details) public returns (uint256 proposalId) {
         require(members[memberToKick].shares > 0, "member must have at least one share");
 
         bool[6] memory flags;
         flags[5] = true;
 
         _submitProposal(memberToKick, 0, 0, 0, address(0), 0, address(0), details, flags);
+        return proposalCount - 1;
     }
 
     function _submitProposal(

@@ -22,6 +22,7 @@ const {
 const Moloch = artifacts.require('./Moloch')
 const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
+const Submitter = artifacts.require('./Submitter') // used to test submit proposal return values
 
 const revertMessages = {
   molochConstructorSummonerCannotBe0: 'summoner cannot be 0',
@@ -132,7 +133,7 @@ async function moveForwardPeriods (periods) {
 }
 
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
-  let moloch, guildBank, tokenAlpha
+  let moloch, guildBank, tokenAlpha, submitter
   let proposal1, proposal2, depositToken
 
   const initSummonerBalance = 100
@@ -176,6 +177,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     const depositTokenAddress = await moloch.depositToken()
     assert.equal(depositTokenAddress, tokenAlpha.address)
+
+    submitter = await Submitter.new(moloch.address)
 
     depositToken = tokenAlpha
   })
@@ -613,6 +616,38 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBe0)
     })
+
+    it('happy case - second submitted proposal returns incremented proposalId', async () => {
+      const emittedLogs1 = await submitter.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: summoner }
+      )
+
+      const proposalId1 = emittedLogs1.logs[0].args.proposalId
+      assert.equal(proposalId1, 0)
+
+      const emittedLogs2 = await submitter.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: summoner }
+      )
+
+      const proposalId2 = emittedLogs2.logs[0].args.proposalId
+      assert.equal(+proposalId2.toString(), 1)
+    })
   })
 
   describe('submitWhitelistProposal', () => {
@@ -642,9 +677,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       await moloch.submitWhitelistProposal(
-        whitelistProposal.tributeToken,
-        whitelistProposal.details,
-        { from: proposer }
+        newToken.address,
+        'whitelist me!',
+        { from: proposal1.applicant }
       )
 
       await verifyProposal({
@@ -690,6 +725,28 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         'whitelist me!',
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitWhitelistProposalAlreadyHaveWhitelistedToken)
+    })
+
+    it('happy case - second submitted proposal returns incremented proposalId', async () => {
+      const emittedLogs1 = await submitter.submitWhitelistProposal(
+        newToken.address,
+        'whitelist me!',
+        { from: summoner }
+      )
+
+      const proposalId1 = emittedLogs1.logs[0].args.proposalId
+      assert.equal(proposalId1, 0)
+
+      tokenBeta = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      const emittedLogs2 = await submitter.submitWhitelistProposal(
+        tokenBeta.address,
+        'whitelist me!',
+        { from: summoner }
+      )
+
+      const proposalId2 = emittedLogs2.logs[0].args.proposalId
+      assert.equal(+proposalId2.toString(), 1)
     })
   })
 
@@ -755,6 +812,37 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         'kick me!',
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
+    })
+
+    it('happy case - second submitted proposal returns incremented proposalId', async () => {
+      const guildKickProposal = {
+        applicant: summoner,
+        proposer: summoner,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: zeroAddress,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'kick me!'
+      }
+
+      const emittedLogs1 = await submitter.submitGuildKickProposal(
+        guildKickProposal.applicant,
+        guildKickProposal.details,
+        { from: summoner }
+      )
+
+      const proposalId1 = emittedLogs1.logs[0].args.proposalId
+      assert.equal(proposalId1, 0)
+
+      const emittedLogs2 = await submitter.submitGuildKickProposal(
+        guildKickProposal.applicant,
+        guildKickProposal.details,
+        { from: summoner }
+      )
+
+      const proposalId2 = emittedLogs2.logs[0].args.proposalId
+      assert.equal(+proposalId2.toString(), 1)
     })
   })
 
@@ -1417,7 +1505,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(uintVote, 1)
     })
 
-    // FIXME is this SubmitVote - don't see the call?
     describe('submitVote modifying member.highestIndexYesVote', () => {
       beforeEach(async () => {
         await fundAndApproveToMoloch({
