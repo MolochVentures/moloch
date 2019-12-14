@@ -3955,7 +3955,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   describe('as a member with solely loot and no shares...', () => {
     beforeEach(async () => {
       proposal1.sharesRequested = 0 // NO SHARES
-      proposal1.lootRequested = 1 // 1 LOOT (ragequit = 50% w/ 1 summoner share)
+      proposal1.lootRequested = 2 // SOME LOOT
 
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -4008,12 +4008,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it('can still ragequit (onlyMember)', async () => {
+    it('can still ragequit (justMember modifier)', async () => {
       const initialGuildBankBalance = new BN(proposal1.tributeOffered)
       const initialTotalSharesAndLoot = new BN(proposal1.lootRequested + proposal1.sharesRequested + 1)
-      const tokensToRageQuit = initialGuildBankBalance.mul(new BN(proposal1.lootRequested)).div(initialTotalSharesAndLoot)
+      const lootToRageQuit = new BN(proposal1.lootRequested) // ragequit 100% of loot
+      const tokensToRageQuit = initialGuildBankBalance.mul(lootToRageQuit).div(initialTotalSharesAndLoot)
 
-      await moloch.ragequit(0, proposal1.lootRequested, { from: proposal1.applicant })
+      await moloch.ragequit(0, lootToRageQuit, { from: proposal1.applicant })
 
       await verifyMember({
         moloch: moloch,
@@ -4023,6 +4024,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedLoot: 0,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
+
 
       await verifyBalances({
         token: depositToken,
@@ -4045,12 +4047,50 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(totalLoot, 0)
     })
 
-    it('unable to update delegateKey (onlyShareholder)', async () => {
+    it('can still partial ragequit (justMember modifier)', async () => {
+      const initialGuildBankBalance = new BN(proposal1.tributeOffered)
+      const initialTotalSharesAndLoot = new BN(proposal1.lootRequested + proposal1.sharesRequested + 1)
+      const lootToRageQuit = new BN(proposal1.lootRequested - 1)
+      const tokensToRageQuit = initialGuildBankBalance.mul(lootToRageQuit).div(initialTotalSharesAndLoot) // ragequit 1 less than total loot
+
+      await moloch.ragequit(0, lootToRageQuit, { from: proposal1.applicant })
+
+      await verifyMember({
+        moloch: moloch,
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: 0,
+        expectedLoot: 1,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: 0,
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: initialGuildBankBalance.sub(tokensToRageQuit),
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: tokensToRageQuit,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
+        processor: processor,
+        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+      })
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, 1)
+
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(totalLoot, 1)
+    })
+
+    it('unable to update delegateKey (justShareholder modifier)', async () => {
       await moloch.updateDelegateKey(applicant2, { from: proposal1.applicant })
       .should.be.rejectedWith(revertMessages.notAShareholder)
     })
 
-    it('unable to use delegate key to sponsor (onlyDelegate)', async () => {
+    it('unable to use delegate key to sponsor (justShareholder modifier)', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -4122,7 +4162,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it('unable to use delegate key to vote (onlyDelegate)', async () => {
+    it('unable to use delegate key to vote (justDelegate modifier)', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
