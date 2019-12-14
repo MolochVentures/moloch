@@ -45,7 +45,7 @@ const revertMessages = {
   submitWhitelistProposalAlreadyHaveWhitelistedToken: 'cannot already have whitelisted the token',
   submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share',
   sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
-  sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has been cancelled',
+  sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has already been cancelled',
   sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
   sponsorProposalAlreadyProposedToKick: 'already proposed to kick',
   sponsorProposalTooManySharesRequested: 'too many shares requested',
@@ -3843,6 +3843,25 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.cancelProposal(firstProposalIndex, { from: proposal1.applicant })
         .should.be.rejectedWith(revertMessages.cancelProposalProposalHasAlreadyBeenSponsored)
+    })
+
+    it('failure - already cancelled', async () => {
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.cancelProposal(firstProposalIndex, { from: proposal1.applicant })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [false, false, false, true, false, false]
+      })
+
+      await moloch.cancelProposal(firstProposalIndex, { from: proposal1.applicant })
+        .should.be.rejectedWith(revertMessages.cancelProposalProposalHasAlreadyBeenCancelled)
     })
 
     it('failure - solely the proposer can cancel', async () => {
