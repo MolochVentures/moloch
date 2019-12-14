@@ -47,6 +47,7 @@ const revertMessages = {
   sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
   sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has already been cancelled',
   sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
+  sponsorProposalAlreadyWhitelisted: 'cannot already have whitelisted the token',
   sponsorProposalAlreadyProposedToKick: 'already proposed to kick',
   sponsorProposalTooManySharesRequested: 'too many shares requested',
   submitVoteProposalDoesNotExist: 'proposal does not exist',
@@ -1340,6 +1341,122 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.submitProposalProposalMustHaveBeenProposed)
     })
   })
+
+  describe.only('having submitted two whitelist proposals for the same token, with one sponsored...', () => {
+    let newToken, whitelistProposal
+    beforeEach(async () => {
+      newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
+
+      whitelistProposal = {
+        applicant: zeroAddress,
+        proposer: proposal1.applicant,
+        sharesRequested: 0,
+        tributeOffered: 0,
+        tributeToken: newToken.address,
+        paymentRequested: 0,
+        paymentToken: zeroAddress,
+        details: 'whitelist me!'
+      }
+
+      await moloch.submitWhitelistProposal(
+        newToken.address,
+        'whitelist me!',
+        { from: proposal1.applicant }
+      )
+
+      const proposer = proposal1.applicant
+
+      await verifyProposal({
+        moloch: moloch,
+        proposal: whitelistProposal,
+        proposalIndex: firstProposalIndex,
+        proposer: proposer,
+        expectedProposalCount: 1
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [false, false, false, false, true, false] // whitelist flag set to true after proposal
+      })
+
+      await moloch.submitWhitelistProposal(
+        newToken.address,
+        'whitelist me!',
+        { from: proposal1.applicant }
+      )
+
+      await verifyProposal({
+        moloch: moloch,
+        proposal: whitelistProposal,
+        proposalIndex: secondProposalIndex,
+        proposer: proposer,
+        expectedProposalCount: 2
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [false, false, false, false, true, false] // whitelist flag set to true after proposal
+      })
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // need to sponsor again after this
+      })
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedFlags: [true, false, false, false, true, false] // sponsor & whitelist flags both true
+      })
+
+      await moveForwardPeriods(1)
+    })
+
+    it('when the first whitelist proposal **passes**, the second can no longer be sponsored', async () => {
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner }) // vote YES
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: summoner })
+      const isWhitelisted = await moloch.tokenWhitelist.call(newToken.address)
+      assert.equal(isWhitelisted, true)
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+        .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyWhitelisted)
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [false, false, false, false, true, false] // sponsored is still false
+      })
+    })
+
+    it('when the first whitelist proposal **fails**, the second can still be sponsored', async () => {
+      await moloch.submitVote(firstProposalIndex, no, { from: summoner }) // vote NO
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: summoner })
+      const isWhitelisted = await moloch.tokenWhitelist.call(newToken.address)
+      assert.equal(isWhitelisted, false)
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedFlags: [true, false, false, false, true, false] // sponsor & whitelist flags both true
+      })
+    })
+  })
+
 
   describe('submitVote', () => {
     beforeEach(async () => {

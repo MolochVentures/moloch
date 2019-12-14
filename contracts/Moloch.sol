@@ -260,6 +260,7 @@ contract Moloch {
 
         // whitelist proposal
         if (proposal.flags[4]) {
+            require(!tokenWhitelist[address(proposal.tributeToken)], "cannot already have whitelisted the token");
             require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
             proposedToWhitelist[address(proposal.tributeToken)] = true;
 
