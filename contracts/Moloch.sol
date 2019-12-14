@@ -33,10 +33,10 @@ contract Moloch {
     /***************
     EVENTS
     ***************/
-    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 tributeOffered, address tributeToken, uint256 sharesRequested, uint256 paymentRequested, address paymentToken);
+    event SubmitProposal(uint256 proposalIndex, address indexed applicant, address indexed delegateKey, address indexed memberAddress, uint256 sharesRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken);
     event SponsorProposal(uint256 proposalIndex, uint256 proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint256 startingPeriod);
     event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalQueueIndex, uint256 indexed proposalId, bool didPass);
+    event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 sharesRequested, uint256 tributeOffered, IERC20 tributeToken, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, address[] tokenList);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -227,7 +227,7 @@ contract Moloch {
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];
-        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
+        emit SubmitProposal(proposalCount, applicant, msg.sender, memberAddress, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken);
         proposalCount += 1;
     }
 
@@ -377,7 +377,7 @@ contract Moloch {
 
         _returnDeposit(proposal.sponsor);
 
-        emit ProcessProposal(proposalIndex, proposalId, didPass);
+        emit ProcessProposal(proposalIndex, proposal.applicant, proposal.sponsor, proposal.sharesRequested, proposal.tributeOffered, proposal.tributeToken, didPass);
     }
 
     function processWhitelistProposal(uint256 proposalIndex) public {
@@ -403,8 +403,6 @@ contract Moloch {
         proposedToWhitelist[address(proposal.tributeToken)] = false;
 
         _returnDeposit(proposal.sponsor);
-
-        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function processGuildKickProposal(uint256 proposalIndex) public {
@@ -429,8 +427,6 @@ contract Moloch {
         proposedToKick[proposal.applicant] = false;
 
         _returnDeposit(proposal.sponsor);
-
-        emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
     function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
@@ -514,6 +510,7 @@ contract Moloch {
         for (uint256 i=0; i < eventTokenList.length; i++) {
             eventTokenList[i] = address(approvedTokens[i]);
         }
+        
         emit Ragequit(msg.sender, sharesToBurn, eventTokenList);
     }
 
