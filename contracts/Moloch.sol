@@ -271,7 +271,7 @@ contract Moloch {
 
         // append proposal to the queue
         proposalQueue.push(proposalId);
-        emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
+        emit SponsorProposal(proposalId, proposalQueue.length.sub(1), msg.sender, memberAddress, startingPeriod);
     }
 
     function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
