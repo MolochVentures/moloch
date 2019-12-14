@@ -87,7 +87,7 @@ const zeroAddress = '0x0000000000000000000000000000000000000000'
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
 const _1e18Plus1 = _1e18.add(_1)
-const _1e18Minus1 = _1e18.add(_1)
+const _1e18Minus1 = _1e18.sub(_1)
 
 async function blockTime () {
   const block = await web3.eth.getBlock('latest')
@@ -1316,7 +1316,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.submitProposal(
         proposal1.applicant,
-        _1e18, // MAX_NUMBER_OF_SHARES
+        _1e18, // MAX_NUMBER_OF_SHARES_AND_LOOT
         0, // skip loot
         0, // skip tribute
         proposal1.tributeToken,
@@ -1338,8 +1338,102 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // should work with one less
       await moloch.submitProposal(
         proposal1.applicant,
-        _1e18.sub(_1), // MAX_NUMBER_OF_SHARES - 1
+        _1e18Minus1, // MAX_NUMBER_OF_SHARES_AND_LOOT - 1
         0, // skip loot
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: secondProposalIndex,
+        expectedFlags: [true, false, false, false, false, false] // sponsored is true
+      })
+    })
+
+    it('failure - too many shares (just loot) requested', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        0, // skip shares
+        _1e18, // MAX_NUMBER_OF_SHARES_AND_LOOT
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+        .should.be.rejectedWith(revertMessages.sponsorProposalTooManySharesRequested)
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: firstProposalIndex,
+        expectedFlags: [false, false, false, false, false, false] // sponsored is false
+      })
+
+      // should work with one less
+      await moloch.submitProposal(
+        proposal1.applicant,
+        0, // skip shares
+        _1e18Minus1.sub(_1), // MAX_NUMBER_OF_SHARES_AND_LOOT - 1
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: secondProposalIndex,
+        expectedFlags: [true, false, false, false, false, false] // sponsored is true
+      })
+    })
+
+    it('failure - too many shares (& loot) requested', async () => {
+      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
+      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        _1e18.sub(new BN('10')), // MAX_NUMBER_OF_SHARES_AND_LOOT - 10
+        10, // 10 loot
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+        .should.be.rejectedWith(revertMessages.sponsorProposalTooManySharesRequested)
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: firstProposalIndex,
+        expectedFlags: [false, false, false, false, false, false] // sponsored is false
+      })
+
+      // should work with one less
+      await moloch.submitProposal(
+        proposal1.applicant,
+        _1e18.sub(new BN('10')), // MAX_NUMBER_OF_SHARES_AND_LOOT - 10
+        9, // 10 loot
         0, // skip tribute
         proposal1.tributeToken,
         proposal1.paymentRequested,
