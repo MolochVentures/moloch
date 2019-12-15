@@ -523,6 +523,8 @@ contract Moloch {
         require(member.loot >= lootToBurn, "insufficient loot");
 
         // TODO move this to ragequit / saferagequit so guild kicks cant be blocked
+        // - on second thought this allows users to spam YES votes when they are being kicked with no consequences...
+        // - if, when you're banned, you can't make any more votes, then you can make a public function for kicking banned members
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
 
         uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);
