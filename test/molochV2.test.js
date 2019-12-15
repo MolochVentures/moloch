@@ -30,7 +30,7 @@ const revertMessages = {
   molochConstructorVotingPeriodLengthCannotBe0: '_votingPeriodLength cannot be 0',
   molochConstructorVotingPeriodLengthExceedsLimit: '_votingPeriodLength exceeds limit',
   molochConstructorGracePeriodLengthExceedsLimit: '_gracePeriodLength exceeds limit',
-  molochConstructorEmergencyExitWaitCannotBe0: '_emergencyExitWait cannot be 0',
+  molochConstructorEmergencyProcessingWaitCannotBe0: '_emergencyProcessingWait cannot be 0',
   molochConstructorDilutionBoundCannotBe0: '_dilutionBound cannot be 0',
   molochConstructorDilutionBoundExceedsLimit: '_dilutionBound exceeds limit',
   molochConstructorNeedAtLeastOneApprovedToken: 'need at least one approved token',
@@ -232,8 +232,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const gracePeriodLength = await moloch.gracePeriodLength()
       assert.equal(+gracePeriodLength, deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      const emergencyExitWaitLength = await moloch.emergencyExitWait()
-      assert.equal(+emergencyExitWaitLength, deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
+      const emergencyProcessingWaitLength = await moloch.emergencyProcessingWait()
+      assert.equal(+emergencyProcessingWaitLength, deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
 
       const proposalDeposit = await moloch.proposalDeposit()
       assert.equal(+proposalDeposit, deploymentConfig.PROPOSAL_DEPOSIT)
@@ -390,7 +390,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMessages.molochConstructorEmergencyExitWaitCannotBe0)
+      ).should.be.rejectedWith(revertMessages.molochConstructorEmergencyProcessingWaitCannotBe0)
     })
 
     it('require fail - dilution bound can not be zero', async () => {

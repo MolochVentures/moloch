@@ -13,7 +13,7 @@ contract Moloch {
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
-    uint256 public emergencyExitWait; // default = 35 periods (7 days)
+    uint256 public emergencyProcessingWait; // default = 35 periods (7 days)
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
@@ -121,7 +121,7 @@ contract Moloch {
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
-        uint256 _emergencyExitWait,
+        uint256 _emergencyProcessingWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
@@ -131,7 +131,7 @@ contract Moloch {
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
-        require(_emergencyExitWait > 0, "_emergencyExitWait cannot be 0");
+        require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
@@ -151,7 +151,7 @@ contract Moloch {
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
-        emergencyExitWait = _emergencyExitWait;
+        emergencyProcessingWait = _emergencyProcessingWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
@@ -202,6 +202,7 @@ contract Moloch {
         return proposalCount - 1;
     }
 
+    // TODO can still guild kick loot holders
     function submitGuildKickProposal(address memberToKick, string memory details) public returns (uint256 proposalId) {
         require(members[memberToKick].shares > 0, "member must have at least one share");
 
@@ -460,9 +461,9 @@ contract Moloch {
 
         didPass = proposal.yesVotes > proposal.noVotes;
 
-        // Make the proposal fail (and skip returning tribute) if emergencyExitWait is exceeded
+        // Make the proposal fail (and skip returning tribute) if emergencyProcessingWait is exceeded
         emergencyProcessing = false;
-        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyProcessingWait)) {
             emergencyProcessing = true;
             didPass = false;
         }
@@ -521,6 +522,7 @@ contract Moloch {
         require(member.shares >= sharesToBurn, "insufficient shares");
         require(member.loot >= lootToBurn, "insufficient loot");
 
+        // TODO move this to ragequit / saferagequit so guild kicks cant be blocked
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
 
         uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);

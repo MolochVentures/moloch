@@ -9,7 +9,7 @@ STEAL THIS CODE
 
 ~ Allen Ginsberg, Howl
 
-Moloch v2 is an upgraded version of MolochDAO that allows the DAO to acquire and spend multiple different tokens, instead of just one. It also introduces the Guild Kick proposal type which allows members to forcibly remove another member (their assets are refunded in full). Finally, v2 fixes the "unsafe approval" issue raised in the original [Nomic Labs audit](https://medium.com/nomic-labs-blog/moloch-dao-audit-report-f31505e85c70).
+Moloch v2 is an upgraded version of MolochDAO that allows the DAO to acquire and spend *multiple different tokens, instead of just one. It introduces the Guild Kick proposal type which allows members to forcibly remove another member (their assets are refunded in full). It also also allows for issuing non-voting shares in the form of Loot. Finally, v2 fixes the "unsafe approval" issue raised in the original [Nomic Labs audit](https://medium.com/nomic-labs-blog/moloch-dao-audit-report-f31505e85c70).
 
 For a primer on Moloch v1, please visit the [original documentation](https://github.com/MolochVentures/moloch/tree/minimal-revenue/v1_contracts).
 
@@ -20,7 +20,9 @@ In developing Moloch v2, we stuck with our ruthless minimalism, deviating as lit
 
 Moloch v2 is designed to extend MolochDAO's operations from purely single-token public goods grants-making to acquiring and spending (or investing in) an unlimited portfolio of assets.
 
-Proposals in Moloch v2 now specify a tribute token and a payment token, which can be any whitelisted ERC20. Membership proposals offering tribute in exchange for shares can now offer any token, possibly helping balance the DAO portfolio. Grant proposals can now be in both shares and a stablecoin payment token to smooth out volatility risk, or even skip shares entirely to pay external contractors without awarding membership. Members can also propose *trades* to swap tokens OTC with the guild bank, which could be used for making investments, active portfolio management, selloffs, or just to top off a stablecoin reserve used to pay for planned expenses.
+Proposals in Moloch v2 now specify a **tribute token** and a **payment token**, which can be any whitelisted ERC20. Membership proposals which offer tribute tokens in exchange for shares can now offer any token, possibly helping balance the DAO portfolio. Grant proposals can now be in both shares and a stablecoin payment token to smooth out volatility risk, or even skip shares entirely to pay external contractors without awarding membership. Members can also propose *trades* to swap tokens OTC with the guild bank, which could be used for making investments, active portfolio management, selloffs, or just to top off a stablecoin reserve used to pay for planned expenses.
+
+In addition to standard proposals above, there are two special proposals. The first is for whitelisting new tokens to be eligible as tribute, and the second is for removing DAO members via Guild Kick. Both follow the same voting mechanics as standard proposals (no quorum, simple majority rules).
 
 ### MolochLAO
 
@@ -28,9 +30,11 @@ In order to limit legal liability on members of a for-profit deployment of Moloc
 
 ##### Security Tokens
 
-To interface with offchain securities like SAFTs, the MolochLAO will issue security tokens that follow the Claims Token Standard [ERC-1843](https://github.com/ethereum/EIPs/issues/1843) and the Simple Restricted Token Standard [ERC-1404](https://github.com/ethereum/EIPs/issues/1404). Upon liquidation of a security, the LAO custodian would convert the proceeds to a token suitable for dividends (e.g. DAI) and send it to the claims token contract to be distributed to the claims token holders.
+To interface with offchain securities like SAFTs, the MolochLAO will issue security tokens that follow the Claims Token Standard [ERC-1843](https://github.com/ethereum/EIPs/issues/1843) and the Simple Restricted Token Standard [ERC-1404](https://github.com/ethereum/EIPs/issues/1404). Upon distribution of the SAFT tokens, the LAO custodian would send them to the claims token contract to be distributed to the claims token holders.
 
-Members that ragequit and receive their fraction of a LAO-held security claims token will still be able to use their claims token to withdraw their dividends from the claims token contract.
+For equity, debt, or other revenue yielding securities the LAO custodian would receive the proceeds, liquidate to a token suitable for dividends (e.g. DAI) and then send the dividend tokens to the claims token contract to be distributed to the claims token holders.
+
+Members that ragequit and receive their fraction of all LAO-held security claims tokens will still be able to use their various claims token to withdraw their dividends from each claims token contract.
 
 Transfer restrictions will be enforced such that the security claims tokens can only be transferred to other DAO members, or other addresses whitelisted by the LAO admins.
 
@@ -149,6 +153,7 @@ Moloch v2 is minimally different from Moloch v1, please read the [original docum
 - removed `approvedToken` reference
 - updated `withdraw` to support multi-token withdrawals
 - add `withdrawToken` to allow for token payments of specific amounts
+- inline `onlyOwner` modifier and remove dependency on `Owned.sol`
 
 ## Moloch.sol
 
@@ -218,27 +223,28 @@ Track the whitelisted tokens in a mapping (to check if that token is on the whit
 - saves a proposal with all other params set to null except the whitelist flag
   and `tributeToken` address (tributeToken acts as token to whitelist)
 
-##### `processProposal`
+##### `processWhitelistProposal`
+- new function to process whitelist proposals
 - on a passing whitelist proposal, add the token to whitelist
 - remove token from `proposedToWhitelist` so another proposal to whitelist the token can be made (assuming it failed)
 
-### Emergency Exit
+### Emergency Processing
 Multi-token support comes with the risk of any individual token breaking or getting stuck in escrow if for whatever reason transfer restrictions prevent it from being transferred. For example, if the members add USDC to the whitelist, a proposal is made with USDC offered as tribute, and before the proposal is processed the applicant is added to the USDC blacklist, then should the proposal fail the applicant will be unable to have their escrowed USDC tribute offering returned to them because the USDC transfer would fail, which in turn would make the entire `processProposal` function call fail. To make matters worse, because Moloch proposals must be processed *in order*, none of the proposals after the failing one would be able to be processed either, and even though the guild bank funds would be safe and could be ragequit, any escrowed tribute on active proposals would be stuck forever.
 
-To counter this, we add a concept of `emergencyProcessing` which kicks in for proposals that still haven't been processed after an `emergencyExitWait` period (e.g 1 week) has passed from the time they should have been processed. During `emergencyProcessing`, a proposal auto-fails (even if the votes were passing) but skips returning the escrowed tribute offered to the applicant.
+To counter this, we add a concept of `emergencyProcessing` which kicks in for proposals that still haven't been processed after an `emergencyProcessingWait` period (e.g 1 week) has passed from the time they should have been processed. During `emergencyProcessing`, a proposal auto-fails (even if the votes were passing) but skips returning the escrowed tribute offered to the applicant.
 
 Fortunately, after the stuck proposal is processed all subsequent proposals also stuck as result will be able to be processed immediately.
 
-The emergency exit is the second line of defense after the token whitelist to defend against malicious or disfunctional tokens. If a whitelisted token breaks, however, any member can submit a proposal using the broken token as tribute and get it stuck in processing, so the best course of action is likely for the members to all ragequit and reform, and take extra precautions against whitelisting tokens with transfer restrictions.
+The emergency processing is the second line of defense after the token whitelist to defend against malicious or disfunctional tokens. If a whitelisted token breaks, however, any member can submit a proposal using the broken token as tribute and get it stuck in processing, so the best course of action is likely for the members to all ragequit and reform, and take extra precautions against whitelisting tokens with transfer restrictions.
 
 ##### Globals
-- add `uint256 public emergencyExitWait`
+- add `uint256 public emergencyProcessingWait`
 
 ##### `constructor`
-- save `emergencyExitWait`
+- save `emergencyProcessingWait`
 
 ##### `processProposal`
-- if the proposal should have been processed more than `emergencyExitWait` periods ago, active `emergencyProcessing` and auto-fail the proposal
+- if the proposal should have been processed more than `emergencyProcessingWait` periods ago, active `emergencyProcessing` and auto-fail the proposal
 - if `emergencyProcessing` has been activated, skip returning tribute to the applicant
 
 ### Submit -> Sponsor Flow
@@ -301,13 +307,59 @@ To allow the members to take risks on new members, we add the guild kick proposa
 
 ##### `submitGuildKickProposal`
 - new function to propose kicking a member
-- enforces that the member exists (has shares)
+- enforces that the member exists (has shares or loot)
 - saves a proposal with all other params set to null except the guild kick flag
   and the `applicant` address (applicant acts as member to kick)
 
-##### `processProposal`
-- on a passing guild kick proposal, ragequit 100% of the member's shares
+##### `processGuildKickProposal`
+- a new function to process guild kick proposals
+- on a passing guild kick proposal, ragequit 100% of the member's shares and loot
 - remove member address from `proposedToKick` so another proposal to kick the member can be made (assuming it failed)
+
+### Loot
+To allow the DAO to issue non-voting shares, we introduce the concept of Loot. Just like shares, loot is requested via proposal, issued to specific members and non-transferrable, and can be redeemed (via ragequit) on par with shares for a proportional fraction of assets in the Guild Bank. However, loot do not count towards votes and DAO members with *only* loot will not be able to sponsor proposals or vote on them. Non-shareholder members with loot will also be prevented from updating their delegate keys as they wouldn't be able to use them for anything anyways.
+
+##### Proposal Struct
+- add `lootRequested`
+- update `maxTotalSharesAtYesVote` -> `maxTotalSharesAndLootAtYesVote`
+
+##### Member Struct
+- add `loot`
+
+##### Globals
+- add `totalLoot`
+- update `totalSharesRequested` -> `totalSharesAndLootRequested`
+- update `MAX_NUMBER_OF_SHARES` -> `MAX_NUMBER_OF_SHARES_AND_LOOT`
+- add `onlyShareholder` modifier to be members with at least 1 share (not loot)
+- update `onlyMember` modifier to be members with at least 1 share **or 1 loot**
+
+##### `submitProposal`
+- add `lootRequested` param
+
+##### `sponsorProposal`
+- check that `MAX_NUMBER_OF_SHARES_AND_LOOT` won't be exceeded
+- update `totalSharesAndLootRequested`
+
+##### `submitVote`
+- update `maxTotalSharesAndLootAtYesVote` if necessary
+
+##### `processProposal`
+- update `totalSharesAndLootRequested`
+- assign loot to member if proposal passes
+- update `totalLoot` if proposal passes
+
+Note - the dilution bound exists to prevent share based overpayment resulting from mass ragequit, and thus takes loot into account when calculating the anticipated dilution.
+
+##### `ragequit`
+- use updated `onlyMember` modifier (so loot holders can ragequit)
+- add `lootToBurn` param
+
+##### `safeRagequit`
+- use updated `onlyMember` modifier (so loot holders can ragequit)
+- add `lootToBurn` param
+
+##### `updateDelegateKey`
+- use `onlyShareholder` modifier to prevent loot-only members from updating delegate keys
 
 ### Deposit Token
 To enforce consistency of the proposal deposits and processing fees (which were previously simply the sole `approvedToken`) we set a fixed `depositToken` at contract deployment.
