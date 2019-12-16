@@ -10,10 +10,12 @@
 //  - can be called anytime after jail state
 //  - can't be called if outstanding YES votes
 //  - returns all funds (calls ragequit)
-//  - removes Jail status
 // 3. bailout function
 //  - burns shares/loot -> loot for summoner
 //  - can only be called after WAITING PERIOD
+
+// TODO
+// - auto-fail any proposals past grace period when emergencyProcessing is switched
 
 pragma solidity 0.5.3;
 
@@ -141,16 +143,20 @@ contract Moloch {
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
         uint256 _emergencyProcessingWait,
+        uint256 _bailoutWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
     ) public {
+        // TODO potentially add checks for maximum emergency processing & bailout wait
+
         require(summoner != address(0), "summoner cannot be 0");
         require(_periodDuration > 0, "_periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
         require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
+        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait");
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
