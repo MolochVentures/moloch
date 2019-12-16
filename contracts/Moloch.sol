@@ -29,6 +29,8 @@ contract Moloch {
     /***************
     GLOBAL CONSTANTS
     ***************/
+    address public summoner; // initial singular shareholder, assists with bailouts
+
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
@@ -137,7 +139,7 @@ contract Moloch {
     }
 
     constructor(
-        address summoner,
+        address _summoner,
         address[] memory _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
@@ -150,17 +152,19 @@ contract Moloch {
     ) public {
         // TODO potentially add checks for maximum emergency processing & bailout wait
 
-        require(summoner != address(0), "summoner cannot be 0");
+        require(_summoner != address(0), "summoner cannot be 0");
         require(_periodDuration > 0, "_periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
         require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
-        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait");
+        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait"); // TODO test
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
+
+        summoner = _summoner; // TODO test
 
         depositToken = IERC20(_approvedTokens[0]);
 
@@ -183,7 +187,7 @@ contract Moloch {
 
         summoningTime = now;
 
-        members[summoner] = Member(summoner, 1, 0, true, 0);
+        members[summoner] = Member(summoner, 1, 0, true, false, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
 
@@ -398,7 +402,7 @@ contract Moloch {
                 }
 
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, false, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
@@ -475,7 +479,11 @@ contract Moloch {
             proposal.flags[2] = true; // didPass
             Member storage member = members[proposal.applicant];
             member.jailed = true;
-            member.loot = member.loot.add(member.shares); // transfer shares to loot
+
+            // transfer shares to loot
+            member.loot = member.loot.add(member.shares);
+            totalShares = totalShares.sub(member.shares);
+            totalLoot = totalLoot.add(member.shares);
             member.shares = 0; // revoke all shares
         }
 
@@ -596,7 +604,7 @@ contract Moloch {
     }
 
     function bailout(address memberToBail) public {
-        Member storage member = members[memberToJail];
+        Member storage member = members[memberToBail];
 
         require(member.jailed, "member must be in jail"); // TODO test
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares

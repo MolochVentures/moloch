@@ -53,6 +53,7 @@ const deploymentConfig = {
   'VOTING_DURATON_IN_PERIODS': 35,
   'GRACE_DURATON_IN_PERIODS': 35,
   'EMERGENCY_EXIT_WAIT_IN_PERIODS': 35,
+  'BAILOUT_WAIT_IN_PERIODS': 70,
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
@@ -103,6 +104,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       deploymentConfig.VOTING_DURATON_IN_PERIODS,
       deploymentConfig.GRACE_DURATON_IN_PERIODS,
       deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+      deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
       deploymentConfig.PROPOSAL_DEPOSIT,
       deploymentConfig.DILUTION_BOUND,
       deploymentConfig.PROCESSING_REWARD

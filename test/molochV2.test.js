@@ -110,7 +110,8 @@ const deploymentConfig = {
   'PERIOD_DURATION_IN_SECONDS': 17280,
   'VOTING_DURATON_IN_PERIODS': 35,
   'GRACE_DURATON_IN_PERIODS': 35,
-  'EMERGENCY_EXIT_WAIT_IN_PERIODS': 35,
+  'EMERGENCY_PROCESSING_WAIT_IN_PERIODS': 35,
+  'BAILOUT_WAIT_IN_PERIODS': 70,
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
@@ -134,6 +135,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   const firstProposalIndex = 0
   const secondProposalIndex = 1
+  const thirdProposalIndex = 2
   const invalidPropsalIndex = 123
 
   const yes = 1
@@ -160,7 +162,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       deploymentConfig.PERIOD_DURATION_IN_SECONDS,
       deploymentConfig.VOTING_DURATON_IN_PERIODS,
       deploymentConfig.GRACE_DURATON_IN_PERIODS,
-      deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+      deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+      deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
       deploymentConfig.PROPOSAL_DEPOSIT,
       deploymentConfig.DILUTION_BOUND,
       deploymentConfig.PROCESSING_REWARD
@@ -233,7 +236,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(+gracePeriodLength, deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
       const emergencyProcessingWaitLength = await moloch.emergencyProcessingWait()
-      assert.equal(+emergencyProcessingWaitLength, deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
+      assert.equal(+emergencyProcessingWaitLength, deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
 
       const proposalDeposit = await moloch.proposalDeposit()
       assert.equal(+proposalDeposit, deploymentConfig.PROPOSAL_DEPOSIT)
@@ -284,7 +287,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -298,7 +302,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         0,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -312,7 +317,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         0,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -326,7 +332,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         _1e18Plus1,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -339,7 +346,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         _1e18,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -356,7 +364,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         _1e18Plus1,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -369,7 +378,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         _1e18,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -387,6 +397,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
         0,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -400,7 +411,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         0,
         deploymentConfig.PROCESSING_REWARD
@@ -414,7 +426,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         _1e18Plus1,
         deploymentConfig.PROCESSING_REWARD
@@ -427,7 +440,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         _1e18,
         deploymentConfig.PROCESSING_REWARD
@@ -444,7 +458,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -458,7 +473,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         _1e18,
         deploymentConfig.DILUTION_BOUND,
         _1e18Plus1
@@ -472,7 +488,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -486,7 +503,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -754,10 +772,57 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   })
 
   describe('submitGuildKickProposal', () => {
+    let proposer, applicant
+    beforeEach(async () => {
+      // cant kick the summoner, so we have to vote in a new member
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyMember({
+        moloch: moloch,
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+    })
+
     it('happy case', async () => {
       const proposer = proposal1.applicant
       const guildKickProposal = {
-        applicant: summoner,
+        applicant: proposal1.applicant,
         proposer: proposer,
         sharesRequested: 0,
         tributeOffered: 0,
@@ -783,14 +848,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyProposal({
         moloch: moloch,
         proposal: guildKickProposal,
-        proposalId: firstProposalIndex,
+        proposalId: secondProposalIndex,
         proposer: proposer,
-        expectedProposalCount: 1
+        expectedProposalCount: 2,
+        expectedProposalQueueLength: 1
       })
 
       await verifyFlags({
         moloch: moloch,
-        proposalId: firstProposalIndex,
+        proposalId: secondProposalIndex,
         expectedFlags: [false, false, false, false, false, true] // guild kick flag set to true after proposal
       })
 
@@ -819,7 +885,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     it('happy case - second submitted proposal returns incremented proposalId', async () => {
       const guildKickProposal = {
-        applicant: summoner,
+        applicant: proposal1.applicant,
         proposer: summoner,
         sharesRequested: 0,
         tributeOffered: 0,
@@ -836,7 +902,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       const proposalId1 = emittedLogs1.logs[0].args.proposalId
-      assert.equal(proposalId1, 0)
+      assert.equal(proposalId1, 1) // 0th proposal is for new membership
 
       const emittedLogs2 = await submitter.submitGuildKickProposal(
         guildKickProposal.applicant,
@@ -845,7 +911,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       const proposalId2 = emittedLogs2.logs[0].args.proposalId
-      assert.equal(+proposalId2.toString(), 1)
+      assert.equal(+proposalId2.toString(), 2)
     })
   })
 
@@ -1010,88 +1076,168 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it('happy path - sponsor guildKick proposal', async () => {
-      const proposer = proposal1.applicant
-      const guildKickProposal = {
-        applicant: summoner,
-        proposer: proposer,
-        sharesRequested: 0,
-        tributeOffered: 0,
-        tributeToken: zeroAddress,
-        paymentRequested: 0,
-        paymentToken: zeroAddress,
-        details: 'kick me!'
-      }
+    describe('with a second member besides the summoner', () => {
+      let proposer, applicant
+      // summoner can not be kicked so we have to vote in a second member
+      beforeEach(async () => {
+        await fundAndApproveToMoloch({
+          to: proposal1.applicant,
+          from: creator,
+          value: proposal1.tributeOffered
+        })
 
-      await moloch.submitGuildKickProposal(
-        guildKickProposal.applicant,
-        guildKickProposal.details,
-        { from: proposer }
-      )
+        // submit
+        proposer = proposal1.applicant
+        applicant = proposal1.applicant
+        await moloch.submitProposal(
+          applicant,
+          proposal1.sharesRequested,
+          proposal1.lootRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
+          proposal1.details,
+          { from: proposer }
+        )
 
-      // ensure period and queue length at zero
-      await verifyProposal({
-        moloch: moloch,
-        proposal: guildKickProposal,
-        proposalId: firstProposalIndex,
-        proposer: proposer,
-        sponsor: zeroAddress,
-        expectedStartingPeriod: 0,
-        expectedProposalCount: 1,
-        expectedProposalQueueLength: 0
+        await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+        await moveForwardPeriods(1)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        await verifyMember({
+          moloch: moloch,
+          member: proposal1.applicant,
+          expectedDelegateKey: proposal1.applicant,
+          expectedShares: proposal1.sharesRequested,
+          expectedLoot: proposal1.lootRequested,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
+
+        // need more deposit since we used it on the membership proposal
+        await fundAndApproveToMoloch({
+          to: summoner,
+          from: creator,
+          value: deploymentConfig.PROPOSAL_DEPOSIT
+        })
       })
 
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [false, false, false, false, false, true] // not sponsored yet...
+      it('happy path - sponsor guildKick proposal', async () => {
+        const proposer = proposal1.applicant
+        const guildKickProposal = {
+          applicant: proposal1.applicant,
+          proposer: proposer,
+          sharesRequested: 0,
+          tributeOffered: 0,
+          tributeToken: zeroAddress,
+          paymentRequested: 0,
+          paymentToken: zeroAddress,
+          details: 'kick me!'
+        }
+
+        await moloch.submitGuildKickProposal(
+          guildKickProposal.applicant,
+          guildKickProposal.details,
+          { from: proposer }
+        )
+
+        // ensure period and queue length at zero
+        await verifyProposal({
+          moloch: moloch,
+          proposal: guildKickProposal,
+          proposalId: secondProposalIndex,
+          proposer: proposer,
+          sponsor: zeroAddress,
+          expectedStartingPeriod: 0,
+          expectedProposalCount: 2,
+          expectedProposalQueueLength: 1
+        })
+
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [false, false, false, false, false, true] // not sponsored yet...
+        })
+
+        let proposedToKick = await moloch.proposedToKick(proposal1.applicant)
+        assert.equal(proposedToKick, false)
+
+
+        // sponsor send by a delegate
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        proposedToKick = await moloch.proposedToKick(proposal1.applicant)
+        assert.equal(proposedToKick, true)
+
+        await verifyProposal({
+          moloch: moloch,
+          proposal: guildKickProposal,
+          proposalId: secondProposalIndex,
+          proposer: proposer,
+          sponsor: summoner,
+          expectedStartingPeriod: 72, // sponsoring moves the period on
+          expectedProposalCount: 2,
+          expectedProposalQueueLength: 2 // we have one in the queue post sponsorship
+        })
+
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, false, false, false, false, true] // sponsored flag set
+        })
+
+        // deposit has moved - still have remaining deposit from membership
+        await verifyBalance({
+          token: depositToken,
+          address: summoner,
+          expectedBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
+        })
+
+        // moloch has the deposit
+        await verifyBalance({
+          token: depositToken,
+          address: moloch.address,
+          expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT
+        })
+
+        await verifyAllowance({
+          token: depositToken,
+          owner: summoner,
+          spender: moloch.address,
+          expectedAllowance: 0
+        })
       })
 
-      let proposedToKick = await moloch.proposedToKick(summoner)
-      assert.equal(proposedToKick, false)
+      it('failure - sponsor kick proposal already proposed', async () => {
+        const proposer = proposal1.applicant
 
-      // sponsor send by a delegate
-      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+        await moloch.submitGuildKickProposal(
+          proposal1.applicant,
+          'kick',
+          { from: proposer }
+        )
 
-      proposedToKick = await moloch.proposedToKick(summoner)
-      assert.equal(proposedToKick, true)
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
-      await verifyProposal({
-        moloch: moloch,
-        proposal: guildKickProposal,
-        proposalId: firstProposalIndex,
-        proposer: proposer,
-        sponsor: summoner,
-        expectedStartingPeriod: 1, // sponsoring moves the period on
-        expectedProposalCount: 1,
-        expectedProposalQueueLength: 1 // we have one in the queue post sponsorship
-      })
+        let proposedToKick = await moloch.proposedToKick(proposal1.applicant)
+        assert.equal(proposedToKick, true)
 
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [true, false, false, false, false, true] // sponsored flag set
-      })
+        // duplicate proposal
+        await moloch.submitGuildKickProposal(
+          proposal1.applicant,
+          'kick',
+          { from: proposer }
+        )
 
-      // deposit has moved
-      await verifyBalance({
-        token: depositToken,
-        address: summoner,
-        expectedBalance: initSummonerBalance
-      })
+        // add another deposit to sponsor proposal 1
+        await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
+        await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
 
-      // moloch has the deposit
-      await verifyBalance({
-        token: depositToken,
-        address: moloch.address,
-        expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT
-      })
-
-      await verifyAllowance({
-        token: depositToken,
-        owner: summoner,
-        spender: moloch.address,
-        expectedAllowance: 0
+        await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+          .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyProposedToKick)
       })
     })
 
@@ -1279,35 +1425,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
         .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyProposedToWhitelist)
-    })
-
-    it('failure - sponsor kick proposal already proposed', async () => {
-      const proposer = proposal1.applicant
-
-      await moloch.submitGuildKickProposal(
-        summoner,
-        'kick',
-        { from: proposer }
-      )
-
-      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-
-      let proposedToKick = await moloch.proposedToKick(summoner)
-      assert.equal(proposedToKick, true)
-
-      // duplicate proposal
-      await moloch.submitGuildKickProposal(
-        summoner,
-        'kick',
-        { from: proposer }
-      )
-
-      // add another deposit to sponsor proposal 1
-      await tokenAlpha.transfer(summoner, deploymentConfig.PROPOSAL_DEPOSIT, { from: creator })
-      await tokenAlpha.approve(moloch.address, deploymentConfig.PROPOSAL_DEPOSIT, { from: summoner })
-
-      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyProposedToKick)
     })
 
     it('failure - too many shares requested', async () => {
@@ -2681,7 +2798,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         member: applicant,
         expectedDelegateKey: applicant,
         expectedShares: 0,
-        expectedLoot: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -2690,6 +2807,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: secondProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
+        expectedTotalLoot: proposal1.sharesRequested + proposal1.lootRequested,
         expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: proposal1.sharesRequested + summonerShares + proposal1.lootRequested
       })
@@ -2702,7 +2820,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // Verify process proposal event
       const { logs } = emittedLogs
-      const log = logs[1] // ragequit event is at logs[0]
+      const log = logs[0]
       const { proposalIndex, proposalId, didPass } = log.args
       assert.equal(log.event, 'ProcessProposal')
       assert.equal(proposalIndex, secondProposalIndex)
@@ -2753,7 +2871,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-      await moveForwardPeriods(deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
 
       await verifyMember({
         moloch: moloch,
