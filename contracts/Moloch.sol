@@ -210,7 +210,7 @@ contract Moloch {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
-        require(!members[applicant].jailed, 'applicant must not be jailed'); // TODO TEST
+        require(!members[applicant].jailed, "proposal applicant must not be jailed");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
@@ -232,9 +232,10 @@ contract Moloch {
         return proposalCount - 1;
     }
 
-    // TODO can still guild kick loot holders
     function submitGuildKickProposal(address memberToKick, string memory details) public returns (uint256 proposalId) {
-        require(members[memberToKick].shares > 0, "member must have at least one share");
+        Member memory member = members[memberToKick];
+
+        require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
         require(memberToKick != summoner, "the summoner may not be kicked"); // TODO test
         require(!members[memberToKick].jailed, 'member must not already be jailed'); // TODO TEST
 
@@ -289,7 +290,7 @@ contract Moloch {
         require(proposal.proposer != address(0), 'proposal must have been proposed');
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
-        require(!members[proposal.applicant].jailed, 'proposal applicant must not jailed'); // TODO TEST
+        require(!members[proposal.applicant].jailed, "proposal applicant must not be jailed");
 
         // whitelist proposal
         if (proposal.flags[4]) {
@@ -513,7 +514,7 @@ contract Moloch {
 
         // Make the proposal fail if the applicant is jailed
         // - for standard proposals, we don't want the applicant to get any shares/loot/payment
-        // - for guild kick proposals, we should never be able to propose to kick a jailed member, so it doesn't matter
+        // - for guild kick proposals, we should never be able to propose to kick a jailed member (or have two kick proposals active), so it doesn't matter
         if (members[proposal.applicant].jailed) {
             didPass = false;
         }
@@ -568,9 +569,6 @@ contract Moloch {
         require(member.shares >= sharesToBurn, "insufficient shares");
         require(member.loot >= lootToBurn, "insufficient loot");
 
-        // TODO move this to ragequit / saferagequit so guild kicks cant be blocked
-        // - on second thought this allows users to spam YES votes when they are being kicked with no consequences...
-        // - if, when you're jailed, you can't make any more votes, then you can make a public function for kicking jailed members
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
 
         uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);
@@ -597,8 +595,6 @@ contract Moloch {
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
         require(!canBailout(member.highestIndexYesVote), "bailoutWait has passed, member must be bailed out"); // TODO test
-
-        // TODO prevent ragekick after bailout wait
 
         _ragequit(memberToKick, 0, member.loot, approvedTokens);
     }

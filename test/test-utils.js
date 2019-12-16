@@ -155,6 +155,7 @@ const verifyMember = async (
     expectedShares = 0,
     expectedLoot = 0,
     expectedExists = true,
+    expectedJailed = false,
     expectedHighestIndexYesVote = 0,
     expectedMemberAddressByDelegateKey = zeroAddress
   }
@@ -164,6 +165,7 @@ const verifyMember = async (
   assert.equal(+memberData.shares, expectedShares, 'expected shares incorrect')
   assert.equal(+memberData.loot, expectedLoot, 'expected loot incorrect')
   assert.equal(memberData.exists, expectedExists, 'exists incorrect')
+  assert.equal(memberData.jailed, expectedJailed, 'jailed incorrect')
   assert.equal(memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
 
   const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(expectedDelegateKey)

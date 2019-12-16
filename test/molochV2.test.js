@@ -41,15 +41,18 @@ const revertMessages = {
   submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
   submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
   submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
+  submitProposalApplicantIsJailed: 'proposal applicant must not be jailed',
   submitWhitelistProposalMustProvideTokenAddress: 'must provide token address',
   submitWhitelistProposalAlreadyHaveWhitelistedToken: 'cannot already have whitelisted the token',
-  submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share',
+  submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share or one loot',
+  submitGuildKickProposalMemberMustNotBeJailed: 'member must not already be jailed',
   sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
   sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has already been cancelled',
   sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
   sponsorProposalAlreadyWhitelisted: 'cannot already have whitelisted the token',
   sponsorProposalAlreadyProposedToKick: 'already proposed to kick',
   sponsorProposalTooManySharesRequested: 'too many shares requested',
+  sponsorProposalApplicantIsJailed: 'proposal applicant must not be jailed',
   submitVoteProposalDoesNotExist: 'proposal does not exist',
   submitVoteMustBeLessThan3: 'must be less than 3',
   submitVoteVotingPeriodHasNotStarted: 'voting period has not started',
@@ -2799,6 +2802,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -4684,6 +4688,472 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedVote: yes,
         expectedMaxSharesAndLootAtYesVote: 1 + proposal1.sharesRequested + proposal1.lootRequested
       })
+    })
+  })
+
+  describe('jail effects', () => {
+    let proposer, applicant
+
+    it('cant process proposals for a jailed applicant', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered * 2 // two membership proposals
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 3 // two membership + 1 guild kick proposals
+      })
+
+      // complete first membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // also submit proposal for more shares
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      // sponsor guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // sponsor proposal for more shares
+      await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+
+      // vote YES on both guild kick + more shares proposals
+      await moveForwardPeriods(2) // move 2 periods bc 2 proposals pending
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moloch.submitVote(thirdProposalIndex, yes, { from: summoner })
+
+      // complete guild kick proposal
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      await moloch.processProposal(thirdProposalIndex, { from: processor })
+
+      // proposal must have failed, despite passing votes
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: thirdProposalIndex,
+        expectedFlags: [true, true, false, false, false, false] // didPass is false
+      })
+
+      // member must not have received more shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+    })
+
+    it('cant sponsor proposals for a jailed applicant', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered * 2 // two membership proposals
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 3 // two membership + 1 guild kick proposals
+      })
+
+      // complete first membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // also submit proposal for more shares
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      // sponsor guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // complete guild kick proposal
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // sponsor proposal for more shares
+      await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+        .should.be.rejectedWith(revertMessages.sponsorProposalApplicantIsJailed)
+    })
+
+    it('cant sponsor guild kick proposals for a jailed applicant', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 3 // 1 membership + 2 guild kick proposals
+      })
+
+      // complete first membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // submit a second guild kick proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // sponsor first guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // complete first guild kick proposal
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // sponsor second guild kick proposal
+      await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+        .should.be.rejectedWith(revertMessages.sponsorProposalApplicantIsJailed)
+    })
+
+    it('cant submit proposals for a jailed applicant', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered * 2 // submitting 2 membership proposals
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // 1 membership + 1 guild kick proposal (to be sponsored)
+      })
+
+      // complete membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // sponsor guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // complete guild kick proposal
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // try to submit second membership proposal - fails b/c jail
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      ).should.be.rejectedWith(revertMessages.submitProposalApplicantIsJailed)
+    })
+
+    it('cant submit guild kick proposals for a jailed applicant', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered // submitting 1 membership proposals
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // 1 membership + 1 guild kick proposal (to be sponsored)
+      })
+
+      // complete membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // sponsor guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // complete guild kick proposal
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: true,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // try to submit second membership proposal - fails b/c jail
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustNotBeJailed)
     })
   })
 })
