@@ -31,6 +31,7 @@ const revertMessages = {
   molochConstructorVotingPeriodLengthExceedsLimit: '_votingPeriodLength exceeds limit',
   molochConstructorGracePeriodLengthExceedsLimit: '_gracePeriodLength exceeds limit',
   molochConstructorEmergencyProcessingWaitCannotBe0: '_emergencyProcessingWait cannot be 0',
+  molochConstructorBailoutWaitMustBeGreaterThanEmergencyProcessingWait: 'bailoutWait must be greater than _emergencyProcessingWait',
   molochConstructorDilutionBoundCannotBe0: '_dilutionBound cannot be 0',
   molochConstructorDilutionBoundExceedsLimit: '_dilutionBound exceeds limit',
   molochConstructorNeedAtLeastOneApprovedToken: 'need at least one approved token',
@@ -46,6 +47,7 @@ const revertMessages = {
   submitWhitelistProposalAlreadyHaveWhitelistedToken: 'cannot already have whitelisted the token',
   submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share or one loot',
   submitGuildKickProposalMemberMustNotBeJailed: 'member must not already be jailed',
+  submitGuildKickProposalMemberMustNotBeSummoner: 'the summoner may not be kicked',
   sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
   sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has already been cancelled',
   sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
@@ -215,7 +217,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe('constructor', () => {
+  describe.only('constructor', () => {
     it('verify deployment parameters', async () => {
       // eslint-disable-next-line no-unused-vars
       const now = await blockTime()
@@ -228,6 +230,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       const guildBankOwner = await guildBank.owner()
       assert.equal(guildBankOwner, moloch.address)
+
+      const summonerAddress = await moloch.summoner()
+      assert.equal(summonerAddress, summoner)
 
       const periodDuration = await moloch.periodDuration()
       assert.equal(+periodDuration, deploymentConfig.PERIOD_DURATION_IN_SECONDS)
@@ -405,6 +410,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
       ).should.be.rejectedWith(revertMessages.molochConstructorEmergencyProcessingWaitCannotBe0)
+    })
+
+    it('require fail - bailout wait must be greater than emergency exit wait', async () => {
+      await Moloch.new(
+        summoner,
+        [tokenAlpha.address],
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        10,
+        10,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      ).should.be.rejectedWith(revertMessages.molochConstructorBailoutWaitMustBeGreaterThanEmergencyProcessingWait)
     })
 
     it('require fail - dilution bound can not be zero', async () => {
@@ -884,6 +904,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         'kick me!',
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
+    })
+
+    it('require fail - summoner can not be kicked', async () => {
+      await moloch.submitGuildKickProposal(
+        summoner,
+        'kick me!',
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustNotBeSummoner)
     })
 
     it('happy case - second submitted proposal returns incremented proposalId', async () => {

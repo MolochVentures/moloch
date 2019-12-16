@@ -158,13 +158,13 @@ contract Moloch {
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
         require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
-        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait"); // TODO test
+        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait");
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
 
-        summoner = _summoner; // TODO test
+        summoner = _summoner;
 
         depositToken = IERC20(_approvedTokens[0]);
 
@@ -236,8 +236,8 @@ contract Moloch {
         Member memory member = members[memberToKick];
 
         require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
-        require(memberToKick != summoner, "the summoner may not be kicked"); // TODO test
-        require(!members[memberToKick].jailed, 'member must not already be jailed'); // TODO TEST
+        require(memberToKick != summoner, "the summoner may not be kicked");
+        require(!members[memberToKick].jailed, "member must not already be jailed");
 
         bool[6] memory flags;
         flags[5] = true;
