@@ -52,7 +52,6 @@ contract Moloch {
     uint256 public proposalCount = 0; // total proposals submitted
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalLoot = 0; // total loot across all members
-    uint256 public totalSharesAndLootRequested = 0; // total shares and loot that have been requested in unprocessed proposals (only used to prevent overflows)
 
     bool public emergencyWarning = false; // true if emergency processing has ever been triggered
     uint256 public lastEmergencyProposalIndex = 0; // index of the last proposal which triggered emergency processing
@@ -188,6 +187,7 @@ contract Moloch {
         address paymentToken,
         string memory details
     ) public returns (uint256 proposalId) {
+        require(sharesRequested.add(lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");  // TODO test
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
@@ -283,15 +283,9 @@ contract Moloch {
         } else if (proposal.flags[5]) {
             require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
-
-        // standard proposal
-        } else {
-            // Make sure we won't run into overflows when doing calculations with shares.
-            // Note that totalShares + totalLoot + totalSharesAndLootRequested + sharesRequested + lootRequested is an upper bound
-            // on the number of shares + loot that can exist until this proposal has been processed.
-            require(totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested).add(totalSharesAndLootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
-            totalSharesAndLootRequested = totalSharesAndLootRequested.add(proposal.sharesRequested).add(proposal.lootRequested);
         }
+
+        // TODO: remove old tests: "too many shares requested"
 
         // compute startingPeriod for proposal
         uint256 startingPeriod = max(
@@ -357,9 +351,13 @@ contract Moloch {
         require(!proposal.flags[4] && !proposal.flags[5], "must be a standard proposal");
 
         proposal.flags[1] = true; // processed
-        totalSharesAndLootRequested = totalSharesAndLootRequested.sub(proposal.sharesRequested.add(proposal.lootRequested));
 
         (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
+
+        // Make the proposal fail if the new total number of shares and loot exceeds the limit
+        if (totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested) > MAX_NUMBER_OF_SHARES_AND_LOOT) {  // TODO test
+            didPass = false;
+        }
 
         if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
