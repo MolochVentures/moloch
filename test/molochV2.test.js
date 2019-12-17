@@ -2937,7 +2937,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedProcessorBalance: 0
       })
 
+      const emergencyWarningBefore = await moloch.emergencyWarning()
+      assert.equal(emergencyWarningBefore, false)
+
+      const lastEmergencyProposalIndexBefore = await moloch.lastEmergencyProposalIndex()
+      assert.equal(lastEmergencyProposalIndexBefore, 0)
+
       await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      const emergencyWarningAfter = await moloch.emergencyWarning()
+      assert.equal(emergencyWarningAfter, true)
+
+      const lastEmergencyProposalIndexAfter = await moloch.lastEmergencyProposalIndex()
+      assert.equal(lastEmergencyProposalIndexAfter, firstProposalIndex) // this is pointless because it is still 0
 
       await verifyProcessProposal({
         moloch: moloch,
@@ -2957,11 +2969,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: proposal1.tributeOffered,
+        expectedMolochBalance: proposal1.tributeOffered, // tribute is stuck in moloch forever
         guildBank: guildBank.address,
         expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
+        expectedApplicantBalance: 0, // applicant does not receive tribute back
         sponsor: summoner,
         expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
         processor: processor,
@@ -2975,6 +2987,237 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedExists: false,
         expectedShares: 0,
         expectedLoot: 0
+      })
+    })
+
+    describe('emergency processing auto-fail cascade boundary condition', async () => {
+      beforeEach(async () => {
+        await fundAndApproveToMoloch({
+          to: proposal1.applicant,
+          from: creator,
+          value: proposal1.tributeOffered * 2 // 2 membership proposals
+        })
+
+        // submit
+        proposer = proposal1.applicant
+        applicant = proposal1.applicant
+        await moloch.submitProposal(
+          applicant,
+          proposal1.sharesRequested,
+          proposal1.lootRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
+          proposal1.details,
+          { from: proposer }
+        )
+
+        // second identical proposal
+        await moloch.submitProposal(
+          applicant,
+          proposal1.sharesRequested,
+          proposal1.lootRequested,
+          proposal1.tributeOffered,
+          proposal1.tributeToken,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
+          proposal1.details,
+          { from: proposer }
+        )
+
+        await fundAndApproveToMoloch({
+          to: summoner,
+          from: creator,
+          value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // 2 proposals to sponsor
+        })
+
+        // sponsor the first proposal
+        await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      })
+
+      it('the next proposal in queue fails', async () => {
+        // sponsor the second proposal immediately after the first
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        // vote yes
+        await moveForwardPeriods(1)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+        // vote yes on the second proposal
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
+
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        // first proposal failed
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: firstProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // second proposal also fails
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // still no shares
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedExists: false,
+          expectedShares: 0,
+          expectedLoot: 0
+        })
+      })
+
+      it('the proposal that would have just started its grace period still fails', async () => {
+        // vote yes
+        await moveForwardPeriods(1)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+        // wait to sponsor the next proposal
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS - 2)
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        // vote yes on the second proposal
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
+
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        // first proposal failed
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: firstProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // second proposal also fails
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // still no shares
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedExists: false,
+          expectedShares: 0,
+          expectedLoot: 0
+        })
+      })
+
+      it('the proposal that would have been about to start its grace period succeeds', async () => {
+        // vote yes
+        await moveForwardPeriods(1)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+        // wait to sponsor the next proposal
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS - 1)
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
+
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        // first proposal failed
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: firstProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // second proposal succeeds!
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, true, true, false, false, false] // didPass is true
+        })
+
+        // yay - shares!
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedExists: true,
+          expectedShares: proposal1.sharesRequested,
+          expectedLoot: proposal1.lootRequested,
+          expectedDelegateKey: proposal1.applicant,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
+      })
+
+      it('when the previous proposal is processed without emergency - lastEmergencyProposalIndex is set correctly', async () => {
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        // vote yes on both
+        await moveForwardPeriods(2)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        // process first proposal before emergency
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        const emergencyWarningBefore = await moloch.emergencyWarning()
+        assert.equal(emergencyWarningBefore, false)
+
+        const lastEmergencyProposalIndexBefore = await moloch.lastEmergencyProposalIndex()
+        assert.equal(lastEmergencyProposalIndexBefore, 0)
+
+        // put second proposal in emergency
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        const emergencyWarningAfter = await moloch.emergencyWarning()
+        assert.equal(emergencyWarningAfter, true)
+
+        const lastEmergencyProposalIndexAfter = await moloch.lastEmergencyProposalIndex()
+        assert.equal(lastEmergencyProposalIndexAfter, secondProposalIndex)
+
+        // first proposal succeeded
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: firstProposalIndex,
+          expectedFlags: [true, true, true, false, false, false] // didPass is true
+        })
+
+        // second proposal fails
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // just 1 proposal worth of shares
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedExists: true,
+          expectedShares: proposal1.sharesRequested,
+          expectedLoot: proposal1.lootRequested,
+          expectedDelegateKey: proposal1.applicant,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
       })
     })
 
@@ -4927,7 +5170,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedLoot: 0,
         expectedMemberAddressByDelegateKey: proposal1.applicant
       })
-
 
       await verifyBalances({
         token: depositToken,

@@ -76,6 +76,9 @@ contract Moloch {
     uint256 public totalLoot = 0; // total loot across all members
     uint256 public totalSharesAndLootRequested = 0; // total shares and loot that have been requested in unprocessed proposals (only used to prevent overflows)
 
+    bool public emergencyWarning = false; // true if emergency processing has ever been triggered
+    uint256 public lastEmergencyProposalIndex = 0; // index of the last proposal which triggered emergency processing
+
     enum Vote {
         Null, // default value, counted as abstention
         Yes,
@@ -87,8 +90,8 @@ contract Moloch {
         uint256 shares; // the # of voting shares assigned to this member
         uint256 loot; // the loot amount available to this member (combined with shares on ragequit)
         bool exists; // always true once a member has been created
-        uint256 jailed; // set to proposalIndex of a passing guild kick proposal for this member, prevents voting on and sponsoring proposals
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
+        uint256 jailed; // set to proposalIndex of a passing guild kick proposal for this member, prevents voting on and sponsoring proposals
     }
 
     struct Proposal {
@@ -496,7 +499,7 @@ contract Moloch {
         emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
+    function _didPass(uint256 proposalIndex) internal returns (bool didPass, bool emergencyProcessing) {
         Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         didPass = proposal.yesVotes > proposal.noVotes;
@@ -504,8 +507,17 @@ contract Moloch {
         // Make the proposal fail (and skip returning tribute) if emergencyProcessingWait is exceeded
         emergencyProcessing = false;
         if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyProcessingWait)) {
+            emergencyWarning = true;
+            lastEmergencyProposalIndex = proposalIndex;
             emergencyProcessing = true;
             didPass = false;
+        }
+
+        // Make the proposal fail if it was in the grace period during the last emergency processing
+        if (emergencyWarning) {
+            if (proposal.startingPeriod < proposals[proposalQueue[lastEmergencyProposalIndex]].startingPeriod.add(emergencyProcessingWait)) {
+                didPass = false;
+            }
         }
 
         // Make the proposal fail if the dilutionBound is exceeded
@@ -677,7 +689,6 @@ contract Moloch {
         uint256 bailoutWaitStartingPeriod = member.highestIndexYesVote > member.jailed
             ? proposals[proposalQueue[member.highestIndexYesVote]].startingPeriod
             : proposals[proposalQueue[member.jailed]].startingPeriod;
-        // TODO TEST both
 
         // TODO TEST edge case - what happens if this proposal is in emergency processing
         // - need to make sure bailoutWait is higher than emergencyProcessingWait
