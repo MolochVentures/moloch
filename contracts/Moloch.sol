@@ -131,8 +131,6 @@ contract Moloch {
         uint256 _dilutionBound,
         uint256 _processingReward
     ) public {
-        // TODO potentially add checks for maximum emergency processing & bailout wait
-
         require(_summoner != address(0), "summoner cannot be 0");
         require(_periodDuration > 0, "_periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
