@@ -1,22 +1,3 @@
-// 1. guild kick proposal puts someone in jail
-//  - jailed state for member
-//  - prevent voting or sponsoring
-//  - don't ragequit funds
-//  - prevent jailed members from receiving more shares & loot
-//    - processProposal (pending proposals)
-//    - sponsorPropoosal (could have already been submitted)
-//    - submitProposal (don't waste space)
-// 2. ragekick function
-//  - can be called anytime after jail state
-//  - can't be called if outstanding YES votes
-//  - returns all funds (calls ragequit)
-// 3. bailout function
-//  - burns shares/loot -> loot for summoner
-//  - can only be called after WAITING PERIOD
-
-// TODO
-// - auto-fail any proposals past grace period when emergencyProcessing is switched
-
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
@@ -56,14 +37,10 @@ contract Moloch {
     // ***************
     // EVENTS
     // ***************
-    // TODO
-    // - OCD the variable orders
-    // - update process proposal
     event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken);
     event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
     event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
     event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
-    // event ProcessProposal(uint256 indexed proposalQueueIndex, address indexed applicant, address indexed memberAddress, uint256 tributeOffered, address tributeToken, uint256 sharesRequested, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
@@ -690,10 +667,6 @@ contract Moloch {
         uint256 bailoutWaitStartingPeriod = member.highestIndexYesVote > member.jailed
             ? proposals[proposalQueue[member.highestIndexYesVote]].startingPeriod
             : proposals[proposalQueue[member.jailed]].startingPeriod;
-
-        // TODO TEST edge case - what happens if this proposal is in emergency processing
-        // - need to make sure bailoutWait is higher than emergencyProcessingWait
-        // - otherwise we can add emergencyProcessingWait to this wait...
 
         // bailout wait starts after proposal grace period ends
         return getCurrentPeriod() >= bailoutWaitStartingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(bailoutWait);
