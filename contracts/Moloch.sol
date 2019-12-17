@@ -87,7 +87,7 @@ contract Moloch {
         uint256 shares; // the # of voting shares assigned to this member
         uint256 loot; // the loot amount available to this member (combined with shares on ragequit)
         bool exists; // always true once a member has been created
-        bool jailed; // true if a guild kick propopsal passes for this member, prevents voting on and sponsoring proposals
+        uint256 jailed; // set to proposalIndex of a passing guild kick proposal for this member, prevents voting on and sponsoring proposals
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
     }
 
@@ -181,13 +181,14 @@ contract Moloch {
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
         emergencyProcessingWait = _emergencyProcessingWait;
+        bailoutWait = _bailoutWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
 
         summoningTime = now;
 
-        members[summoner] = Member(summoner, 1, 0, true, false, 0);
+        members[summoner] = Member(summoner, 1, 0, true, 0, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
 
@@ -210,7 +211,7 @@ contract Moloch {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
-        require(!members[applicant].jailed, "proposal applicant must not be jailed");
+        require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
@@ -237,7 +238,7 @@ contract Moloch {
 
         require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
         require(memberToKick != summoner, "the summoner may not be kicked");
-        require(!members[memberToKick].jailed, "member must not already be jailed");
+        require(members[memberToKick].jailed == 0, "member must not already be jailed");
 
         bool[6] memory flags;
         flags[5] = true;
@@ -290,7 +291,7 @@ contract Moloch {
         require(proposal.proposer != address(0), 'proposal must have been proposed');
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
-        require(!members[proposal.applicant].jailed, "proposal applicant must not be jailed");
+        require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // whitelist proposal
         if (proposal.flags[4]) {
@@ -403,7 +404,7 @@ contract Moloch {
                 }
 
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, false, 0);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
@@ -479,7 +480,7 @@ contract Moloch {
         if (didPass) {
             proposal.flags[2] = true; // didPass
             Member storage member = members[proposal.applicant];
-            member.jailed = true;
+            member.jailed = proposalIndex;
 
             // transfer shares to loot
             member.loot = member.loot.add(member.shares);
@@ -515,7 +516,7 @@ contract Moloch {
         // Make the proposal fail if the applicant is jailed
         // - for standard proposals, we don't want the applicant to get any shares/loot/payment
         // - for guild kick proposals, we should never be able to propose to kick a jailed member (or have two kick proposals active), so it doesn't matter
-        if (members[proposal.applicant].jailed) {
+        if (members[proposal.applicant].jailed != 0) {
             didPass = false;
         }
 
@@ -591,10 +592,10 @@ contract Moloch {
     function ragekick(address memberToKick) public {
         Member storage member = members[memberToKick];
 
-        require(member.jailed, "member must be in jail");
+        require(member.jailed != 0, "member must be in jail");
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
-        require(!canBailout(member.highestIndexYesVote), "bailoutWait has passed, member must be bailed out"); // TODO test
+        require(!canBailout(memberToKick), "bailoutWait has passed, member must be bailed out"); // TODO test
 
         _ragequit(memberToKick, 0, member.loot, approvedTokens);
     }
@@ -602,9 +603,9 @@ contract Moloch {
     function bailout(address memberToBail) public {
         Member storage member = members[memberToBail];
 
-        require(member.jailed, "member must be in jail"); // TODO test
+        require(member.jailed != 0, "member must be in jail");
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
-        require(canBailout(member.highestIndexYesVote), "cannot bailout yet"); // TODO test
+        require(canBailout(memberToBail), "cannot bailout yet");
 
         members[summoner].loot = members[summoner].loot.add(member.loot);
         member.loot = 0;
@@ -668,12 +669,22 @@ contract Moloch {
         return proposals[proposalQueue[highestIndexYesVote]].flags[1];
     }
 
-    function canBailout(uint256 highestIndexYesVote) public view returns (bool) {
-        require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
-        // edge case - what happens if this proposal is in emergency processing
+    function canBailout(address memberToBail) public view returns (bool) {
+        Member memory member = members[memberToBail];
+
+        // get the starting period of the proposal to start the bailout wait from
+        // - either the guild kick proposal or the member's highest index yes vote
+        uint256 bailoutWaitStartingPeriod = member.highestIndexYesVote > member.jailed
+            ? proposals[proposalQueue[member.highestIndexYesVote]].startingPeriod
+            : proposals[proposalQueue[member.jailed]].startingPeriod;
+        // TODO TEST both
+
+        // TODO TEST edge case - what happens if this proposal is in emergency processing
         // - need to make sure bailoutWait is higher than emergencyProcessingWait
         // - otherwise we can add emergencyProcessingWait to this wait...
-        return getCurrentPeriod() >= proposals[proposalQueue[highestIndexYesVote]].startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(bailoutWait);
+
+        // bailout wait starts after proposal grace period ends
+        return getCurrentPeriod() >= bailoutWaitStartingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(bailoutWait);
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {

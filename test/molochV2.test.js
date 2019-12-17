@@ -81,6 +81,12 @@ const revertMessages = {
   canRageQuitProposalDoesNotExist: 'proposal does not exist',
   safeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
   safeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
+  ragekickMustBeInJail: 'member must be in jail',
+  ragekickMustHaveSomeLoot: 'member must have some loot',
+  ragekickBailoutWaitHasPassed: 'bailoutWait has passed, member must be bailed out',
+  bailoutNotYet: 'cannot bailout yet',
+  bailoutMustBeInJail: 'member must be in jail',
+  bailoutMustHaveSomeLoot: 'member must have some loot',
   getMemberProposalVoteMemberDoesntExist: 'member does not exist',
   getMemberProposalVoteProposalDoesntExist: 'proposal does not exist',
 }
@@ -217,7 +223,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe.only('constructor', () => {
+  describe('constructor', () => {
     it('verify deployment parameters', async () => {
       // eslint-disable-next-line no-unused-vars
       const now = await blockTime()
@@ -245,6 +251,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       const emergencyProcessingWaitLength = await moloch.emergencyProcessingWait()
       assert.equal(+emergencyProcessingWaitLength, deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
+
+      const bailoutWaitLength = await moloch.bailoutWait()
+      assert.equal(+bailoutWaitLength, deploymentConfig.BAILOUT_WAIT_IN_PERIODS)
 
       const proposalDeposit = await moloch.proposalDeposit()
       assert.equal(+proposalDeposit, deploymentConfig.PROPOSAL_DEPOSIT)
@@ -2830,7 +2839,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -4394,6 +4403,382 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
+  describe('ragekick', () => {
+    it('failure - member must be in jail', async () => {
+      await moloch.ragekick(summoner)
+        .should.be.rejectedWith(revertMessages.ragekickMustBeInJail)
+    })
+  })
+
+  describe('bailout', () => {
+    it('failure - member must be in jail', async () => {
+      await moloch.bailout(summoner)
+        .should.be.rejectedWith(revertMessages.bailoutMustBeInJail)
+    })
+  })
+
+  describe('ragekick & bailout & canBailout - member has never voted', () => {
+    beforeEach(async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered // submitting 1 membership proposal
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // 1 membership + 1 guild kick proposal (to be sponsored)
+      })
+
+      // complete membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // sponsor guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // complete guild kick proposal
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: processor })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: 1,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+    })
+
+    it('ragekick - happy case - can ragekick immediately after guild kick', async () => {
+      const initialGuildBankBalance = new BN(proposal1.tributeOffered)
+      const initialTotalSharesAndLoot = new BN(proposal1.lootRequested + proposal1.sharesRequested + 1)
+      const lootToRageQuit = new BN(proposal1.lootRequested + proposal1.sharesRequested) // ragequit 100% of loot + shares
+      const tokensToRageQuit = initialGuildBankBalance.mul(lootToRageQuit).div(initialTotalSharesAndLoot)
+
+      await moloch.ragekick(proposal1.applicant)
+
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: 0, // no more loot
+        expectedJailed: 1,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      await verifyBalances({
+        token: depositToken,
+        moloch: moloch.address,
+        expectedMolochBalance: 0,
+        guildBank: guildBank.address,
+        expectedGuildBankBalance: initialGuildBankBalance.sub(tokensToRageQuit),
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: tokensToRageQuit,
+        sponsor: summoner,
+        expectedSponsorBalance: initSummonerBalance + ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
+        processor: processor,
+        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2
+      })
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, 1)
+
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(totalLoot, 0)
+    })
+
+    it('ragekick - failure - member must have some loot', async () => {
+      await moloch.ragekick(proposal1.applicant)
+
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: 0, // no more loot
+        expectedJailed: 1,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      await moloch.ragekick(proposal1.applicant)
+        .should.be.rejectedWith(revertMessages.ragekickMustHaveSomeLoot)
+    })
+
+    it('ragekick - failure - bailoutWait has passed', async () => {
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS)
+
+      await moloch.ragekick(proposal1.applicant)
+        .should.be.rejectedWith(revertMessages.ragekickBailoutWaitHasPassed)
+    })
+
+    it('ragekick - boundary condition - can still ragekick before bailoutWait passes', async () => {
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS - 1)
+
+      await moloch.ragekick(proposal1.applicant)
+
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: 0, // no more loot
+        expectedJailed: 1,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+    })
+
+    it('bailout - happy case - bailout wait starts after guild kick, can bail out after it finishes', async () => {
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS)
+
+      const canBailout = await moloch.canBailout(proposal1.applicant)
+      assert.equal(canBailout, true)
+
+      await moloch.bailout(proposal1.applicant)
+
+      // loot removed from jailed member
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: 0, // no more loot
+        expectedJailed: 1,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // loot added to summoner
+      await verifyMember({
+        moloch: moloch,
+        member: summoner,
+        expectedDelegateKey: summoner,
+        expectedShares: 1,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // summoner has all the loot
+        expectedJailed: 0,
+        expectedHighestIndexYesVote: 1,
+        expectedMemberAddressByDelegateKey: summoner
+      })
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, 1)
+
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(totalLoot, proposal1.sharesRequested + proposal1.lootRequested)
+    })
+
+    it('failure - canBailout is false - bailoutWait has not finished', async () => {
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS - 1) // wait 1 period less than bailoutWait
+
+      const canBailout = await moloch.canBailout(proposal1.applicant)
+      assert.equal(canBailout, false)
+
+      await moloch.bailout(proposal1.applicant)
+        .should.be.rejectedWith(revertMessages.bailoutNotYet)
+    })
+
+    it('failure - member must have some loot', async () => {
+      // try to bailout twice - member is still jailed, but has no loot
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS)
+      await moloch.bailout(proposal1.applicant)
+      await moloch.bailout(proposal1.applicant)
+        .should.be.rejectedWith(revertMessages.bailoutMustHaveSomeLoot)
+    })
+  })
+
+  describe('ragekick & bailout & canBailout - member voted on later proposal', () => {
+    beforeEach(async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered * 2 // submitting 2 membership proposal
+      })
+
+      // submit membership proposal
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 3 // 2 membership + 1 guild kick proposal (to be sponsored)
+      })
+
+      // complete membership proposal
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      // proposal 1 has given applicant shares
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: proposal1.sharesRequested,
+        expectedLoot: proposal1.lootRequested,
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // raise the kick applicant proposal
+      await moloch.submitGuildKickProposal(
+        applicant,
+        'kick',
+        { from: proposer }
+      )
+
+      // submit a second proposal for more shares
+      await moloch.submitProposal(
+        applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      // sponsor guild kick proposal
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+      // sponsor second membership proposal
+      await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+
+      // vote yes on guild kick
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+      // applicant votes yes on the second membership proposal
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: proposal1.applicant })
+
+      // complete guild kick proposal
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+
+      // shares removed
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+        expectedJailed: 1,
+        expectedHighestIndexYesVote: 1, // applicant voted on second membership proposal
+        expectedMemberAddressByDelegateKey: applicant
+      })
+    })
+
+    it('happy case - bailout wait starts after second membership proposal is processed, can bail out after it finishes', async () => {
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS - 1) // minus 1 bc we moved forward 1 extra period
+
+      const canBailout = await moloch.canBailout(proposal1.applicant)
+      assert.equal(canBailout, true)
+
+      await moloch.bailout(proposal1.applicant)
+
+      // loot removed from jailed member
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: 0, // no more loot
+        expectedJailed: 1,
+        expectedHighestIndexYesVote: 1, // applicant voted on second membership proposal
+        expectedMemberAddressByDelegateKey: applicant
+      })
+
+      // loot added to summoner
+      await verifyMember({
+        moloch: moloch,
+        member: summoner,
+        expectedDelegateKey: summoner,
+        expectedShares: 1,
+        expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // summoner has all the loot
+        expectedJailed: 0,
+        expectedHighestIndexYesVote: 1,
+        expectedMemberAddressByDelegateKey: summoner
+      })
+
+      const totalShares = await moloch.totalShares()
+      assert.equal(totalShares, 1)
+
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(totalLoot, proposal1.sharesRequested + proposal1.lootRequested)
+    })
+
+    it('failure - canBailout is false - bailoutWait has not finished', async () => {
+      // move forward 1 less than bailout wait (the second membership proposal has not been processed)
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS - 2)
+
+      const canBailout = await moloch.canBailout(proposal1.applicant)
+      assert.equal(canBailout, false)
+
+      await moloch.bailout(proposal1.applicant)
+        .should.be.rejectedWith(revertMessages.bailoutNotYet)
+    })
+  })
+
   describe('getMemberProposalVote', () => {
     it('happy case', async () => {
       await fundAndApproveToMoloch({
@@ -4811,7 +5196,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -4831,7 +5216,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
     })
@@ -4919,7 +5304,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -5005,7 +5390,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -5084,7 +5469,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -5172,7 +5557,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedDelegateKey: applicant,
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
-        expectedJailed: true,
+        expectedJailed: 1,
         expectedMemberAddressByDelegateKey: applicant
       })
 
