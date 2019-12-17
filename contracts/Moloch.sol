@@ -595,7 +595,7 @@ contract Moloch {
         require(member.jailed != 0, "member must be in jail");
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
-        require(!canBailout(memberToKick), "bailoutWait has passed, member must be bailed out"); // TODO test
+        require(!canBailout(memberToKick), "bailoutWait has passed, member must be bailed out");
 
         _ragequit(memberToKick, 0, member.loot, approvedTokens);
     }

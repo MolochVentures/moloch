@@ -84,6 +84,7 @@ const revertMessages = {
   ragekickMustBeInJail: 'member must be in jail',
   ragekickMustHaveSomeLoot: 'member must have some loot',
   ragekickBailoutWaitHasPassed: 'bailoutWait has passed, member must be bailed out',
+  ragekickPendingProposals: 'cannot ragequit until highest index proposal member voted YES on is processed',
   bailoutNotYet: 'cannot bailout yet',
   bailoutMustBeInJail: 'member must be in jail',
   bailoutMustHaveSomeLoot: 'member must have some loot',
@@ -4708,7 +4709,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       // applicant votes yes on the second membership proposal
       await moveForwardPeriods(1)
-      await moloch.submitVote(secondProposalIndex, yes, { from: proposal1.applicant })
+      await moloch.submitVote(thirdProposalIndex, yes, { from: proposal1.applicant })
 
       // complete guild kick proposal
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
@@ -4723,13 +4724,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedShares: 0,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
         expectedJailed: 1,
-        expectedHighestIndexYesVote: 1, // applicant voted on second membership proposal
+        expectedHighestIndexYesVote: thirdProposalIndex, // applicant voted on second membership proposal
         expectedMemberAddressByDelegateKey: applicant
       })
     })
 
     it('happy case - bailout wait starts after second membership proposal is processed, can bail out after it finishes', async () => {
-      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS - 1) // minus 1 bc we moved forward 1 extra period
+      await moveForwardPeriods(deploymentConfig.BAILOUT_WAIT_IN_PERIODS) // minus 1 bc we moved forward 1 extra period
 
       const canBailout = await moloch.canBailout(proposal1.applicant)
       assert.equal(canBailout, true)
@@ -4744,7 +4745,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedShares: 0,
         expectedLoot: 0, // no more loot
         expectedJailed: 1,
-        expectedHighestIndexYesVote: 1, // applicant voted on second membership proposal
+        expectedHighestIndexYesVote: thirdProposalIndex, // applicant voted on second membership proposal
         expectedMemberAddressByDelegateKey: applicant
       })
 
@@ -4756,7 +4757,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedShares: 1,
         expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // summoner has all the loot
         expectedJailed: 0,
-        expectedHighestIndexYesVote: 1,
+        expectedHighestIndexYesVote: secondProposalIndex, // summoner voted on guild kick
         expectedMemberAddressByDelegateKey: summoner
       })
 
@@ -4776,6 +4777,27 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       await moloch.bailout(proposal1.applicant)
         .should.be.rejectedWith(revertMessages.bailoutNotYet)
+    })
+
+    it('ragekick - boundary condition - must wait for highestIndexYesVote propopsal to be processed', async () => {
+      await moloch.ragekick(proposal1.applicant)
+        .should.be.rejectedWith(revertMessages.ragekickPendingProposals)
+
+      await moloch.processProposal(thirdProposalIndex) // process the second membership proposal
+
+      // now we can ragekick
+      await moloch.ragekick(proposal1.applicant)
+
+      await verifyMember({
+        moloch: moloch,
+        member: applicant,
+        expectedDelegateKey: applicant,
+        expectedShares: 0,
+        expectedLoot: 0, // no more loot
+        expectedJailed: 1,
+        expectedHighestIndexYesVote: thirdProposalIndex,
+        expectedMemberAddressByDelegateKey: applicant
+      })
     })
   })
 
