@@ -10,10 +10,13 @@ contract Moloch {
     /***************
     GLOBAL CONSTANTS
     ***************/
+    address public summoner; // initial singular shareholder, assists with bailouts
+
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
-    uint256 public emergencyExitWait; // default = 35 periods (7 days)
+    uint256 public emergencyProcessingWait; // default = 35 periods (7 days)
+    uint256 public bailoutWait; // default = 70 periods (14 days)
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
@@ -25,29 +28,34 @@ contract Moloch {
     // HARD-CODED LIMITS
     // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
     // with periods or shares, yet big enough to not limit reasonable use cases.
-    uint256 constant MAX_VOTING_PERIOD_LENGTH = 10 ** 18;
-    uint256 constant MAX_GRACE_PERIOD_LENGTH = 10 ** 18;
-    uint256 constant MAX_DILUTION_BOUND = 10 ** 18;
-    uint256 constant MAX_NUMBER_OF_SHARES = 10 ** 18;
+    uint256 constant MAX_VOTING_PERIOD_LENGTH = 10**18; // maximum length of voting period
+    uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
+    uint256 constant MAX_BAILOUT_WAIT = 10**18; // maximum # periods after a jailed member can be ragekicked before they must be bailed out instead
+    uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
+    uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
 
-    /***************
-    EVENTS
-    ***************/
-    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant,uint256 tributeOffered, address tributeToken, uint256 sharesRequested, uint256 paymentRequested, address paymentToken);
+    // ***************
+    // EVENTS
+    // ***************
+    event SubmitProposal(uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress, address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken);
     event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
-    event SubmitVote(uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
-    event ProcessProposal(uint256 indexed proposalQueueIndex, uint256 indexed proposalId, bool didPass);
-    event Ragequit(address indexed memberAddress, uint256 sharesToBurn, address[] tokenList);
+    event SubmitVote(uint256 indexed proposalIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
+    event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
+    event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
 
-    /******************
-    INTERNAL ACCOUNTING
-    ******************/
-    uint256 public proposalCount = 0; // the total # of proposals submitted (includes those not yet sponsored)
+    // *******************
+    // INTERNAL ACCOUNTING
+    // *******************
+    uint256 public proposalCount = 0; // total proposals submitted
     uint256 public totalShares = 0; // total shares across all members
-    uint256 public totalSharesRequested = 0; // total shares that have been requested in unprocessed proposals
+    uint256 public totalLoot = 0; // total loot across all members
+    uint256 public totalSharesAndLootRequested = 0; // total shares and loot that have been requested in unprocessed proposals (only used to prevent overflows)
+
+    bool public emergencyWarning = false; // true if emergency processing has ever been triggered
+    uint256 public lastEmergencyProposalIndex = 0; // index of the last proposal which triggered emergency processing
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -57,9 +65,11 @@ contract Moloch {
 
     struct Member {
         address delegateKey; // the key responsible for submitting proposals and voting - defaults to member address unless updated
-        uint256 shares; // the # of shares assigned to this member
+        uint256 shares; // the # of voting shares assigned to this member
+        uint256 loot; // the loot amount available to this member (combined with shares on ragequit)
         bool exists; // always true once a member has been created
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
+        uint256 jailed; // set to proposalIndex of a passing guild kick proposal for this member, prevents voting on and sponsoring proposals
     }
 
     struct Proposal {
@@ -67,6 +77,7 @@ contract Moloch {
         address proposer; // the account that submitted the proposal (can be non-member)
         address sponsor; // the member that sponsored the proposal (moving it into the queue)
         uint256 sharesRequested; // the # of shares the applicant is requesting
+        uint256 lootRequested; // the amount of loot the applicant is requesting
         uint256 tributeOffered; // amount of tokens offered as tribute
         IERC20 tributeToken; // tribute token contract reference
         uint256 paymentRequested; // amount of tokens requested as payment
@@ -76,7 +87,7 @@ contract Moloch {
         uint256 noVotes; // the total number of NO votes for this proposal
         bool[6] flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         string details; // proposal details - could be IPFS hash, plaintext, or JSON
-        uint256 maxTotalSharesAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
+        uint256 maxTotalSharesAndLootAtYesVote; // the maximum # of total shares encountered at a yes vote on this proposal
         mapping(address => Vote) votesByMember; // the votes on this proposal by each member
     }
 
@@ -94,7 +105,12 @@ contract Moloch {
     uint256[] public proposalQueue;
 
     modifier onlyMember {
-        require(members[msg.sender].shares > 0, "not a member");
+        require(members[msg.sender].shares > 0 || members[msg.sender].loot > 0, "not a member");
+        _;
+    }
+
+    modifier onlyShareholder {
+        require(members[msg.sender].shares > 0, "not a shareholder");
         _;
     }
 
@@ -104,26 +120,31 @@ contract Moloch {
     }
 
     constructor(
-        address summoner,
+        address _summoner,
         address[] memory _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
-        uint256 _emergencyExitWait,
+        uint256 _emergencyProcessingWait,
+        uint256 _bailoutWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
     ) public {
-        require(summoner != address(0), "summoner cannot be 0");
+        require(_summoner != address(0), "summoner cannot be 0");
         require(_periodDuration > 0, "_periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
-        require(_emergencyExitWait > 0, "_emergencyExitWait cannot be 0");
+        require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
+        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait");
+        require(_bailoutWait <= MAX_BAILOUT_WAIT, "_bailoutWait exceeds limit");
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
+
+        summoner = _summoner;
 
         depositToken = IERC20(_approvedTokens[0]);
 
@@ -139,14 +160,15 @@ contract Moloch {
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
-        emergencyExitWait = _emergencyExitWait;
+        emergencyProcessingWait = _emergencyProcessingWait;
+        bailoutWait = _bailoutWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
 
         summoningTime = now;
 
-        members[summoner] = Member(summoner, 1, true, 0);
+        members[summoner] = Member(summoner, 1, 0, true, 0, 0);
         memberAddressByDelegateKey[summoner] = summoner;
         totalShares = 1;
 
@@ -159,48 +181,56 @@ contract Moloch {
     function submitProposal(
         address applicant,
         uint256 sharesRequested,
+        uint256 lootRequested,
         uint256 tributeOffered,
         address tributeToken,
         uint256 paymentRequested,
         address paymentToken,
         string memory details
-    )
-    public
-    {
+    ) public returns (uint256 proposalId) {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
+        require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // collect tribute from applicant and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
 
         bool[6] memory flags;
 
-        _submitProposal(applicant, sharesRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
+        _submitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
+        return proposalCount - 1; // return proposalId - contracts calling submit might want it
     }
 
-    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public {
+    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public returns (uint256 proposalId) {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
 
         bool[6] memory flags;
         flags[4] = true;
 
-        _submitProposal(address(0), 0, 0, tokenToWhitelist, 0, address(0), details, flags);
+        _submitProposal(address(0), 0, 0, 0, tokenToWhitelist, 0, address(0), details, flags);
+        return proposalCount - 1;
     }
 
-    function submitGuildKickProposal(address memberToKick, string memory details) public {
-        require(members[memberToKick].shares > 0, "member must have at least one share");
+    function submitGuildKickProposal(address memberToKick, string memory details) public returns (uint256 proposalId) {
+        Member memory member = members[memberToKick];
+
+        require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
+        require(memberToKick != summoner, "the summoner may not be kicked");
+        require(members[memberToKick].jailed == 0, "member must not already be jailed");
 
         bool[6] memory flags;
         flags[5] = true;
 
-        _submitProposal(memberToKick, 0, 0, address(0), 0, address(0), details, flags);
+        _submitProposal(memberToKick, 0, 0, 0, address(0), 0, address(0), details, flags);
+        return proposalCount - 1;
     }
 
     function _submitProposal(
         address applicant,
         uint256 sharesRequested,
+        uint256 lootRequested,
         uint256 tributeOffered,
         address tributeToken,
         uint256 paymentRequested,
@@ -213,6 +243,7 @@ contract Moloch {
             proposer : msg.sender,
             sponsor : address(0),
             sharesRequested : sharesRequested,
+            lootRequested : lootRequested,
             tributeOffered : tributeOffered,
             tributeToken : IERC20(tributeToken),
             paymentRequested : paymentRequested,
@@ -222,12 +253,12 @@ contract Moloch {
             noVotes : 0,
             flags : flags,
             details : details,
-            maxTotalSharesAtYesVote : 0
+            maxTotalSharesAndLootAtYesVote : 0
         });
 
         proposals[proposalCount] = proposal;
         address memberAddress = memberAddressByDelegateKey[msg.sender];
-        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, tributeOffered, tributeToken, sharesRequested, paymentRequested, paymentToken);
+        emit SubmitProposal(proposalCount, msg.sender, memberAddress, applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken);
         proposalCount += 1;
     }
 
@@ -238,22 +269,28 @@ contract Moloch {
         Proposal storage proposal = proposals[proposalId];
 
         require(proposal.proposer != address(0), 'proposal must have been proposed');
-
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has been cancelled");
+        require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
+        // whitelist proposal
         if (proposal.flags[4]) {
+            require(!tokenWhitelist[address(proposal.tributeToken)], "cannot already have whitelisted the token");
             require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
             proposedToWhitelist[address(proposal.tributeToken)] = true;
+
+        // guild kick proposal
         } else if (proposal.flags[5]) {
             require(!proposedToKick[proposal.applicant], 'already proposed to kick');
             proposedToKick[proposal.applicant] = true;
+
+        // standard proposal
         } else {
             // Make sure we won't run into overflows when doing calculations with shares.
-            // Note that totalShares + totalSharesRequested + sharesRequested is an upper bound
-            // on the number of shares that can exist until this proposal has been processed.
-            require(totalShares.add(totalSharesRequested).add(proposal.sharesRequested) <= MAX_NUMBER_OF_SHARES, "too many shares requested");
-            totalSharesRequested = totalSharesRequested.add(proposal.sharesRequested);
+            // Note that totalShares + totalLoot + totalSharesAndLootRequested + sharesRequested + lootRequested is an upper bound
+            // on the number of shares + loot that can exist until this proposal has been processed.
+            require(totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested).add(totalSharesAndLootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
+            totalSharesAndLootRequested = totalSharesAndLootRequested.add(proposal.sharesRequested).add(proposal.lootRequested);
         }
 
         // compute startingPeriod for proposal
@@ -300,8 +337,8 @@ contract Moloch {
             }
 
             // set maximum of total shares encountered at a yes vote - used to bound dilution for yes voters
-            if (totalShares > proposal.maxTotalSharesAtYesVote) {
-                proposal.maxTotalSharesAtYesVote = totalShares;
+            if (totalShares.add(totalLoot) > proposal.maxTotalSharesAndLootAtYesVote) {
+                proposal.maxTotalSharesAndLootAtYesVote = totalShares.add(totalLoot);
             }
 
         } else if (vote == Vote.No) {
@@ -319,8 +356,8 @@ contract Moloch {
 
         require(!proposal.flags[4] && !proposal.flags[5], "must be a standard proposal");
 
-        proposal.flags[1] = true;
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+        proposal.flags[1] = true; // processed
+        totalSharesAndLootRequested = totalSharesAndLootRequested.sub(proposal.sharesRequested.add(proposal.lootRequested));
 
         (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
 
@@ -330,11 +367,12 @@ contract Moloch {
 
         // PROPOSAL PASSED
         if (didPass) {
-            proposal.flags[2] = true;
+            proposal.flags[2] = true; // didPass
 
-            // if the applicant is already a member, add to their existing shares
+            // if the applicant is already a member, add to their existing shares & loot
             if (members[proposal.applicant].exists) {
                 members[proposal.applicant].shares = members[proposal.applicant].shares.add(proposal.sharesRequested);
+                members[proposal.applicant].loot = members[proposal.applicant].loot.add(proposal.lootRequested);
 
             // the applicant is a new member, create a new record for them
             } else {
@@ -346,12 +384,13 @@ contract Moloch {
                 }
 
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, true, 0);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
-            // mint new shares
+            // mint new shares & loot
             totalShares = totalShares.add(proposal.sharesRequested);
+            totalLoot = totalLoot.add(proposal.lootRequested);
 
             require(
                 proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
@@ -388,13 +427,12 @@ contract Moloch {
 
         require(proposal.flags[4], "must be a whitelist proposal");
 
-        proposal.flags[1] = true;
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+        proposal.flags[1] = true; // processed
 
         (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
-            proposal.flags[2] = true;
+            proposal.flags[2] = true; // didPass
 
             tokenWhitelist[address(proposal.tributeToken)] = true;
             approvedTokens.push(proposal.tributeToken);
@@ -415,15 +453,20 @@ contract Moloch {
 
         require(proposal.flags[5], "must be a guild kick proposal");
 
-        proposal.flags[1] = true;
-        totalSharesRequested = totalSharesRequested.sub(proposal.sharesRequested);
+        proposal.flags[1] = true; // processed
 
         (bool didPass,) = _didPass(proposalIndex);
 
         if (didPass) {
-            proposal.flags[2] = true;
+            proposal.flags[2] = true; // didPass
+            Member storage member = members[proposal.applicant];
+            member.jailed = proposalIndex;
 
-            _ragequit(proposal.applicant, members[proposal.applicant].shares, approvedTokens);
+            // transfer shares to loot
+            member.loot = member.loot.add(member.shares);
+            totalShares = totalShares.sub(member.shares);
+            totalLoot = totalLoot.add(member.shares);
+            member.shares = 0; // revoke all shares
         }
 
         proposedToKick[proposal.applicant] = false;
@@ -433,20 +476,36 @@ contract Moloch {
         emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function _didPass(uint256 proposalIndex) internal view returns (bool didPass, bool emergencyProcessing) {
+    function _didPass(uint256 proposalIndex) internal returns (bool didPass, bool emergencyProcessing) {
         Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         didPass = proposal.yesVotes > proposal.noVotes;
 
-        // Make the proposal fail (and skip returning tribute) if emergencyExitWait is exceeded
+        // Make the proposal fail (and skip returning tribute) if emergencyProcessingWait is exceeded
         emergencyProcessing = false;
-        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyExitWait)) {
+        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyProcessingWait)) {
+            emergencyWarning = true;
+            lastEmergencyProposalIndex = proposalIndex;
             emergencyProcessing = true;
             didPass = false;
         }
 
+        // Make the proposal fail if it was in the grace period during the last emergency processing
+        if (emergencyWarning) {
+            if (proposal.startingPeriod < proposals[proposalQueue[lastEmergencyProposalIndex]].startingPeriod.add(emergencyProcessingWait)) {
+                didPass = false;
+            }
+        }
+
         // Make the proposal fail if the dilutionBound is exceeded
-        if (totalShares.mul(dilutionBound) < proposal.maxTotalSharesAtYesVote) {
+        if ((totalShares.add(totalLoot)).mul(dilutionBound) < proposal.maxTotalSharesAndLootAtYesVote) {
+            didPass = false;
+        }
+
+        // Make the proposal fail if the applicant is jailed
+        // - for standard proposals, we don't want the applicant to get any shares/loot/payment
+        // - for guild kick proposals, we should never be able to propose to kick a jailed member (or have two kick proposals active), so it doesn't matter
+        if (members[proposal.applicant].jailed != 0) {
             didPass = false;
         }
 
@@ -474,13 +533,13 @@ contract Moloch {
         );
     }
 
-    function ragequit(uint256 sharesToBurn) public onlyMember {
-        _ragequit(msg.sender, sharesToBurn, approvedTokens);
+    function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public onlyMember {
+        _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
     }
 
-    // provide a list of tokens to withdraw (in case guild bank has broken tokens)
-    function safeRagequit(uint256 sharesToBurn, IERC20[] memory tokenList) public onlyMember {
-        for (uint256 i = 0; i < tokenList.length; i++) {
+    function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public onlyMember {
+        // all tokens in tokenList must be in the tokenWhitelist
+        for (uint256 i=0; i < tokenList.length; i++) {
             require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
 
             if (i > 0) {
@@ -488,41 +547,65 @@ contract Moloch {
             }
         }
 
-        _ragequit(msg.sender, sharesToBurn, tokenList);
+        _ragequit(msg.sender, sharesToBurn, lootToBurn, tokenList);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, IERC20[] memory tokenList) internal {
-        uint256 initialTotalShares = totalShares;
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) internal {
+        uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
 
         require(member.shares >= sharesToBurn, "insufficient shares");
+        require(member.loot >= lootToBurn, "insufficient loot");
 
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
 
-        // burn shares
+        uint256 sharesAndLootToBurn = sharesToBurn.add(lootToBurn);
+
+        // burn shares and loot
         member.shares = member.shares.sub(sharesToBurn);
+        member.loot = member.loot.sub(lootToBurn);
         totalShares = totalShares.sub(sharesToBurn);
+        totalLoot = totalLoot.sub(lootToBurn);
 
         // instruct guildBank to transfer fair share of tokens to the ragequitter
         require(
-            guildBank.withdraw(memberAddress, sharesToBurn, initialTotalShares, tokenList),
+            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, tokenList),
             "withdrawal of tokens from guildBank failed"
         );
 
-        address[] memory eventTokenList = new address[](tokenList.length);
-        for (uint256 i=0; i < eventTokenList.length; i++) {
-            eventTokenList[i] = address(approvedTokens[i]);
-        }
-        emit Ragequit(msg.sender, sharesToBurn, eventTokenList);
+        emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
+    }
+
+    function ragekick(address memberToKick) public {
+        Member storage member = members[memberToKick];
+
+        require(member.jailed != 0, "member must be in jail");
+        require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
+        require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
+        require(!canBailout(memberToKick), "bailoutWait has passed, member must be bailed out");
+
+        _ragequit(memberToKick, 0, member.loot, approvedTokens);
+    }
+
+    function bailout(address memberToBail) public {
+        Member storage member = members[memberToBail];
+
+        require(member.jailed != 0, "member must be in jail");
+        require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
+        require(canBailout(memberToBail), "cannot bailout yet");
+
+        members[summoner].loot = members[summoner].loot.add(member.loot);
+        member.loot = 0;
     }
 
     function cancelProposal(uint256 proposalId) public {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
-        require(msg.sender == proposal.proposer, "only the proposer can cancel");
+        require(!proposal.flags[3], "proposal has already been cancelled");
+        require(msg.sender == proposal.proposer, "solely the proposer can cancel");
 
-        proposal.flags[3] = true;
+        proposal.flags[3] = true; // cancelled
 
         require(
             proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
@@ -532,7 +615,7 @@ contract Moloch {
         emit CancelProposal(proposalId, msg.sender);
     }
 
-    function updateDelegateKey(address newDelegateKey) public onlyMember {
+    function updateDelegateKey(address newDelegateKey) public onlyShareholder {
         require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
 
         // skip checks if member is setting the delegate key to their member address
@@ -564,14 +647,27 @@ contract Moloch {
         return proposalQueue.length;
     }
 
-    function getProposalFlags(uint256 proposalIndex) public view returns (bool[6] memory) {
-        return proposals[proposalIndex].flags;
+    function getProposalFlags(uint256 proposalId) public view returns (bool[6] memory) {
+        return proposals[proposalId].flags;
     }
 
     // can only ragequit if the latest proposal you voted YES on has been processed
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[highestIndexYesVote]].flags[1];
+    }
+
+    function canBailout(address memberToBail) public view returns (bool) {
+        Member memory member = members[memberToBail];
+
+        // get the starting period of the proposal to start the bailout wait from
+        // - either the guild kick proposal or the member's highest index yes vote
+        uint256 bailoutWaitStartingPeriod = member.highestIndexYesVote > member.jailed
+            ? proposals[proposalQueue[member.highestIndexYesVote]].startingPeriod
+            : proposals[proposalQueue[member.jailed]].startingPeriod;
+
+        // bailout wait starts after proposal grace period ends
+        return getCurrentPeriod() >= bailoutWaitStartingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(bailoutWait);
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {

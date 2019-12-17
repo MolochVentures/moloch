@@ -17,7 +17,7 @@ const verifyProposal = async (
   {
     moloch,
     proposal,
-    proposalIndex,
+    proposalId,
     proposer,
     sponsor = zeroAddress,
     expectedStartingPeriod = 0,
@@ -25,7 +25,7 @@ const verifyProposal = async (
     expectedProposalQueueLength = 0
   }
 ) => {
-  const proposalData = await moloch.proposals(proposalIndex)
+  const proposalData = await moloch.proposals(proposalId)
 
   const proposalCount = await moloch.proposalCount()
   assert.equal(+proposalCount, expectedProposalCount)
@@ -49,11 +49,11 @@ const verifyProposal = async (
   assert.equal(proposalData.yesVotes, 0, 'yesVotes does not match')
   assert.equal(proposalData.noVotes, 0, 'noVotes does not match')
   assert.equal(proposalData.details, proposal.details, 'details does not match')
-  assert.equal(proposalData.maxTotalSharesAtYesVote, 0, 'maxTotalSharesAtYesVote invalid')
+  assert.equal(proposalData.maxTotalSharesAndLootAtYesVote, 0, 'maxTotalSharesAndLootAtYesVote invalid')
 }
 
-const verifyFlags = async ({ moloch, proposalIndex, expectedFlags }) => {
-  const actualFlags = await moloch.getProposalFlags(proposalIndex)
+const verifyFlags = async ({ moloch, proposalId, expectedFlags }) => {
+  const actualFlags = await moloch.getProposalFlags(proposalId)
 
   // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
   assert.equal(actualFlags[0], expectedFlags[0], 'sponsored flag incorrect')
@@ -101,15 +101,17 @@ const verifySubmitVote = async (
     proposalIndex,
     memberAddress,
     expectedVote,
-    expectedMaxSharesAtYesVote = 0,
+    expectedMaxSharesAndLootAtYesVote = 0,
     initialYesVotes = 0,
     initialNoVotes = 0
   }
 ) => {
-  const proposalData = await moloch.proposals(proposalIndex)
+  const proposalId = await moloch.proposalQueue(proposalIndex)
+  const proposalData = await moloch.proposals(proposalId)
+
   assert.equal(+proposalData.yesVotes, initialYesVotes + (expectedVote === 1 ? 1 : 0))
   assert.equal(+proposalData.noVotes, initialNoVotes + (expectedVote === 1 ? 0 : 1))
-  assert.equal(+proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote)
+  assert.equal(+proposalData.maxTotalSharesAndLootAtYesVote, expectedMaxSharesAndLootAtYesVote)
 
   const memberVote = await moloch.getMemberProposalVote(memberAddress, proposalIndex)
   assert.equal(+memberVote, expectedVote)
@@ -122,22 +124,27 @@ const verifyProcessProposal = async (
     expectedYesVotes = 0,
     expectedNoVotes = 0,
     expectedTotalShares = 0,
-    expectedFinalTotalSharesRequested = 0,
-    expectedMaxSharesAtYesVote = 0
+    expectedTotalLoot = 0,
+    expectedFinalTotalSharesAndLootRequested = 0,
+    expectedMaxSharesAndLootAtYesVote = 0
   }
 ) => {
   // flags and proposal data
-  const proposalData = await moloch.proposals(proposalIndex)
+  const proposalId = await moloch.proposalQueue(proposalIndex)
+  const proposalData = await moloch.proposals(proposalId)
 
   assert.equal(+proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
   assert.equal(+proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')
-  assert.equal(+proposalData.maxTotalSharesAtYesVote, expectedMaxSharesAtYesVote, 'total shares at yes vote incorrect')
+  assert.equal(+proposalData.maxTotalSharesAndLootAtYesVote, expectedMaxSharesAndLootAtYesVote, 'total shares at yes vote incorrect')
 
-  const totalSharesRequested = await moloch.totalSharesRequested()
-  assert.equal(+totalSharesRequested, expectedFinalTotalSharesRequested, 'total shares requested incorrect')
+  const totalSharesAndLootRequested = await moloch.totalSharesAndLootRequested()
+  assert.equal(+totalSharesAndLootRequested, expectedFinalTotalSharesAndLootRequested, 'total shares and loot requested incorrect')
 
   const totalShares = await moloch.totalShares()
   assert.equal(+totalShares, expectedTotalShares, 'total shares incorrect')
+
+  const totalLoot = await moloch.totalLoot()
+  assert.equal(+totalLoot, expectedTotalLoot, 'total loot incorrect')
 }
 
 const verifyMember = async (
@@ -146,7 +153,9 @@ const verifyMember = async (
     member,
     expectedDelegateKey = zeroAddress,
     expectedShares = 0,
+    expectedLoot = 0,
     expectedExists = true,
+    expectedJailed = 0,
     expectedHighestIndexYesVote = 0,
     expectedMemberAddressByDelegateKey = zeroAddress
   }
@@ -154,8 +163,10 @@ const verifyMember = async (
   const memberData = await moloch.members(member)
   assert.equal(memberData.delegateKey, expectedDelegateKey, 'delegate key incorrect')
   assert.equal(+memberData.shares, expectedShares, 'expected shares incorrect')
+  assert.equal(+memberData.loot, expectedLoot, 'expected loot incorrect')
   assert.equal(memberData.exists, expectedExists, 'exists incorrect')
-  assert.equal(memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
+  assert.equal(+memberData.jailed, expectedJailed, 'jailed incorrect')
+  assert.equal(+memberData.highestIndexYesVote, expectedHighestIndexYesVote, 'highest index yes vote incorrect')
 
   const newMemberAddressByDelegateKey = await moloch.memberAddressByDelegateKey(expectedDelegateKey)
   assert.equal(newMemberAddressByDelegateKey, expectedMemberAddressByDelegateKey, 'member address by delegate key incorrect')
