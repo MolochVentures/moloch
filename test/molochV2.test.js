@@ -32,6 +32,7 @@ const revertMessages = {
   molochConstructorGracePeriodLengthExceedsLimit: '_gracePeriodLength exceeds limit',
   molochConstructorEmergencyProcessingWaitCannotBe0: '_emergencyProcessingWait cannot be 0',
   molochConstructorBailoutWaitMustBeGreaterThanEmergencyProcessingWait: 'bailoutWait must be greater than _emergencyProcessingWait',
+  molochConstructorBailoutWaitExceedsLimit: 'bailoutWait exceeds limit',
   molochConstructorDilutionBoundCannotBe0: '_dilutionBound cannot be 0',
   molochConstructorDilutionBoundExceedsLimit: '_dilutionBound exceeds limit',
   molochConstructorNeedAtLeastOneApprovedToken: 'need at least one approved token',
@@ -435,6 +436,38 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
       ).should.be.rejectedWith(revertMessages.molochConstructorBailoutWaitMustBeGreaterThanEmergencyProcessingWait)
+    })
+
+    it('require fail - bailout wait exceeds limit', async () => {
+      await Moloch.new(
+        summoner,
+        [tokenAlpha.address],
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        _1e18Plus1,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      ).should.be.rejectedWith(revertMessages.molochConstructorBailoutWaitExceedsLimit)
+
+      // still works with 1 less
+      const molochTemp = await Moloch.new(
+        summoner,
+        [tokenAlpha.address],
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
+        _1e18,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      )
+
+      const totalShares = await molochTemp.totalShares()
+      assert.equal(+totalShares, summonerShares)
     })
 
     it('require fail - dilution bound can not be zero', async () => {

@@ -49,6 +49,7 @@ contract Moloch {
     // with periods or shares, yet big enough to not limit reasonable use cases.
     uint256 constant MAX_VOTING_PERIOD_LENGTH = 10**18; // maximum length of voting period
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
+    uint256 constant MAX_BAILOUT_WAIT = 10**18; // maximum # periods after a jailed member can be ragekicked before they must be bailed out instead
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
 
@@ -162,6 +163,7 @@ contract Moloch {
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
         require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
         require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait");
+        require(_bailoutWait <= MAX_BAILOUT_WAIT, "_bailoutWait exceeds limit");
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
@@ -560,7 +562,6 @@ contract Moloch {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
     }
 
-    // TODO update to be exclusive
     function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
         for (uint256 i=0; i < tokenList.length; i++) {
