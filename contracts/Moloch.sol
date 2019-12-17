@@ -359,7 +359,7 @@ contract Moloch {
             didPass = false;
         }
 
-        if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
+        if (!emergencyProcessing && proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }
 
