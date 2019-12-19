@@ -187,7 +187,7 @@ contract Moloch {
         address paymentToken,
         string memory details
     ) public returns (uint256 proposalId) {
-        require(sharesRequested.add(lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");  // TODO test
+        require(sharesRequested.add(lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
@@ -285,8 +285,6 @@ contract Moloch {
             proposedToKick[proposal.applicant] = true;
         }
 
-        // TODO: remove old tests: "too many shares requested"
-
         // compute startingPeriod for proposal
         uint256 startingPeriod = max(
             getCurrentPeriod(),
@@ -359,6 +357,7 @@ contract Moloch {
             didPass = false;
         }
 
+        // Make the proposal fail if it is requesting more tokens as payment than the available guild bank balance
         if (!emergencyProcessing && proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
             didPass = false;
         }

@@ -125,7 +125,6 @@ const verifyProcessProposal = async (
     expectedNoVotes = 0,
     expectedTotalShares = 0,
     expectedTotalLoot = 0,
-    expectedFinalTotalSharesAndLootRequested = 0,
     expectedMaxSharesAndLootAtYesVote = 0
   }
 ) => {
@@ -136,9 +135,6 @@ const verifyProcessProposal = async (
   assert.equal(+proposalData.yesVotes, expectedYesVotes, 'proposal yes votes incorrect')
   assert.equal(+proposalData.noVotes, expectedNoVotes, 'proposal no votes incorrect')
   assert.equal(+proposalData.maxTotalSharesAndLootAtYesVote, expectedMaxSharesAndLootAtYesVote, 'total shares at yes vote incorrect')
-
-  const totalSharesAndLootRequested = await moloch.totalSharesAndLootRequested()
-  assert.equal(+totalSharesAndLootRequested, expectedFinalTotalSharesAndLootRequested, 'total shares and loot requested incorrect')
 
   const totalShares = await moloch.totalShares()
   assert.equal(+totalShares, expectedTotalShares, 'total shares incorrect')

@@ -39,6 +39,7 @@ const revertMessages = {
   molochConstructorDepositCannotBeSmallerThanProcessingReward: '_proposalDeposit cannot be smaller than _processingReward',
   molochConstructorApprovedTokenCannotBe0: '_approvedToken cannot be 0',
   molochConstructorDuplicateApprovedToken: 'revert duplicate approved token',
+  submitProposalTooManySharesRequested: 'too many shares requested',
   submitProposalProposalMustHaveBeenProposed: 'proposal must have been proposed',
   submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
   submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
@@ -54,7 +55,6 @@ const revertMessages = {
   sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
   sponsorProposalAlreadyWhitelisted: 'cannot already have whitelisted the token',
   sponsorProposalAlreadyProposedToKick: 'already proposed to kick',
-  sponsorProposalTooManySharesRequested: 'too many shares requested',
   sponsorProposalApplicantIsJailed: 'proposal applicant must not be jailed',
   submitVoteProposalDoesNotExist: 'proposal does not exist',
   submitVoteMustBeLessThan3: 'must be less than 3',
@@ -703,6 +703,106 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBe0)
     })
+
+    it('failure - too many shares requested', async () => {
+      await moloch.submitProposal(
+        proposal1.applicant,
+        _1e18Plus1, // MAX_NUMBER_OF_SHARES_AND_LOOT
+        0, // skip loot
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitProposalTooManySharesRequested)
+
+      const proposalCount = await moloch.proposalCount()
+      assert.equal(proposalCount, 0)
+
+      // should work with one less
+      await moloch.submitProposal(
+        proposal1.applicant,
+        _1e18, // MAX_NUMBER_OF_SHARES_AND_LOOT - 1
+        0, // skip loot
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      const proposalCountAfter = await moloch.proposalCount()
+      assert.equal(proposalCountAfter, 1)
+    })
+
+    it('failure - too many shares (just loot) requested', async () => {
+      await moloch.submitProposal(
+        proposal1.applicant,
+        0, // skip shares
+        _1e18Plus1, // MAX_NUMBER_OF_SHARES_AND_LOOT
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitProposalTooManySharesRequested)
+
+      const proposalCount = await moloch.proposalCount()
+      assert.equal(proposalCount, 0)
+
+      // should work with one less
+      await moloch.submitProposal(
+        proposal1.applicant,
+        0, // skip shares
+        _1e18, // MAX_NUMBER_OF_SHARES_AND_LOOT - 1
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      const proposalCountAfter = await moloch.proposalCount()
+      assert.equal(proposalCountAfter, 1)
+    })
+
+    it('failure - too many shares (& loot) requested', async () => {
+      await moloch.submitProposal(
+        proposal1.applicant,
+        _1e18Plus1.sub(new BN('10')), // MAX_NUMBER_OF_SHARES_AND_LOOT - 10
+        10, // 10 loot
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitProposalTooManySharesRequested)
+
+      const proposalCount = await moloch.proposalCount()
+      assert.equal(proposalCount, 0)
+
+      // should work with one less
+      await moloch.submitProposal(
+        proposal1.applicant,
+        _1e18.sub(new BN('10')), // MAX_NUMBER_OF_SHARES_AND_LOOT - 10
+        10, // 10 loot
+        0, // skip tribute
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      const proposalCountAfter = await moloch.proposalCount()
+      assert.equal(proposalCountAfter, 1)
+    })
+
 
     it('happy case - second submitted proposal returns incremented proposalId', async () => {
       const emittedLogs1 = await submitter.submitProposal(
@@ -1501,147 +1601,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         .should.be.rejectedWith(revertMessages.sponsorProposalAlreadyProposedToWhitelist)
     })
 
-    it('failure - too many shares requested', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        _1e18, // MAX_NUMBER_OF_SHARES_AND_LOOT
-        0, // skip loot
-        0, // skip tribute
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMessages.sponsorProposalTooManySharesRequested)
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [false, false, false, false, false, false] // sponsored is false
-      })
-
-      // should work with one less
-      await moloch.submitProposal(
-        proposal1.applicant,
-        _1e18Minus1, // MAX_NUMBER_OF_SHARES_AND_LOOT - 1
-        0, // skip loot
-        0, // skip tribute
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: secondProposalIndex,
-        expectedFlags: [true, false, false, false, false, false] // sponsored is true
-      })
-    })
-
-    it('failure - too many shares (just loot) requested', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        0, // skip shares
-        _1e18, // MAX_NUMBER_OF_SHARES_AND_LOOT
-        0, // skip tribute
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMessages.sponsorProposalTooManySharesRequested)
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [false, false, false, false, false, false] // sponsored is false
-      })
-
-      // should work with one less
-      await moloch.submitProposal(
-        proposal1.applicant,
-        0, // skip shares
-        _1e18Minus1.sub(_1), // MAX_NUMBER_OF_SHARES_AND_LOOT - 1
-        0, // skip tribute
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: secondProposalIndex,
-        expectedFlags: [true, false, false, false, false, false] // sponsored is true
-      })
-    })
-
-    it('failure - too many shares (& loot) requested', async () => {
-      await tokenAlpha.transfer(proposal1.applicant, proposal1.tributeOffered, { from: creator })
-      await tokenAlpha.approve(moloch.address, proposal1.tributeOffered, { from: proposal1.applicant })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        _1e18.sub(new BN('10')), // MAX_NUMBER_OF_SHARES_AND_LOOT - 10
-        10, // 10 loot
-        0, // skip tribute
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-        .should.be.rejectedWith(revertMessages.sponsorProposalTooManySharesRequested)
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [false, false, false, false, false, false] // sponsored is false
-      })
-
-      // should work with one less
-      await moloch.submitProposal(
-        proposal1.applicant,
-        _1e18.sub(new BN('10')), // MAX_NUMBER_OF_SHARES_AND_LOOT - 10
-        9, // 10 loot
-        0, // skip tribute
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: secondProposalIndex,
-        expectedFlags: [true, false, false, false, false, false] // sponsored is true
-      })
-    })
-
     it('require fail - insufficient deposit token', async () => {
       await tokenAlpha.decreaseAllowance(moloch.address, 1, { from: summoner })
 
@@ -2207,7 +2166,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedTotalLoot: proposal1.lootRequested,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2323,7 +2281,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 0,
         expectedNoVotes: 1,
         expectedTotalShares: 1, // just the summoner still in
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 0
       })
 
@@ -2603,7 +2560,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedTotalLoot: proposal1.lootRequested,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2660,6 +2616,178 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedLoot: proposal1.lootRequested,
         expectedExists: true,
         expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+    })
+
+    it('happy path - auto-fail if shares exceed limit', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered * 2 // 2 proposals
+      })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        _1e18, // max shares
+        0, // skip loot
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await moloch.submitProposal(
+        applicant,
+        _1e18Minus1, // 1 less than max shares
+        0, // skip loot
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // two proposals
+      })
+
+      // sponsor and vote on both proposals
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+      await moveForwardPeriods(2)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      // first proposal should fail
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: summonerShares, // no more shares added
+        expectedTotalLoot: 0, // no loot
+        expectedMaxSharesAndLootAtYesVote: 1
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: firstProposalIndex,
+        expectedFlags: [true, true, false, false, false, false] // didPass is false
+      })
+
+      // second proposal should pass
+      await moloch.processProposal(secondProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: new BN(summonerShares).add(_1e18Minus1), // maximum possible shares
+        expectedTotalLoot: 0, // no loot
+        expectedMaxSharesAndLootAtYesVote: 1
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: secondProposalIndex,
+        expectedFlags: [true, true, true, false, false, false] // didPass is false
+      })
+    })
+
+    it('happy path - auto-fail if loot & shares exceed limit', async () => {
+      await fundAndApproveToMoloch({
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered * 2 // 2 proposals
+      })
+
+      // submit
+      proposer = proposal1.applicant
+      applicant = proposal1.applicant
+      await moloch.submitProposal(
+        applicant,
+        _1e18.sub(new BN(10)), // almost max shares
+        10, // enough loot to cross max
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await moloch.submitProposal(
+        applicant,
+        _1e18Minus1.sub(new BN(10)), // almost max shares
+        9, // 1 less loot than last time
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposer }
+      )
+
+      await fundAndApproveToMoloch({
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * 2 // two proposals
+      })
+
+      // sponsor and vote on both proposals
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+      await moveForwardPeriods(2)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      // first proposal should fail
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        moloch: moloch,
+        proposalIndex: firstProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: summonerShares, // no more shares added
+        expectedTotalLoot: 0, // no loot
+        expectedMaxSharesAndLootAtYesVote: 1
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: firstProposalIndex,
+        expectedFlags: [true, true, false, false, false, false] // didPass is false
+      })
+
+      // second proposal should pass
+      await moloch.processProposal(secondProposalIndex, { from: processor })
+
+      await verifyProcessProposal({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedYesVotes: 1,
+        expectedTotalShares: _1e18.sub(new BN(10)), // maximum possible shares
+        expectedTotalLoot: 9, // no loot
+        expectedMaxSharesAndLootAtYesVote: 1
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: secondProposalIndex,
+        expectedFlags: [true, true, true, false, false, false] // didPass is false
       })
     })
 
@@ -2737,7 +2865,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -2883,7 +3010,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: 1, // no more shares added so still 1
         expectedTotalLoot: proposal1.sharesRequested + proposal1.lootRequested,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: proposal1.sharesRequested + summonerShares + proposal1.lootRequested
       })
 
@@ -2989,7 +3115,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalIndex: firstProposalIndex,
         expectedYesVotes: 1,
         expectedTotalShares: 1,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -3391,7 +3516,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedTotalLoot: proposal1.lootRequested,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -3520,7 +3644,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: (proposal1.sharesRequested + summonerShares) - 100, // add the 1 the summoner, minus the 68 rage quit
         expectedTotalLoot: proposal1.lootRequested - 20,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 174
       })
 
@@ -3970,7 +4093,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedTotalLoot: proposal1.lootRequested,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
@@ -4201,7 +4323,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedYesVotes: 1,
         expectedTotalShares: proposal1.sharesRequested + summonerShares, // add the 1 the summoner has
         expectedTotalLoot: proposal1.lootRequested,
-        expectedFinalTotalSharesAndLootRequested: 0,
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
