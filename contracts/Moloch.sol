@@ -2,9 +2,10 @@ pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
+import "./oz/ReentrancyGuard.sol";
 import "./GuildBank.sol";
 
-contract Moloch {
+contract Moloch is ReentrancyGuard {
     using SafeMath for uint256;
 
     /***************
@@ -186,7 +187,7 @@ contract Moloch {
         uint256 paymentRequested,
         address paymentToken,
         string memory details
-    ) public returns (uint256 proposalId) {
+    ) public nonReentrant returns (uint256 proposalId) {
         require(sharesRequested.add(lootRequested) <= MAX_NUMBER_OF_SHARES_AND_LOOT, "too many shares requested");
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
@@ -202,7 +203,7 @@ contract Moloch {
         return proposalCount - 1; // return proposalId - contracts calling submit might want it
     }
 
-    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public returns (uint256 proposalId) {
+    function submitWhitelistProposal(address tokenToWhitelist, string memory details) public nonReentrant returns (uint256 proposalId) {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
 
@@ -213,7 +214,7 @@ contract Moloch {
         return proposalCount - 1;
     }
 
-    function submitGuildKickProposal(address memberToKick, string memory details) public returns (uint256 proposalId) {
+    function submitGuildKickProposal(address memberToKick, string memory details) public nonReentrant returns (uint256 proposalId) {
         Member memory member = members[memberToKick];
 
         require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
@@ -262,7 +263,7 @@ contract Moloch {
         proposalCount += 1;
     }
 
-    function sponsorProposal(uint256 proposalId) public onlyDelegate {
+    function sponsorProposal(uint256 proposalId) public nonReentrant onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
 
@@ -303,7 +304,7 @@ contract Moloch {
         emit SponsorProposal(msg.sender, memberAddress, proposalId, proposalQueue.length.sub(1), startingPeriod);
     }
 
-    function submitVote(uint256 proposalIndex, uint8 uintVote) public onlyDelegate {
+    function submitVote(uint256 proposalIndex, uint8 uintVote) public nonReentrant onlyDelegate {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         Member storage member = members[memberAddress];
 
@@ -340,7 +341,7 @@ contract Moloch {
         emit SubmitVote(proposalIndex, msg.sender, memberAddress, uintVote);
     }
 
-    function processProposal(uint256 proposalIndex) public {
+    function processProposal(uint256 proposalIndex) public nonReentrant {
         _validateProposalForProcessing(proposalIndex);
 
         uint256 proposalId = proposalQueue[proposalIndex];
@@ -416,7 +417,7 @@ contract Moloch {
         emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function processWhitelistProposal(uint256 proposalIndex) public {
+    function processWhitelistProposal(uint256 proposalIndex) public nonReentrant {
         _validateProposalForProcessing(proposalIndex);
 
         uint256 proposalId = proposalQueue[proposalIndex];
@@ -442,7 +443,7 @@ contract Moloch {
         emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function processGuildKickProposal(uint256 proposalIndex) public {
+    function processGuildKickProposal(uint256 proposalIndex) public nonReentrant {
         _validateProposalForProcessing(proposalIndex);
 
         uint256 proposalId = proposalQueue[proposalIndex];
@@ -530,11 +531,11 @@ contract Moloch {
         );
     }
 
-    function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public onlyMember {
+    function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public nonReentrant onlyMember {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
     }
 
-    function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public onlyMember {
+    function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public nonReentrant onlyMember {
         // all tokens in tokenList must be in the tokenWhitelist
         for (uint256 i=0; i < tokenList.length; i++) {
             require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
@@ -574,7 +575,7 @@ contract Moloch {
         emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
     }
 
-    function ragekick(address memberToKick) public {
+    function ragekick(address memberToKick) public nonReentrant {
         Member storage member = members[memberToKick];
 
         require(member.jailed != 0, "member must be in jail");
@@ -585,7 +586,7 @@ contract Moloch {
         _ragequit(memberToKick, 0, member.loot, approvedTokens);
     }
 
-    function bailout(address memberToBail) public {
+    function bailout(address memberToBail) public nonReentrant {
         Member storage member = members[memberToBail];
 
         require(member.jailed != 0, "member must be in jail");
@@ -596,7 +597,7 @@ contract Moloch {
         member.loot = 0;
     }
 
-    function cancelProposal(uint256 proposalId) public {
+    function cancelProposal(uint256 proposalId) public nonReentrant {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
         require(!proposal.flags[3], "proposal has already been cancelled");
@@ -612,7 +613,7 @@ contract Moloch {
         emit CancelProposal(proposalId, msg.sender);
     }
 
-    function updateDelegateKey(address newDelegateKey) public onlyShareholder {
+    function updateDelegateKey(address newDelegateKey) public nonReentrant onlyShareholder {
         require(newDelegateKey != address(0), "newDelegateKey cannot be 0");
 
         // skip checks if member is setting the delegate key to their member address
