@@ -194,10 +194,10 @@ contract Moloch is ReentrancyGuard {
         require(applicant != address(0), "applicant cannot be 0");
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
-        // collect tribute from applicant and store it in the Moloch until the proposal is processed
+        // collect tribute from proposer and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
 
-        bool[6] memory flags;
+        bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
 
         _submitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
         return proposalCount - 1; // return proposalId - contracts calling submit might want it
@@ -207,7 +207,7 @@ contract Moloch is ReentrancyGuard {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
 
-        bool[6] memory flags;
+        bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         flags[4] = true;
 
         _submitProposal(address(0), 0, 0, 0, tokenToWhitelist, 0, address(0), details, flags);
@@ -221,7 +221,7 @@ contract Moloch is ReentrancyGuard {
         require(memberToKick != summoner, "the summoner may not be kicked");
         require(members[memberToKick].jailed == 0, "member must not already be jailed");
 
-        bool[6] memory flags;
+        bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         flags[5] = true;
 
         _submitProposal(memberToKick, 0, 0, 0, address(0), 0, address(0), details, flags);
@@ -488,7 +488,7 @@ contract Moloch is ReentrancyGuard {
             didPass = false;
         }
 
-        // Make the proposal fail if it was in the grace period during the last emergency processing
+        // Make the proposal fail if it was past the grace period during the last emergency processing
         if (emergencyWarning) {
             if (proposal.startingPeriod < proposals[proposalQueue[lastEmergencyProposalIndex]].startingPeriod.add(emergencyProcessingWait)) {
                 didPass = false;
