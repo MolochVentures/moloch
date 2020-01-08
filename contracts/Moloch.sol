@@ -488,9 +488,9 @@ contract Moloch is ReentrancyGuard {
             didPass = false;
         }
 
-        // Make the proposal fail if it was past its grace period during the last emergency processing
+        // Make the proposal fail if it was past its grace period during the last emergency processing and it is not a guild kick proposal
         if (emergencyWarning) {
-            if (proposal.startingPeriod <= proposals[proposalQueue[lastEmergencyProposalIndex]].startingPeriod.add(emergencyProcessingWait)) {
+            if (proposal.startingPeriod <= proposals[proposalQueue[lastEmergencyProposalIndex]].startingPeriod.add(emergencyProcessingWait) && !proposal.flags[5]) {
                 didPass = false;
             }
         }
