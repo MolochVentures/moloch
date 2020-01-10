@@ -3209,7 +3209,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
         await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
 
+        // emergency processing
         await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        // can be processed immediately, so is past its grace period and should therefore fail
         await moloch.processProposal(secondProposalIndex, { from: processor })
 
         // first proposal failed
@@ -3236,50 +3239,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
 
-      it('the proposal that would have just started its grace period still fails', async () => {
-        // vote yes
-        await moveForwardPeriods(1)
-        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
-
-        // wait to sponsor the next proposal
-        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS - 2)
-        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-        // vote yes on the second proposal
-        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-
-        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
-
-        await moloch.processProposal(firstProposalIndex, { from: processor })
-        await moloch.processProposal(secondProposalIndex, { from: processor })
-
-        // first proposal failed
-        await verifyFlags({
-          moloch: moloch,
-          proposalId: firstProposalIndex,
-          expectedFlags: [true, true, false, false, false, false] // didPass is false
-        })
-
-        // second proposal also fails
-        await verifyFlags({
-          moloch: moloch,
-          proposalId: secondProposalIndex,
-          expectedFlags: [true, true, false, false, false, false] // didPass is false
-        })
-
-        // still no shares
-        await verifyMember({
-          moloch: moloch,
-          member: applicant,
-          expectedExists: false,
-          expectedShares: 0,
-          expectedLoot: 0
-        })
-      })
-
-      it('the proposal that would have been about to start its grace period succeeds', async () => {
+      it('the proposal that has just ended its grace period still fails', async () => {
         // vote yes
         await moveForwardPeriods(1)
         await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
@@ -3288,13 +3248,140 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS - 1)
         await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
+        // vote yes on the second proposal
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS + 1)
+
+        // emergency processing
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        // can be processed immediately, so is past its grace period and should therefore fail
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        // first proposal failed
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: firstProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // second proposal also fails
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // still no shares
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedExists: false,
+          expectedShares: 0,
+          expectedLoot: 0
+        })
+      })
+
+      it('a guild kick proposal can succeed even if it is already past its grace period', async () => {
+        // first proposal succeeds and grants the applicant some shares
+        await moveForwardPeriods(1)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+        await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        // verify that applicant has indeed received shares
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedExists: true,
+          expectedShares: proposal1.sharesRequested,
+          expectedLoot: proposal1.lootRequested,
+          expectedDelegateKey: proposal1.applicant,
+          expectedMemberAddressByDelegateKey: proposal1.applicant
+        })
+
+        // sponsor and vote on second proposal
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+        await moveForwardPeriods(1)
+        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+        // submit guild kick proposal
+        await moloch.submitGuildKickProposal(
+          applicant,
+          'kick',
+          { from: proposer }
+        )
+
+        // wait and then sponsor guild kick proposal
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS - 1)
+        await fundAndApproveToMoloch({
+          to: summoner,
+          from: creator,
+          value: deploymentConfig.PROPOSAL_DEPOSIT
+        })
+        await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
+
+        // vote yes on the guild kick proposal
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moloch.submitVote(thirdProposalIndex, yes, { from: summoner })
+
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS + 1)
+
+        // emergency processing of second proposal
+        await moloch.processProposal(secondProposalIndex, { from: processor })
+
+        // guild kick proposal can be processed immediately, so is past its grace period
+        await moloch.processGuildKickProposal(thirdProposalIndex, { from: processor })
+
+        // second proposal failed
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: secondProposalIndex,
+          expectedFlags: [true, true, false, false, false, false] // didPass is false
+        })
+
+        // guild kick proposal succeeds
+        await verifyFlags({
+          moloch: moloch,
+          proposalId: thirdProposalIndex,
+          expectedFlags: [true, true, true, false, false, true] // didPass is true
+        })
+
+        // kick successful
+        await verifyMember({
+          moloch: moloch,
+          member: applicant,
+          expectedDelegateKey: applicant,
+          expectedShares: 0,
+          expectedLoot: proposal1.lootRequested + proposal1.sharesRequested, // convert shares to loot
+          expectedJailed: thirdProposalIndex,
+          expectedMemberAddressByDelegateKey: applicant
+        })
+      })
+
+      it('the proposal that is still in its grace period succeeds', async () => {
+        // vote yes
+        await moveForwardPeriods(1)
+        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+        // wait to sponsor the next proposal
+        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
+        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+        // vote yes on the second proposal
         await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
         await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
         await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
 
+        // emergency processing
         await moloch.processProposal(firstProposalIndex, { from: processor })
+
+        // second proposal is still in grace period, needs to wait another period before it can be processed
+        await moveForwardPeriods(1)
         await moloch.processProposal(secondProposalIndex, { from: processor })
 
         // first proposal failed
