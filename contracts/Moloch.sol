@@ -1,3 +1,17 @@
+// Update Moloch to use the pull-pattern
+
+// DONE
+// - track balances on Moloch
+// - update process proposal to use balances
+// - generic withdraw token
+// - update ragequit to use withdraw
+// - remove guild bank
+// - remove emergency processing
+// - remove bailout
+
+// TODO
+// - use address for all tokens, IERC20 wrap when sending
+
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
@@ -16,22 +30,18 @@ contract Moloch is ReentrancyGuard {
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
-    uint256 public emergencyProcessingWait; // default = 35 periods (7 days)
-    uint256 public bailoutWait; // default = 70 periods (14 days)
     uint256 public proposalDeposit; // default = 10 ETH (~$1,000 worth of ETH at contract deployment)
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
     IERC20 public depositToken; // deposit token contract reference; default = wETH
-    GuildBank public guildBank; // guild bank contract reference
 
     // HARD-CODED LIMITS
     // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
     // with periods or shares, yet big enough to not limit reasonable use cases.
     uint256 constant MAX_VOTING_PERIOD_LENGTH = 10**18; // maximum length of voting period
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
-    uint256 constant MAX_BAILOUT_WAIT = 10**18; // maximum # periods after a jailed member can be ragekicked before they must be bailed out instead
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
 
@@ -54,8 +64,9 @@ contract Moloch is ReentrancyGuard {
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalLoot = 0; // total loot across all members
 
-    bool public emergencyWarning = false; // true if emergency processing has ever been triggered
-    uint256 public lastEmergencyProposalIndex = 0; // index of the last proposal which triggered emergency processing
+    address public GUILD = 0x0;
+    address public ESCROW = 0x1;
+    mapping (address => mapping(address => uint256)) userTokenBalances; // tokenBalances[userAddress][tokenAddress]
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -125,8 +136,6 @@ contract Moloch is ReentrancyGuard {
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
-        uint256 _emergencyProcessingWait,
-        uint256 _bailoutWait,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
         uint256 _processingReward
@@ -136,9 +145,6 @@ contract Moloch is ReentrancyGuard {
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
         require(_votingPeriodLength <= MAX_VOTING_PERIOD_LENGTH, "_votingPeriodLength exceeds limit");
         require(_gracePeriodLength <= MAX_GRACE_PERIOD_LENGTH, "_gracePeriodLength exceeds limit");
-        require(_emergencyProcessingWait > 0, "_emergencyProcessingWait cannot be 0");
-        require(_bailoutWait > _emergencyProcessingWait, "_bailoutWait must be greater than _emergencyProcessingWait");
-        require(_bailoutWait <= MAX_BAILOUT_WAIT, "_bailoutWait exceeds limit");
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
@@ -155,13 +161,9 @@ contract Moloch is ReentrancyGuard {
             approvedTokens.push(IERC20(_approvedTokens[i]));
         }
 
-        guildBank = new GuildBank();
-
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
-        emergencyProcessingWait = _emergencyProcessingWait;
-        bailoutWait = _bailoutWait;
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
@@ -196,6 +198,7 @@ contract Moloch is ReentrancyGuard {
 
         // collect tribute from proposer and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
+        addToBalance(ESCROW, tributeToken, tributeOffered);
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
 
@@ -266,6 +269,7 @@ contract Moloch is ReentrancyGuard {
     function sponsorProposal(uint256 proposalId) public nonReentrant onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
         require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
+        addToBalance(ESCROW, depositToken, proposalDeposit);
 
         Proposal storage proposal = proposals[proposalId];
 
@@ -351,7 +355,7 @@ contract Moloch is ReentrancyGuard {
 
         proposal.flags[1] = true; // processed
 
-        (bool didPass, bool emergencyProcessing) = _didPass(proposalIndex);
+        bool didPass = _didPass(proposalIndex);
 
         // Make the proposal fail if the new total number of shares and loot exceeds the limit
         if (totalShares.add(totalLoot).add(proposal.sharesRequested).add(proposal.lootRequested) > MAX_NUMBER_OF_SHARES_AND_LOOT) {
@@ -359,7 +363,7 @@ contract Moloch is ReentrancyGuard {
         }
 
         // Make the proposal fail if it is requesting more tokens as payment than the available guild bank balance
-        if (!emergencyProcessing && proposal.paymentToken != IERC20(0) && proposal.paymentRequested > proposal.paymentToken.balanceOf(address(guildBank))) {
+        if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > userTokenBalances[GUILD][proposal.paymentToken])) {
             didPass = false;
         }
 
@@ -390,26 +394,13 @@ contract Moloch is ReentrancyGuard {
             totalShares = totalShares.add(proposal.sharesRequested);
             totalLoot = totalLoot.add(proposal.lootRequested);
 
-            require(
-                proposal.tributeToken.transfer(address(guildBank), proposal.tributeOffered),
-                "token transfer to guild bank failed"
-            );
-
-            require(
-                guildBank.withdrawToken(proposal.paymentToken, proposal.applicant, proposal.paymentRequested),
-                "token payment to applicant failed"
-            );
-
+            internalTransfer(ESCROW, GUILD, proposal.tributeToken, proposal.tributeOffered);
+            internalTransfer(GUILD, proposal.applicant, proposal.paymentToken, proposal.paymentRequested);
 
         // PROPOSAL FAILED
         } else {
-            // return all tokens to the applicant (skip if emergency processing)
-            if (!emergencyProcessing) {
-                require(
-                    proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
-                    "failing vote token transfer failed"
-                );
-            }
+            // return all tokens to the applicant
+            internalTransfer(ESCROW, proposal.applicant, proposal.tributeToken, proposal.tributeOffered)
         }
 
         _returnDeposit(proposal.sponsor);
@@ -427,7 +418,7 @@ contract Moloch is ReentrancyGuard {
 
         proposal.flags[1] = true; // processed
 
-        (bool didPass,) = _didPass(proposalIndex);
+        bool didPass = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true; // didPass
@@ -453,7 +444,7 @@ contract Moloch is ReentrancyGuard {
 
         proposal.flags[1] = true; // processed
 
-        (bool didPass,) = _didPass(proposalIndex);
+        bool didPass = _didPass(proposalIndex);
 
         if (didPass) {
             proposal.flags[2] = true; // didPass
@@ -474,26 +465,10 @@ contract Moloch is ReentrancyGuard {
         emit ProcessProposal(proposalIndex, proposalId, didPass);
     }
 
-    function _didPass(uint256 proposalIndex) internal returns (bool didPass, bool emergencyProcessing) {
+    function _didPass(uint256 proposalIndex) internal returns (bool didPass) {
         Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         didPass = proposal.yesVotes > proposal.noVotes;
-
-        // Make the proposal fail (and skip returning tribute) if emergencyProcessingWait is exceeded
-        emergencyProcessing = false;
-        if (getCurrentPeriod() >= proposal.startingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(emergencyProcessingWait)) {
-            emergencyWarning = true;
-            lastEmergencyProposalIndex = proposalIndex;
-            emergencyProcessing = true;
-            didPass = false;
-        }
-
-        // Make the proposal fail if it was past its grace period during the last emergency processing and it is not a guild kick proposal
-        if (emergencyWarning) {
-            if (proposal.startingPeriod <= proposals[proposalQueue[lastEmergencyProposalIndex]].startingPeriod.add(emergencyProcessingWait) && !proposal.flags[5]) {
-                didPass = false;
-            }
-        }
 
         // Make the proposal fail if the dilutionBound is exceeded
         if ((totalShares.add(totalLoot)).mul(dilutionBound) < proposal.maxTotalSharesAndLootAtYesVote) {
@@ -507,7 +482,7 @@ contract Moloch is ReentrancyGuard {
             didPass = false;
         }
 
-        return (didPass, emergencyProcessing);
+        return didPass;
     }
 
     function _validateProposalForProcessing(uint256 proposalIndex) internal view {
@@ -520,19 +495,36 @@ contract Moloch is ReentrancyGuard {
     }
 
     function _returnDeposit(address sponsor) internal {
-        require(
-            depositToken.transfer(msg.sender, processingReward),
-            "failed to send processing reward to msg.sender"
-        );
+        internalTransfer(ESCROW, msg.sender, depositToken, processingReward);
+        internalTransfer(ESCROW, sponsor, depositToken, proposalDeposit.sub(processingReward));
+    }
 
-        require(
-            depositToken.transfer(sponsor, proposalDeposit.sub(processingReward)),
-            "failed to return proposal deposit to sponsor"
-        );
+
+    function withdrawBalance(address token, uint256 amount) public {
+        require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
+        require(ERC20(token).transfer(msg.sender, amount), "transfer failed");
+    }
+
+    function withdrawBalances(address[] tokens, uint256[] amounts, bool max) public {
+        for (uint256 i=0; i < tokens.length; i++) {
+            uint256 withdrawAmount = amounts[i];
+            if (max) { // withdraw the maximum balance
+                withdrawAmount = userTokenBalances[msg.sender][tokens[i]];
+            }
+
+            withdrawBalance(tokens[i], withdrawAmount);
+
+            if (i > 0) {
+                require(tokens[i] > tokens[i - 1], "token list must be unique and in ascending order");
+            }
+        }
     }
 
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public nonReentrant onlyMember {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
+
+        uint256[] amounts = uint256[](approvedTokens.length);
+        withdrawBalances(approvedTokens, amounts, true);
     }
 
     function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public nonReentrant onlyMember {
@@ -546,6 +538,9 @@ contract Moloch is ReentrancyGuard {
         }
 
         _ragequit(msg.sender, sharesToBurn, lootToBurn, tokenList);
+
+        uint256[] amounts = uint256[](tokenList.length);
+        withdrawBalances(tokenList, amounts, true);
     }
 
     function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) internal {
@@ -566,11 +561,10 @@ contract Moloch is ReentrancyGuard {
         totalShares = totalShares.sub(sharesToBurn);
         totalLoot = totalLoot.sub(lootToBurn);
 
-        // instruct guildBank to transfer fair share of tokens to the ragequitter
-        require(
-            guildBank.withdraw(memberAddress, sharesAndLootToBurn, initialTotalSharesAndLoot, tokenList),
-            "withdrawal of tokens from guildBank failed"
-        );
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            uint256 userBalance = fairShare(userTokenBalances[memberAddress][tokenList[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
+            internalTransfer(GUILD, memberAddress, tokenList[i], userBalance);
+        }
 
         emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
     }
@@ -581,20 +575,8 @@ contract Moloch is ReentrancyGuard {
         require(member.jailed != 0, "member must be in jail");
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
-        require(!canBailout(memberToKick), "bailoutWait has passed, member must be bailed out");
 
         _ragequit(memberToKick, 0, member.loot, approvedTokens);
-    }
-
-    function bailout(address memberToBail) public nonReentrant {
-        Member storage member = members[memberToBail];
-
-        require(member.jailed != 0, "member must be in jail");
-        require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
-        require(canBailout(memberToBail), "cannot bailout yet");
-
-        members[summoner].loot = members[summoner].loot.add(member.loot);
-        member.loot = 0;
     }
 
     function cancelProposal(uint256 proposalId) public nonReentrant {
@@ -649,23 +631,37 @@ contract Moloch is ReentrancyGuard {
         return proposals[proposalId].flags;
     }
 
+    function addToBalance(address user, address token, uint256 amount) internal {
+        userTokenBalances[user][token] = userTokenBalances[user][token].add(amount)
+    }
+
+    function subtractFromBalance(address user, address token, uint256 amount) internal {
+        userTokenBalances[user][token] = userTokenBalances[user][token].sub(amount)
+    }
+
+    function internalTransfer(address from, address to, address token, uint256 amount) internal {
+        subtractFromBalance(from, token, amount);
+        addToBalance(to, token, amount);
+    }
+
+    function fairShare(uint256 balance, uint256 shares, uint256 totalShares) internal pure returns (uint256) {
+        require(totalShares != 0);
+
+        if (balance == 0) { return 0; }
+
+        uint256 prod = balance * shares;
+
+        if (prod / balance == shares) { // no overflow in multiplication above?
+            return prod / totalShares;
+        }
+
+        return (balance / totalShares) * shares;
+    }
+
     // can only ragequit if the latest proposal you voted YES on has been processed
     function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
         require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[highestIndexYesVote]].flags[1];
-    }
-
-    function canBailout(address memberToBail) public view returns (bool) {
-        Member memory member = members[memberToBail];
-
-        // get the starting period of the proposal to start the bailout wait from
-        // - either the guild kick proposal or the member's highest index yes vote
-        uint256 bailoutWaitStartingPeriod = member.highestIndexYesVote > member.jailed
-            ? proposals[proposalQueue[member.highestIndexYesVote]].startingPeriod
-            : proposals[proposalQueue[member.jailed]].startingPeriod;
-
-        // bailout wait starts after proposal grace period ends
-        return getCurrentPeriod() >= bailoutWaitStartingPeriod.add(votingPeriodLength).add(gracePeriodLength).add(bailoutWait);
     }
 
     function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
@@ -677,4 +673,5 @@ contract Moloch is ReentrancyGuard {
         require(proposalIndex < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
     }
+
 }
