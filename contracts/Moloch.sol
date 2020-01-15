@@ -584,8 +584,7 @@ contract Moloch is ReentrancyGuard {
 
         proposal.flags[3] = true; // cancelled
 
-        subtractFromBalance(ESCROW, proposal.tributeToken, proposal.tributeOffered);
-        require(IERC20(proposal.tributeToken).transferFrom(address(this), proposal.proposer, proposal.tributeOffered), "failed to return tribute to proposer");
+        internalTransfer(ESCROW, proposal.proposer, proposal.tributeToken, proposal.tributeOffered);
         emit CancelProposal(proposalId, msg.sender);
     }
 
