@@ -9,6 +9,16 @@
 // - remove emergency processing
 // - remove bailout
 
+// REVIEW
+// https://github.com/MolochVentures/moloch/commit/5465d70fab5be24bfe0cb7494dd78a50822ba36e
+// - Missing subtraction in withdrawBalance
+// - Missing nonReentrant modifiers
+// - Token duplicate check in withdrawBalances is not necessary, but array lengths should be verified to be equal. (Ideally...)
+// - unbundle ragequit from withdraw
+//   - possibly remove safeRagequit
+// - Should consider creating a private _withdrawBalance function.
+// - Fairshare should use guildbank balance as the first argument.
+
 // TODO
 // - use address for all tokens, IERC20 wrap when sending
 
