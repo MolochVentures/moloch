@@ -18,7 +18,6 @@ chai
   .should()
 
 const Moloch = artifacts.require('./Moloch')
-const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
 
 const SolRevert = 'VM Exception while processing transaction: revert'

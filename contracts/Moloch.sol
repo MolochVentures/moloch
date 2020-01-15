@@ -19,17 +19,16 @@
 // [x] Should consider creating a private _withdrawBalance function.
 // [x] Fairshare should use guildbank balance as the first argument.
 // [ ] Limit whitelisted token count, so a ragequit won't run out of gas.
-// [ ] Also, we need to use non-reverting math operators for the internal transfers (balance updates) in _ragequit.
+// [x] Also, we need to use non-reverting math operators for the internal transfers (balance updates) in _ragequit.
 
 // TODO
-// - use address for all tokens, IERC20 wrap when sending
+// [x] use address for all tokens, IERC20 wrap when sending
 
 pragma solidity 0.5.3;
 
 import "./oz/SafeMath.sol";
 import "./oz/IERC20.sol";
 import "./oz/ReentrancyGuard.sol";
-import "./GuildBank.sol";
 
 contract Moloch is ReentrancyGuard {
     using SafeMath for uint256;
@@ -47,7 +46,7 @@ contract Moloch is ReentrancyGuard {
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
 
-    IERC20 public depositToken; // deposit token contract reference; default = wETH
+    address public depositToken; // deposit token contract reference; default = wETH
 
     // HARD-CODED LIMITS
     // These numbers are quite arbitrary; they are small enough to avoid overflows when doing calculations
@@ -76,8 +75,8 @@ contract Moloch is ReentrancyGuard {
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalLoot = 0; // total loot across all members
 
-    address public GUILD = 0x0;
-    address public ESCROW = 0x1;
+    address public constant GUILD = address(0xdead);
+    address public constant ESCROW = address(0xbeef);
     mapping (address => mapping(address => uint256)) userTokenBalances; // tokenBalances[userAddress][tokenAddress]
 
     enum Vote {
@@ -102,9 +101,9 @@ contract Moloch is ReentrancyGuard {
         uint256 sharesRequested; // the # of shares the applicant is requesting
         uint256 lootRequested; // the amount of loot the applicant is requesting
         uint256 tributeOffered; // amount of tokens offered as tribute
-        IERC20 tributeToken; // tribute token contract reference
+        address tributeToken; // tribute token contract reference
         uint256 paymentRequested; // amount of tokens requested as payment
-        IERC20 paymentToken; // payment token contract reference
+        address paymentToken; // payment token contract reference
         uint256 startingPeriod; // the period in which voting can start for this proposal
         uint256 yesVotes; // the total number of YES votes for this proposal
         uint256 noVotes; // the total number of NO votes for this proposal
@@ -115,7 +114,7 @@ contract Moloch is ReentrancyGuard {
     }
 
     mapping(address => bool) public tokenWhitelist;
-    IERC20[] public approvedTokens;
+    address[] public approvedTokens;
 
     mapping(address => bool) public proposedToWhitelist;
     mapping(address => bool) public proposedToKick;
@@ -164,13 +163,13 @@ contract Moloch is ReentrancyGuard {
 
         summoner = _summoner;
 
-        depositToken = IERC20(_approvedTokens[0]);
+        depositToken = _approvedTokens[0];
 
         for (uint256 i = 0; i < _approvedTokens.length; i++) {
             require(_approvedTokens[i] != address(0), "_approvedToken cannot be 0");
             require(!tokenWhitelist[_approvedTokens[i]], "duplicate approved token");
             tokenWhitelist[_approvedTokens[i]] = true;
-            approvedTokens.push(IERC20(_approvedTokens[i]));
+            approvedTokens.push(_approvedTokens[i]);
         }
 
         periodDuration = _periodDuration;
@@ -261,9 +260,9 @@ contract Moloch is ReentrancyGuard {
             sharesRequested : sharesRequested,
             lootRequested : lootRequested,
             tributeOffered : tributeOffered,
-            tributeToken : IERC20(tributeToken),
+            tributeToken : tributeToken,
             paymentRequested : paymentRequested,
-            paymentToken : IERC20(paymentToken),
+            paymentToken : paymentToken,
             startingPeriod : 0,
             yesVotes : 0,
             noVotes : 0,
@@ -280,7 +279,7 @@ contract Moloch is ReentrancyGuard {
 
     function sponsorProposal(uint256 proposalId) public nonReentrant onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
-        require(depositToken.transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
+        require(IERC20(depositToken).transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
         addToBalance(ESCROW, depositToken, proposalDeposit);
 
         Proposal storage proposal = proposals[proposalId];
@@ -375,7 +374,7 @@ contract Moloch is ReentrancyGuard {
         }
 
         // Make the proposal fail if it is requesting more tokens as payment than the available guild bank balance
-        if (proposal.paymentToken != IERC20(0) && proposal.paymentRequested > userTokenBalances[GUILD][proposal.paymentToken])) {
+        if (proposal.paymentToken != address(0) && proposal.paymentRequested > userTokenBalances[GUILD][proposal.paymentToken]) {
             didPass = false;
         }
 
@@ -412,7 +411,7 @@ contract Moloch is ReentrancyGuard {
         // PROPOSAL FAILED
         } else {
             // return all tokens to the applicant
-            internalTransfer(ESCROW, proposal.applicant, proposal.tributeToken, proposal.tributeOffered)
+            internalTransfer(ESCROW, proposal.applicant, proposal.tributeToken, proposal.tributeOffered);
         }
 
         _returnDeposit(proposal.sponsor);
@@ -514,14 +513,14 @@ contract Moloch is ReentrancyGuard {
     function _withdrawBalance(address token, uint256 amount) internal {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
         subtractFromBalance(msg.sender, token, amount);
-        require(ERC20(token).transfer(msg.sender, amount), "transfer failed");
+        require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
     function withdrawBalance(address token, uint256 amount) public nonReentrant {
         _withdrawBalance(token, amount);
     }
 
-    function withdrawBalances(address[] tokens, uint256[] amounts, bool max) public nonReentrant {
+    function withdrawBalances(address[] memory tokens, uint256[] memory amounts, bool max) public nonReentrant {
         require(tokens.length == amounts.length, "tokens and amounts arrays must be matching lengths");
 
         for (uint256 i=0; i < tokens.length; i++) {
@@ -536,11 +535,9 @@ contract Moloch is ReentrancyGuard {
 
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public nonReentrant onlyMember {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
-
-        uint256[] amounts = uint256[](approvedTokens.length);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, address[] memory tokens) internal {
         uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
@@ -562,8 +559,8 @@ contract Moloch is ReentrancyGuard {
             uint256 userBalance = fairShare(userTokenBalances[GUILD][tokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
             // deliberately not using safemath here to keep overflows from preventing the function execution (which would break ragekicks)
             // if a token overflows, it is because the supply was artificially inflated to oblivion, so we probably don't care about it anyways
-            userTokenBalances[GUILD][tokens[i]] = userTokenBalances[GUILD][tokens[i]] - amount
-            userTokenBalances[memberAddress][tokens[i]] = userTokenBalances[memberAddress][tokens[i]] + amount
+            userTokenBalances[GUILD][tokens[i]] = userTokenBalances[GUILD][tokens[i]] - userBalance;
+            userTokenBalances[memberAddress][tokens[i]] = userTokenBalances[memberAddress][tokens[i]] + userBalance;
         }
 
         emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
@@ -587,11 +584,8 @@ contract Moloch is ReentrancyGuard {
 
         proposal.flags[3] = true; // cancelled
 
-        require(
-            proposal.tributeToken.transfer(proposal.proposer, proposal.tributeOffered),
-            "failed to return tribute to proposer"
-        );
-
+        subtractFromBalance(ESCROW, proposal.tributeToken, proposal.tributeOffered);
+        require(IERC20(proposal.tributeToken).transferFrom(address(this), proposal.proposer, proposal.tributeOffered), "failed to return tribute to proposer");
         emit CancelProposal(proposalId, msg.sender);
     }
 
@@ -632,11 +626,11 @@ contract Moloch is ReentrancyGuard {
     }
 
     function addToBalance(address user, address token, uint256 amount) internal {
-        userTokenBalances[user][token] = userTokenBalances[user][token].add(amount)
+        userTokenBalances[user][token] = userTokenBalances[user][token].add(amount);
     }
 
     function subtractFromBalance(address user, address token, uint256 amount) internal {
-        userTokenBalances[user][token] = userTokenBalances[user][token].sub(amount)
+        userTokenBalances[user][token] = userTokenBalances[user][token].sub(amount);
     }
 
     function internalTransfer(address from, address to, address token, uint256 amount) internal {
