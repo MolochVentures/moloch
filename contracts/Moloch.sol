@@ -11,13 +11,13 @@
 
 // REVIEW
 // https://github.com/MolochVentures/moloch/commit/5465d70fab5be24bfe0cb7494dd78a50822ba36e
-// - Missing subtraction in withdrawBalance
-// - Missing nonReentrant modifiers
-// - Token duplicate check in withdrawBalances is not necessary, but array lengths should be verified to be equal. (Ideally...)
-// - unbundle ragequit from withdraw
-//   - possibly remove safeRagequit
-// - Should consider creating a private _withdrawBalance function.
-// - Fairshare should use guildbank balance as the first argument.
+// [x] Missing subtraction in withdrawBalance
+// [x] Missing nonReentrant modifiers
+// [x] Token duplicate check in withdrawBalances is not necessary, but array lengths should be verified to be equal. (Ideally...)
+// [x] unbundle ragequit from withdraw
+//   [x] possibly remove safeRagequit
+// [x] Should consider creating a private _withdrawBalance function.
+// [x] Fairshare should use guildbank balance as the first argument.
 
 // TODO
 // - use address for all tokens, IERC20 wrap when sending
@@ -509,24 +509,26 @@ contract Moloch is ReentrancyGuard {
         internalTransfer(ESCROW, sponsor, depositToken, proposalDeposit.sub(processingReward));
     }
 
-
-    function withdrawBalance(address token, uint256 amount) public {
+    function _withdrawBalance(address token, uint256 amount) internal {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
+        subtractFromBalance(msg.sender, token, amount);
         require(ERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
-    function withdrawBalances(address[] tokens, uint256[] amounts, bool max) public {
+    function withdrawBalance(address token, uint256 amount) public nonReentrant {
+        _withdrawBalance(token, amount);
+    }
+
+    function withdrawBalances(address[] tokens, uint256[] amounts, bool max) public nonReentrant {
+        require(tokens.length == amounts.length, "tokens and amounts arrays must be matching lengths");
+
         for (uint256 i=0; i < tokens.length; i++) {
             uint256 withdrawAmount = amounts[i];
             if (max) { // withdraw the maximum balance
                 withdrawAmount = userTokenBalances[msg.sender][tokens[i]];
             }
 
-            withdrawBalance(tokens[i], withdrawAmount);
-
-            if (i > 0) {
-                require(tokens[i] > tokens[i - 1], "token list must be unique and in ascending order");
-            }
+            _withdrawBalance(tokens[i], withdrawAmount);
         }
     }
 
@@ -534,23 +536,6 @@ contract Moloch is ReentrancyGuard {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
 
         uint256[] amounts = uint256[](approvedTokens.length);
-        withdrawBalances(approvedTokens, amounts, true);
-    }
-
-    function safeRagequit(uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) public nonReentrant onlyMember {
-        // all tokens in tokenList must be in the tokenWhitelist
-        for (uint256 i=0; i < tokenList.length; i++) {
-            require(tokenWhitelist[address(tokenList[i])], "token must be whitelisted");
-
-            if (i > 0) {
-                require(tokenList[i] > tokenList[i - 1], "token list must be unique and in ascending order");
-            }
-        }
-
-        _ragequit(msg.sender, sharesToBurn, lootToBurn, tokenList);
-
-        uint256[] amounts = uint256[](tokenList.length);
-        withdrawBalances(tokenList, amounts, true);
     }
 
     function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) internal {
@@ -572,7 +557,7 @@ contract Moloch is ReentrancyGuard {
         totalLoot = totalLoot.sub(lootToBurn);
 
         for (uint256 i = 0; i < tokenList.length; i++) {
-            uint256 userBalance = fairShare(userTokenBalances[memberAddress][tokenList[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
+            uint256 userBalance = fairShare(userTokenBalances[GUILD][tokenList[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
             internalTransfer(GUILD, memberAddress, tokenList[i], userBalance);
         }
 
