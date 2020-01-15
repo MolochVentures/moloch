@@ -18,6 +18,8 @@
 //   [x] possibly remove safeRagequit
 // [x] Should consider creating a private _withdrawBalance function.
 // [x] Fairshare should use guildbank balance as the first argument.
+// [ ] Limit whitelisted token count, so a ragequit won't run out of gas.
+// [ ] Also, we need to use non-reverting math operators for the internal transfers (balance updates) in _ragequit.
 
 // TODO
 // - use address for all tokens, IERC20 wrap when sending
@@ -538,7 +540,7 @@ contract Moloch is ReentrancyGuard {
         uint256[] amounts = uint256[](approvedTokens.length);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokenList) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, IERC20[] memory tokens) internal {
         uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
@@ -556,9 +558,12 @@ contract Moloch is ReentrancyGuard {
         totalShares = totalShares.sub(sharesToBurn);
         totalLoot = totalLoot.sub(lootToBurn);
 
-        for (uint256 i = 0; i < tokenList.length; i++) {
-            uint256 userBalance = fairShare(userTokenBalances[GUILD][tokenList[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
-            internalTransfer(GUILD, memberAddress, tokenList[i], userBalance);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 userBalance = fairShare(userTokenBalances[GUILD][tokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
+            // deliberately not using safemath here to keep overflows from preventing the function execution (which would break ragekicks)
+            // if a token overflows, it is because the supply was artificially inflated to oblivion, so we probably don't care about it anyways
+            userTokenBalances[GUILD][tokens[i]] = userTokenBalances[GUILD][tokens[i]] - amount
+            userTokenBalances[memberAddress][tokens[i]] = userTokenBalances[memberAddress][tokens[i]] + amount
         }
 
         emit Ragequit(msg.sender, sharesToBurn, lootToBurn);
