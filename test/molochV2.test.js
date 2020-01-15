@@ -174,15 +174,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       deploymentConfig.PERIOD_DURATION_IN_SECONDS,
       deploymentConfig.VOTING_DURATON_IN_PERIODS,
       deploymentConfig.GRACE_DURATON_IN_PERIODS,
-      deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-      deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
       deploymentConfig.PROPOSAL_DEPOSIT,
       deploymentConfig.DILUTION_BOUND,
       deploymentConfig.PROCESSING_REWARD
     )
-
-    const guildBankAddress = await moloch.guildBank()
-    guildBank = await GuildBank.at(guildBankAddress)
 
     const depositTokenAddress = await moloch.depositToken()
     assert.equal(depositTokenAddress, tokenAlpha.address)
