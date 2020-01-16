@@ -11,6 +11,7 @@ chai
 const {
   verifyBalance,
   verifyInternalBalance,
+  verifyInternalBalances,
   verifyAllowance,
   verifyProposal,
   verifyFlags,
@@ -940,7 +941,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalance({
         token: tokenAlpha,
         address: moloch.address,
+        expectedBalance: proposal1.tributeOffered + deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await verifyInternalBalance({
+        moloch: moloch,
+        token: depositToken,
+        user: ESCROW,
         expectedBalance: 0
+      })
+
+      await verifyInternalBalance({
+        moloch: moloch,
+        token: depositToken,
+        user: GUILD,
+        expectedBalance: proposal1.tributeOffered
       })
     })
 
@@ -992,7 +1007,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.only('sponsorProposal', () => {
+  describe('sponsorProposal', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: summoner,
@@ -1653,7 +1668,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-
   describe('submitVote', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
@@ -1934,7 +1948,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe('processProposal', () => {
+  describe.only('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {})
 
@@ -1994,8 +2008,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -2071,8 +2083,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -2101,15 +2111,20 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered,
+          [ESCROW]: 0,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
       })
 
       await verifyMember({
@@ -2186,14 +2201,8 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance,
-        processor: processor,
-        expectedProcessorBalance: 0
       })
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
@@ -2216,15 +2225,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
-        applicant: proposal1.applicant, // applicant gets tribute returned
-        expectedApplicantBalance: proposal1.tributeOffered,
-        sponsor: summoner, // sponsor - deposit returned
-        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
-        processor: processor, // processor - gets reward
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered, // tribute is still in moloch
+        applicant: proposal1.applicant,
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: 0,
+          [ESCROW]: 0,
+          [proposal1.applicant]: proposal1.tributeOffered,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
       })
 
       await verifyMember({
@@ -2326,14 +2341,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: (deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered) * 2,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance,
-        processor: processor,
-        expectedProcessorBalance: 0
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: 0,
+          [ESCROW]: (deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered) * 2,
+          [summoner]: 0,
+          [processor]: 0
+        }
       })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
@@ -2377,15 +2397,20 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered * 2,
+        expectedMolochBalance: (proposal1.tributeOffered + deploymentConfig.PROPOSAL_DEPOSIT) * 2,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance + ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2),
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered * 2,
+          [ESCROW]: 0,
+          [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+          [processor]: deploymentConfig.PROCESSING_REWARD * 2
+        }
       })
     })
 
@@ -2465,14 +2490,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: proposal1.tributeOffered + deploymentConfig.PROPOSAL_DEPOSIT,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance,
-        processor: processor,
-        expectedProcessorBalance: 0
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: 0,
+          [ESCROW]: proposal1.tributeOffered + deploymentConfig.PROPOSAL_DEPOSIT,
+          [summoner]: 0,
+          [processor]: 0
+        }
       })
 
       await moloch.processProposal(firstProposalIndex, { from: processor })
@@ -2508,15 +2538,20 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal1.tributeOffered + deploymentConfig.PROPOSAL_DEPOSIT, // tribute now in bank,
         applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered,
+          [ESCROW]: 0,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
       })
 
       // delegate reset
@@ -2542,7 +2577,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it('happy path - auto-fail if shares exceed limit', async () => {
+    it.only('happy path - auto-fail if shares exceed limit', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -2768,8 +2803,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit solely as whitelisting has no tribute
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -2801,8 +2834,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0, // tribute now in bank
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -3009,8 +3040,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -3051,8 +3080,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: proposal1.tributeOffered, // tribute is stuck in moloch forever
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0, // applicant does not receive tribute back
         sponsor: summoner,
@@ -3332,61 +3359,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           expectedMemberAddressByDelegateKey: proposal1.applicant
         })
       })
-
-      it('when the previous proposal is processed without emergency - lastEmergencyProposalIndex is set correctly', async () => {
-        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-        // vote yes on both
-        await moveForwardPeriods(2)
-        await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
-        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-
-        // process first proposal before emergency
-        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-        await moloch.processProposal(firstProposalIndex, { from: processor })
-
-        const emergencyWarningBefore = await moloch.emergencyWarning()
-        assert.equal(emergencyWarningBefore, false)
-
-        const lastEmergencyProposalIndexBefore = await moloch.lastEmergencyProposalIndex()
-        assert.equal(lastEmergencyProposalIndexBefore, 0)
-
-        // put second proposal in emergency
-        await moveForwardPeriods(deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
-        await moloch.processProposal(secondProposalIndex, { from: processor })
-
-        const emergencyWarningAfter = await moloch.emergencyWarning()
-        assert.equal(emergencyWarningAfter, true)
-
-        const lastEmergencyProposalIndexAfter = await moloch.lastEmergencyProposalIndex()
-        assert.equal(lastEmergencyProposalIndexAfter, secondProposalIndex)
-
-        // first proposal succeeded
-        await verifyFlags({
-          moloch: moloch,
-          proposalId: firstProposalIndex,
-          expectedFlags: [true, true, true, false, false, false] // didPass is true
-        })
-
-        // second proposal fails
-        await verifyFlags({
-          moloch: moloch,
-          proposalId: secondProposalIndex,
-          expectedFlags: [true, true, false, false, false, false] // didPass is false
-        })
-
-        // just 1 proposal worth of shares
-        await verifyMember({
-          moloch: moloch,
-          member: applicant,
-          expectedExists: true,
-          expectedShares: proposal1.sharesRequested,
-          expectedLoot: proposal1.lootRequested,
-          expectedDelegateKey: proposal1.applicant,
-          expectedMemberAddressByDelegateKey: proposal1.applicant
-        })
-      })
     })
 
     it('edge case - paymentRequested more than funds in the bank', async () => {
@@ -3538,9 +3510,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal1.tributeOffered, // tribute now in bank
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -3896,8 +3866,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit solely as whitelisting has no tribute
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -3964,8 +3932,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit solely as whitelisting has no tribute
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -4032,8 +3998,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         token: depositToken,
         moloch: moloch.address,
         expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT, // deposit solely as whitelisting has no tribute
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -4115,9 +4079,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal1.tributeOffered, // tribute now in bank,
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -4345,9 +4307,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal1.tributeOffered, // tribute now in bank
         applicant: proposal1.applicant,
         expectedApplicantBalance: 0,
         sponsor: summoner,
@@ -4922,9 +4882,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: initialGuildBankBalance.sub(tokensToRageQuit),
+        expectedMolochBalance: initialGuildBankBalance.sub(tokensToRageQuit),
         applicant: proposal1.applicant,
         expectedApplicantBalance: tokensToRageQuit,
         sponsor: summoner,
@@ -5338,9 +5296,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: initialGuildBankBalance.sub(tokensToRageQuit),
+        expectedMolochBalance: initialGuildBankBalance.sub(tokensToRageQuit),
         applicant: proposal1.applicant,
         expectedApplicantBalance: tokensToRageQuit,
         sponsor: summoner,
@@ -5376,9 +5332,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: initialGuildBankBalance.sub(tokensToRageQuit),
+        expectedMolochBalance: initialGuildBankBalance.sub(tokensToRageQuit),
         applicant: proposal1.applicant,
         expectedApplicantBalance: tokensToRageQuit,
         sponsor: summoner,

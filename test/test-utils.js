@@ -14,10 +14,10 @@ const verifyInternalBalance = async ({ moloch, token, user, expectedBalance }) =
 }
 
 const verifyInternalBalances = async ({ moloch, token, userBalances }) => {
-  Object.keys(userBalances).map(async (user) => {
-    const balance = await moloch.userTokenBalances.call(user, token.address)
-    assert.equal(+balance, userBalances[user], `internal token balance incorrect for user ${user} and token ${token.address}`)
-  })
+  const users = Object.keys(userBalances)
+  for (i = 0; i < users.length; i++) {
+    await verifyInternalBalance({ moloch, token, user: users[i], expectedBalance: userBalances[users[i]]})
+  }
 }
 
 const verifyAllowance = async ({ token, owner, spender, expectedAllowance }) => {
@@ -81,30 +81,15 @@ const verifyBalances = async (
     token,
     moloch, // FIXME rename as slightly misleading
     expectedMolochBalance,
-    guildBank,
-    expectedGuildBankBalance,
     applicant,
-    expectedApplicantBalance,
-    sponsor,
-    expectedSponsorBalance,
-    processor,
-    expectedProcessorBalance
+    expectedApplicantBalance
   }
 ) => {
   const molochBalance = await token.balanceOf(moloch)
   assert.equal(+molochBalance, +expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
 
-  const guildBankBalance = await token.balanceOf(guildBank)
-  assert.equal(+guildBankBalance, +expectedGuildBankBalance, `Guild Bank token balance incorrect for ${token.address} with ${guildBank}`)
-
   const applicantBalance = await token.balanceOf(applicant)
   assert.equal(+applicantBalance, +expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
-
-  const sponsorBalance = await token.balanceOf(sponsor)
-  assert.equal(+sponsorBalance, +expectedSponsorBalance, `Sponsor token balance incorrect for ${token.address} with ${sponsor}`)
-
-  const processorBalance = await token.balanceOf(processor)
-  assert.equal(+processorBalance, +expectedProcessorBalance, `Processor token balance incorrect for ${token.address} with ${processor}`)
 }
 
 const verifySubmitVote = async (
@@ -185,6 +170,7 @@ Object.assign(exports, {
   verifyFlags,
   verifyBalance,
   verifyInternalBalance,
+  verifyInternalBalances,
   verifyBalances,
   verifyAllowance,
   verifySubmitVote,
