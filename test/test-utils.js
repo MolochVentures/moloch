@@ -5,12 +5,12 @@ const { assert } = chai
 
 const verifyBalance = async ({ token, address, expectedBalance }) => {
   const balance = await token.balanceOf(address)
-  assert.equal(+balance, expectedBalance, `token balance incorrect for ${token.address} with ${address}`)
+  assert.equal(balance.toString(), expectedBalance.toString(), `token balance incorrect for ${token.address} with ${address}`)
 }
 
 const verifyInternalBalance = async ({ moloch, token, user, expectedBalance }) => {
   const balance = await moloch.userTokenBalances.call(user, token.address)
-  assert.equal(+balance, expectedBalance, `internal token balance incorrect for user ${user} and token ${token.address}`)
+  assert.equal(balance.toString(), expectedBalance.toString(), `internal token balance incorrect for user ${user} and token ${token.address}`)
 }
 
 const verifyInternalBalances = async ({ moloch, token, userBalances }) => {
@@ -86,10 +86,11 @@ const verifyBalances = async (
   }
 ) => {
   const molochBalance = await token.balanceOf(moloch)
-  assert.equal(+molochBalance, +expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
+
+  assert.equal(molochBalance.toString(), expectedMolochBalance.toString(), `moloch token balance incorrect for ${token.address} with ${moloch}`)
 
   const applicantBalance = await token.balanceOf(applicant)
-  assert.equal(+applicantBalance, +expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
+  assert.equal(applicantBalance.toString(), expectedApplicantBalance.toString(), `Applicant token balance incorrect for ${token.address} with ${applicant}`)
 }
 
 const verifySubmitVote = async (
