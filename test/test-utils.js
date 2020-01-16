@@ -8,6 +8,18 @@ const verifyBalance = async ({ token, address, expectedBalance }) => {
   assert.equal(+balance, expectedBalance, `token balance incorrect for ${token.address} with ${address}`)
 }
 
+const verifyInternalBalance = async ({ moloch, token, user, expectedBalance }) => {
+  const balance = await moloch.userTokenBalances.call(user, token.address)
+  assert.equal(+balance, expectedBalance, `internal token balance incorrect for user ${user} and token ${token.address}`)
+}
+
+const verifyInternalBalances = async ({ moloch, token, userBalances }) => {
+  Object.keys(userBalances).map(async (user) => {
+    const balance = await moloch.userTokenBalances.call(user, token.address)
+    assert.equal(+balance, userBalances[user], `internal token balance incorrect for user ${user} and token ${token.address}`)
+  })
+}
+
 const verifyAllowance = async ({ token, owner, spender, expectedAllowance }) => {
   const allowance = await token.allowance(owner, spender)
   assert.equal(+allowance, expectedAllowance, `allowance incorrect for ${token.address} owner ${owner} spender ${spender}`)
@@ -172,6 +184,7 @@ Object.assign(exports, {
   verifyProposal,
   verifyFlags,
   verifyBalance,
+  verifyInternalBalance,
   verifyBalances,
   verifyAllowance,
   verifySubmitVote,

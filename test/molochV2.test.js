@@ -10,6 +10,7 @@ chai
 
 const {
   verifyBalance,
+  verifyInternalBalance,
   verifyAllowance,
   verifyProposal,
   verifyFlags,
@@ -95,6 +96,8 @@ const revertMessages = {
 const SolRevert = 'VM Exception while processing transaction: revert'
 
 const zeroAddress = '0x0000000000000000000000000000000000000000'
+const GUILD  = '0x000000000000000000000000000000000000dead'
+const ESCROW = '0x000000000000000000000000000000000000beef'
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -140,7 +143,7 @@ async function moveForwardPeriods (periods) {
 }
 
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
-  let moloch, guildBank, tokenAlpha, submitter
+  let moloch, tokenAlpha, submitter
   let proposal1, proposal2, depositToken
 
   const initSummonerBalance = 100
@@ -227,12 +230,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const proposalCount = await moloch.proposalCount()
       assert.equal(proposalCount, 0)
 
-      const guildBankAddress = await moloch.guildBank()
-      assert.equal(guildBankAddress, guildBank.address)
-
-      const guildBankOwner = await guildBank.owner()
-      assert.equal(guildBankOwner, moloch.address)
-
       const summonerAddress = await moloch.summoner()
       assert.equal(summonerAddress, summoner)
 
@@ -244,12 +241,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       const gracePeriodLength = await moloch.gracePeriodLength()
       assert.equal(+gracePeriodLength, deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-      const emergencyProcessingWaitLength = await moloch.emergencyProcessingWait()
-      assert.equal(+emergencyProcessingWaitLength, deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS)
-
-      const bailoutWaitLength = await moloch.bailoutWait()
-      assert.equal(+bailoutWaitLength, deploymentConfig.BAILOUT_WAIT_IN_PERIODS)
 
       const proposalDeposit = await moloch.proposalDeposit()
       assert.equal(+proposalDeposit, deploymentConfig.PROPOSAL_DEPOSIT)
@@ -300,8 +291,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -315,8 +304,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         0,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -330,8 +317,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         0,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -345,8 +330,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         _1e18Plus1,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -359,8 +342,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         _1e18,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -377,8 +358,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         _1e18Plus1,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -390,70 +369,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         [tokenAlpha.address],
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
-        _1e18,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
-        deploymentConfig.PROPOSAL_DEPOSIT,
-        deploymentConfig.DILUTION_BOUND,
-        deploymentConfig.PROCESSING_REWARD
-      )
-
-      const totalShares = await molochTemp.totalShares()
-      assert.equal(+totalShares, summonerShares)
-    })
-
-    it('require fail - emergency exit wait can not be zero', async () => {
-      await Moloch.new(
-        summoner,
-        [tokenAlpha.address],
-        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
-        deploymentConfig.VOTING_DURATON_IN_PERIODS,
-        deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        0,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
-        deploymentConfig.PROPOSAL_DEPOSIT,
-        deploymentConfig.DILUTION_BOUND,
-        deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMessages.molochConstructorEmergencyProcessingWaitCannotBe0)
-    })
-
-    it('require fail - bailout wait must be greater than emergency exit wait', async () => {
-      await Moloch.new(
-        summoner,
-        [tokenAlpha.address],
-        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
-        deploymentConfig.VOTING_DURATON_IN_PERIODS,
-        deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        10,
-        10,
-        deploymentConfig.PROPOSAL_DEPOSIT,
-        deploymentConfig.DILUTION_BOUND,
-        deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMessages.molochConstructorBailoutWaitMustBeGreaterThanEmergencyProcessingWait)
-    })
-
-    it('require fail - bailout wait exceeds limit', async () => {
-      await Moloch.new(
-        summoner,
-        [tokenAlpha.address],
-        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
-        deploymentConfig.VOTING_DURATON_IN_PERIODS,
-        deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        _1e18Plus1,
-        deploymentConfig.PROPOSAL_DEPOSIT,
-        deploymentConfig.DILUTION_BOUND,
-        deploymentConfig.PROCESSING_REWARD
-      ).should.be.rejectedWith(revertMessages.molochConstructorBailoutWaitExceedsLimit)
-
-      // still works with 1 less
-      const molochTemp = await Moloch.new(
-        summoner,
-        [tokenAlpha.address],
-        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
-        deploymentConfig.VOTING_DURATON_IN_PERIODS,
-        deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
         _1e18,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
@@ -471,8 +386,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         0,
         deploymentConfig.PROCESSING_REWARD
@@ -486,8 +399,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         _1e18Plus1,
         deploymentConfig.PROCESSING_REWARD
@@ -500,8 +411,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         _1e18,
         deploymentConfig.PROCESSING_REWARD
@@ -518,8 +427,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -533,8 +440,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         _1e18,
         deploymentConfig.DILUTION_BOUND,
         _1e18Plus1
@@ -548,8 +453,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -563,8 +466,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
-        deploymentConfig.EMERGENCY_PROCESSING_WAIT_IN_PERIODS,
-        deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
         deploymentConfig.PROPOSAL_DEPOSIT,
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
@@ -631,6 +532,14 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalance({
         token: tokenAlpha,
         address: moloch.address,
+        expectedBalance: proposal1.tributeOffered
+      })
+
+      // ESCROW balance has been updated
+      await verifyInternalBalance({
+        moloch: moloch,
+        token: tokenAlpha,
+        user: ESCROW,
         expectedBalance: proposal1.tributeOffered
       })
     })
@@ -1083,7 +992,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe('sponsorProposal', () => {
+  describe.only('sponsorProposal', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: summoner,
@@ -1333,7 +1242,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         let proposedToKick = await moloch.proposedToKick(proposal1.applicant)
         assert.equal(proposedToKick, false)
 
-
         // sponsor send by a delegate
         await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
 
@@ -1361,14 +1269,28 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await verifyBalance({
           token: depositToken,
           address: summoner,
-          expectedBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
+          expectedBalance: initSummonerBalance
         })
 
         // moloch has the deposit
         await verifyBalance({
           token: depositToken,
           address: moloch.address,
+          expectedBalance: (deploymentConfig.PROPOSAL_DEPOSIT * 2) + proposal1.tributeOffered
+        })
+
+        await verifyInternalBalance({
+          moloch: moloch,
+          token: depositToken,
+          user: ESCROW,
           expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT
+        })
+
+        await verifyInternalBalance({
+          moloch: moloch,
+          token: depositToken,
+          user: GUILD,
+          expectedBalance: proposal1.tributeOffered
         })
 
         await verifyAllowance({
@@ -1498,6 +1420,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalance({
         token: depositToken,
         address: moloch.address,
+        expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered
+      })
+
+      await verifyInternalBalance({
+        moloch: moloch,
+        token: depositToken,
+        user: ESCROW,
         expectedBalance: deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered
       })
 

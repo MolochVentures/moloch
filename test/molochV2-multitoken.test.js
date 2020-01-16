@@ -69,7 +69,7 @@ async function moveForwardPeriods (periods) {
 }
 
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
-  let moloch, guildBank, tokenAlpha, tokenBeta
+  let moloch, tokenAlpha, tokenBeta
   let proposal1, proposal2, proposal3, depositToken
 
   const firstProposalIndex = 0

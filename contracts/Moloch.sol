@@ -77,7 +77,7 @@ contract Moloch is ReentrancyGuard {
 
     address public constant GUILD = address(0xdead);
     address public constant ESCROW = address(0xbeef);
-    mapping (address => mapping(address => uint256)) userTokenBalances; // tokenBalances[userAddress][tokenAddress]
+    mapping (address => mapping(address => uint256)) public userTokenBalances; // userTokenBalances[userAddress][tokenAddress]
 
     enum Vote {
         Null, // default value, counted as abstention
@@ -622,6 +622,10 @@ contract Moloch is ReentrancyGuard {
 
     function getProposalFlags(uint256 proposalId) public view returns (bool[6] memory) {
         return proposals[proposalId].flags;
+    }
+
+    function getUserTokenBalance(address user, address token) public view returns (uint256) {
+        return userTokenBalances[user][token];
     }
 
     function addToBalance(address user, address token, uint256 amount) internal {
