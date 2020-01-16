@@ -556,11 +556,11 @@ contract Moloch is ReentrancyGuard {
         totalLoot = totalLoot.sub(lootToBurn);
 
         for (uint256 i = 0; i < tokens.length; i++) {
-            uint256 userBalance = fairShare(userTokenBalances[GUILD][tokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
+            uint256 amountToRagequit = fairShare(userTokenBalances[GUILD][tokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
             // deliberately not using safemath here to keep overflows from preventing the function execution (which would break ragekicks)
             // if a token overflows, it is because the supply was artificially inflated to oblivion, so we probably don't care about it anyways
-            userTokenBalances[GUILD][tokens[i]] = userTokenBalances[GUILD][tokens[i]] - userBalance;
-            userTokenBalances[memberAddress][tokens[i]] = userTokenBalances[memberAddress][tokens[i]] + userBalance;
+            userTokenBalances[GUILD][tokens[i]] -= amountToRagequit;
+            userTokenBalances[memberAddress][tokens[i]] += amountToRagequit;
         }
 
         emit Ragequit(msg.sender, sharesToBurn, lootToBurn);

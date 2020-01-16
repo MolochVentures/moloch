@@ -158,7 +158,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe('rageQuit - multi-token', async () => {
+  describe('multi-token ragequit + withdraw', async () => {
     beforeEach(async () => {
       // 1st proposal for with token alpha tribute
       await fundAndApproveToMoloch({
@@ -379,6 +379,11 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
             [processor]: 0
           }
         })
+      })
+
+      // TODO
+      it('withdraw tokens works', async () => {
+
       })
     })
   })
