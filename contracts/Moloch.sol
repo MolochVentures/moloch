@@ -199,7 +199,7 @@ contract Moloch is ReentrancyGuard {
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-        flags[4] = true;
+        flags[4] = true; // whitelist
 
         _submitProposal(address(0), 0, 0, 0, tokenToWhitelist, 0, address(0), details, flags);
         return proposalCount - 1;
@@ -213,7 +213,7 @@ contract Moloch is ReentrancyGuard {
         require(members[memberToKick].jailed == 0, "member must not already be jailed");
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
-        flags[5] = true;
+        flags[5] = true; // guild kick
 
         _submitProposal(memberToKick, 0, 0, 0, address(0), 0, address(0), details, flags);
         return proposalCount - 1;
@@ -289,7 +289,7 @@ contract Moloch is ReentrancyGuard {
         address memberAddress = memberAddressByDelegateKey[msg.sender];
         proposal.sponsor = memberAddress;
 
-        proposal.flags[0] = true;
+        proposal.flags[0] = true; // sponsored
 
         // append proposal to the queue
         proposalQueue.push(proposalId);

@@ -74,6 +74,7 @@ const revertMessages = {
   rageQuitInsufficientShares: 'insufficient shares',
   rageQuitInsufficientLoot: 'insufficient loot',
   rageQuitUntilHighestIndex: 'cannot ragequit until highest index proposal member voted YES on is processed',
+  withdrawBalanceInsufficientBalance: 'insufficient balance',
   updateDelegateKeyNewDelegateKeyCannotBe0: 'newDelegateKey cannot be 0',
   updateDelegateKeyCantOverwriteExistingMembers: 'cannot overwrite existing members',
   updateDelegateKeyCantOverwriteExistingDelegateKeys: 'cannot overwrite existing delegate keys',
@@ -3603,7 +3604,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe('rageQuit', () => {
+  describe('rageQuit + withdrawBalance', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -3862,14 +3863,111 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
     })
+
+    describe.only('withdraw balance', async () => {
+      beforeEach(async () => {
+        await moloch.ragequit(proposal1.sharesRequested, proposal1.lootRequested, { from: proposal1.applicant })
+
+        await verifyInternalBalances({
+          moloch,
+          token: depositToken,
+          userBalances: {
+            [GUILD]: 1, // because 1 summoner share other than applicant
+            [ESCROW]: 0,
+            [proposal1.applicant]: proposal1.tributeOffered - 1,
+            [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
+            [processor]: deploymentConfig.PROCESSING_REWARD
+          }
+        })
+      })
+
+      it('withdraw full balance (applicant, sponsor, processor)', async () => {
+        await moloch.withdrawBalance(depositToken.address, proposal1.tributeOffered - 1, { from: proposal1.applicant })
+        await moloch.withdrawBalance(depositToken.address, deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, { from: summoner })
+        await moloch.withdrawBalance(depositToken.address, deploymentConfig.PROCESSING_REWARD, { from: processor })
+
+        await verifyInternalBalances({
+          moloch,
+          token: depositToken,
+          userBalances: {
+            [GUILD]: 1, // because 1 summoner share other than applicant
+            [ESCROW]: 0,
+            [proposal1.applicant]: 0,
+            [summoner]: 0,
+            [processor]: 0
+          }
+        })
+
+        await verifyBalance({
+          token: depositToken,
+          address: proposal1.applicant,
+          expectedBalance: proposal1.tributeOffered - 1
+        })
+
+        await verifyBalance({
+          token: depositToken,
+          address: summoner,
+          expectedBalance: initSummonerBalance + deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD
+        })
+
+        await verifyBalance({
+          token: depositToken,
+          address: processor,
+          expectedBalance: deploymentConfig.PROCESSING_REWARD
+        })
+      })
+
+      it('withdraw some balance (applicant)', async () => {
+        await moloch.withdrawBalance(depositToken.address, 10, { from: proposal1.applicant })
+
+        await verifyInternalBalances({
+          moloch,
+          token: depositToken,
+          userBalances: {
+            [GUILD]: 1, // because 1 summoner share other than applicant
+            [ESCROW]: 0,
+            [proposal1.applicant]: proposal1.tributeOffered - 11,
+            [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
+            [processor]: deploymentConfig.PROCESSING_REWARD
+          }
+        })
+
+        await verifyBalance({
+          token: depositToken,
+          address: proposal1.applicant,
+          expectedBalance: 10
+        })
+      })
+
+      it('withdraw 0 balance (applicant)', async () => {
+        await moloch.withdrawBalance(depositToken.address, 0, { from: proposal1.applicant })
+
+        await verifyInternalBalances({
+          moloch,
+          token: depositToken,
+          userBalances: {
+            [GUILD]: 1, // because 1 summoner share other than applicant
+            [ESCROW]: 0,
+            [proposal1.applicant]: proposal1.tributeOffered - 1,
+            [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
+            [processor]: deploymentConfig.PROCESSING_REWARD
+          }
+        })
+
+        await verifyBalance({
+          token: depositToken,
+          address: proposal1.applicant,
+          expectedBalance: 0
+        })
+      })
+
+      it('require fail - insufficient balance', async () => {
+        await moloch.withdrawBalance(depositToken.address, proposal1.tributeOffered, { from: proposal1.applicant })
+          .should.be.rejectedWith(revertMessages.withdrawBalanceInsufficientBalance)
+      })
+    })
   })
 
-  describe('withdraw balance', async () => {
-    // after submitting / processing a proposal, then ragequit
-    // - user / sponsor / processor withdraw
-    // - check insufficient balance
-
-  })
 
   describe('cancelProposal', () => {
     beforeEach(async () => {
