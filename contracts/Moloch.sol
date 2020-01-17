@@ -1,28 +1,5 @@
-// Update Moloch to use the pull-pattern
-
-// DONE
-// - track balances on Moloch
-// - update process proposal to use balances
-// - generic withdraw token
-// - update ragequit to use withdraw
-// - remove guild bank
-// - remove emergency processing
-// - remove bailout
-
-// REVIEW
-// https://github.com/MolochVentures/moloch/commit/5465d70fab5be24bfe0cb7494dd78a50822ba36e
-// [x] Missing subtraction in withdrawBalance
-// [x] Missing nonReentrant modifiers
-// [x] Token duplicate check in withdrawBalances is not necessary, but array lengths should be verified to be equal. (Ideally...)
-// [x] unbundle ragequit from withdraw
-//   [x] possibly remove safeRagequit
-// [x] Should consider creating a private _withdrawBalance function.
-// [x] Fairshare should use guildbank balance as the first argument.
-// [ ] Limit whitelisted token count, so a ragequit won't run out of gas.
-// [x] Also, we need to use non-reverting math operators for the internal transfers (balance updates) in _ragequit.
-
 // TODO
-// [x] use address for all tokens, IERC20 wrap when sending
+// [ ] Limit whitelisted token count, so a ragequit won't run out of gas.
 
 pragma solidity 0.5.3;
 
@@ -510,29 +487,6 @@ contract Moloch is ReentrancyGuard {
         internalTransfer(ESCROW, sponsor, depositToken, proposalDeposit.sub(processingReward));
     }
 
-    function _withdrawBalance(address token, uint256 amount) internal {
-        require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
-        subtractFromBalance(msg.sender, token, amount);
-        require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
-    }
-
-    function withdrawBalance(address token, uint256 amount) public nonReentrant {
-        _withdrawBalance(token, amount);
-    }
-
-    function withdrawBalances(address[] memory tokens, uint256[] memory amounts, bool max) public nonReentrant {
-        require(tokens.length == amounts.length, "tokens and amounts arrays must be matching lengths");
-
-        for (uint256 i=0; i < tokens.length; i++) {
-            uint256 withdrawAmount = amounts[i];
-            if (max) { // withdraw the maximum balance
-                withdrawAmount = userTokenBalances[msg.sender][tokens[i]];
-            }
-
-            _withdrawBalance(tokens[i], withdrawAmount);
-        }
-    }
-
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public nonReentrant onlyMember {
         _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
     }
@@ -576,6 +530,29 @@ contract Moloch is ReentrancyGuard {
         _ragequit(memberToKick, 0, member.loot, approvedTokens);
     }
 
+    function withdrawBalance(address token, uint256 amount) public nonReentrant {
+        _withdrawBalance(token, amount);
+    }
+
+    function withdrawBalances(address[] memory tokens, uint256[] memory amounts, bool max) public nonReentrant {
+        require(tokens.length == amounts.length, "tokens and amounts arrays must be matching lengths");
+
+        for (uint256 i=0; i < tokens.length; i++) {
+            uint256 withdrawAmount = amounts[i];
+            if (max) { // withdraw the maximum balance
+                withdrawAmount = userTokenBalances[msg.sender][tokens[i]];
+            }
+
+            _withdrawBalance(tokens[i], withdrawAmount);
+        }
+    }
+
+    function _withdrawBalance(address token, uint256 amount) internal {
+        require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
+        subtractFromBalance(msg.sender, token, amount);
+        require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
+    }
+
     function cancelProposal(uint256 proposalId) public nonReentrant {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
@@ -605,9 +582,20 @@ contract Moloch is ReentrancyGuard {
         emit UpdateDelegateKey(msg.sender, newDelegateKey);
     }
 
+    // can only ragequit if the latest proposal you voted YES on has been processed
+    function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
+        require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
+        return proposals[proposalQueue[highestIndexYesVote]].flags[1];
+    }
+
+    function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
+        return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
+    }
+
     /***************
     GETTER FUNCTIONS
     ***************/
+
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
         return x >= y ? x : y;
     }
@@ -628,6 +616,15 @@ contract Moloch is ReentrancyGuard {
         return userTokenBalances[user][token];
     }
 
+    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
+        require(members[memberAddress].exists, "member does not exist");
+        require(proposalIndex < proposalQueue.length, "proposal does not exist");
+        return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
+    }
+
+    /***************
+    HELPER FUNCTIONS
+    ***************/
     function addToBalance(address user, address token, uint256 amount) internal {
         userTokenBalances[user][token] = userTokenBalances[user][token].add(amount);
     }
@@ -654,21 +651,4 @@ contract Moloch is ReentrancyGuard {
 
         return (balance / totalShares) * shares;
     }
-
-    // can only ragequit if the latest proposal you voted YES on has been processed
-    function canRagequit(uint256 highestIndexYesVote) public view returns (bool) {
-        require(highestIndexYesVote < proposalQueue.length, "proposal does not exist");
-        return proposals[proposalQueue[highestIndexYesVote]].flags[1];
-    }
-
-    function hasVotingPeriodExpired(uint256 startingPeriod) public view returns (bool) {
-        return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
-    }
-
-    function getMemberProposalVote(address memberAddress, uint256 proposalIndex) public view returns (Vote) {
-        require(members[memberAddress].exists, "member does not exist");
-        require(proposalIndex < proposalQueue.length, "proposal does not exist");
-        return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
-    }
-
 }

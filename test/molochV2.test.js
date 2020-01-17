@@ -31,9 +31,6 @@ const revertMessages = {
   molochConstructorVotingPeriodLengthCannotBe0: '_votingPeriodLength cannot be 0',
   molochConstructorVotingPeriodLengthExceedsLimit: '_votingPeriodLength exceeds limit',
   molochConstructorGracePeriodLengthExceedsLimit: '_gracePeriodLength exceeds limit',
-  molochConstructorEmergencyProcessingWaitCannotBe0: '_emergencyProcessingWait cannot be 0',
-  molochConstructorBailoutWaitMustBeGreaterThanEmergencyProcessingWait: 'bailoutWait must be greater than _emergencyProcessingWait',
-  molochConstructorBailoutWaitExceedsLimit: 'bailoutWait exceeds limit',
   molochConstructorDilutionBoundCannotBe0: '_dilutionBound cannot be 0',
   molochConstructorDilutionBoundExceedsLimit: '_dilutionBound exceeds limit',
   molochConstructorNeedAtLeastOneApprovedToken: 'need at least one approved token',
@@ -85,11 +82,7 @@ const revertMessages = {
   safeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
   ragekickMustBeInJail: 'member must be in jail',
   ragekickMustHaveSomeLoot: 'member must have some loot',
-  ragekickBailoutWaitHasPassed: 'bailoutWait has passed, member must be bailed out',
   ragekickPendingProposals: 'cannot ragequit until highest index proposal member voted YES on is processed',
-  bailoutNotYet: 'cannot bailout yet',
-  bailoutMustBeInJail: 'member must be in jail',
-  bailoutMustHaveSomeLoot: 'member must have some loot',
   getMemberProposalVoteMemberDoesntExist: 'member does not exist',
   getMemberProposalVoteProposalDoesntExist: 'proposal does not exist',
 }
@@ -126,8 +119,6 @@ const deploymentConfig = {
   'PERIOD_DURATION_IN_SECONDS': 17280,
   'VOTING_DURATON_IN_PERIODS': 35,
   'GRACE_DURATON_IN_PERIODS': 35,
-  'EMERGENCY_PROCESSING_WAIT_IN_PERIODS': 35,
-  'BAILOUT_WAIT_IN_PERIODS': 70,
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
@@ -3871,6 +3862,13 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
     })
+  })
+
+  describe('withdraw balance', async () => {
+    // after submitting / processing a proposal, then ragequit
+    // - user / sponsor / processor withdraw
+    // - check insufficient balance
+
   })
 
   describe('cancelProposal', () => {

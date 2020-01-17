@@ -55,8 +55,6 @@ const deploymentConfig = {
   'PERIOD_DURATION_IN_SECONDS': 17280,
   'VOTING_DURATON_IN_PERIODS': 35,
   'GRACE_DURATON_IN_PERIODS': 35,
-  'EMERGENCY_EXIT_WAIT_IN_PERIODS': 35,
-  'BAILOUT_WAIT_IN_PERIODS': 70,
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
@@ -381,10 +379,15 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
 
-      // TODO
-      it('withdraw tokens works', async () => {
+      it('withdraw balances', async () => {
+        // post multi-token ragequit, get all balances at once (max = true)
+        // partial withdraw balances (max = false)
+        // "tokens and amounts arrays must be matching lengths"
 
       })
     })
+
+    // TODO bring back token w/ transfer restriction setup and test
+    // - withdraw balance "transfer failed"
   })
 })
