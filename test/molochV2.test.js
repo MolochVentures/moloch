@@ -3864,7 +3864,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    describe.only('withdraw balance', async () => {
+    describe('withdraw balance', async () => {
       beforeEach(async () => {
         await moloch.ragequit(proposal1.sharesRequested, proposal1.lootRequested, { from: proposal1.applicant })
 
