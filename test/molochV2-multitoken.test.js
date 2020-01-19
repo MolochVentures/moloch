@@ -384,7 +384,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         })
       })
 
-      describe.only('withdraw balances', () => {
+      describe('withdraw balances', () => {
         let tokens, applicantTokenBalances
         let zeroesArray = [0, 0]
 

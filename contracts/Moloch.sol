@@ -13,8 +13,6 @@ contract Moloch is ReentrancyGuard {
     /***************
     GLOBAL CONSTANTS
     ***************/
-    address public summoner; // initial singular shareholder, assists with bailouts
-
     uint256 public periodDuration; // default = 17280 = 4.8 hours in seconds (5 periods per day)
     uint256 public votingPeriodLength; // default = 35 periods (7 days)
     uint256 public gracePeriodLength; // default = 35 periods (7 days)
@@ -138,8 +136,6 @@ contract Moloch is ReentrancyGuard {
         require(_approvedTokens.length > 0, "need at least one approved token");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
 
-        summoner = _summoner;
-
         depositToken = _approvedTokens[0];
 
         for (uint256 i = 0; i < _approvedTokens.length; i++) {
@@ -158,11 +154,11 @@ contract Moloch is ReentrancyGuard {
 
         summoningTime = now;
 
-        members[summoner] = Member(summoner, 1, 0, true, 0, 0);
-        memberAddressByDelegateKey[summoner] = summoner;
+        members[_summoner] = Member(_summoner, 1, 0, true, 0, 0);
+        memberAddressByDelegateKey[_summoner] = _summoner;
         totalShares = 1;
 
-        emit SummonComplete(summoner, 1);
+        emit SummonComplete(_summoner, 1);
     }
 
     /*****************
@@ -209,7 +205,6 @@ contract Moloch is ReentrancyGuard {
         Member memory member = members[memberToKick];
 
         require(member.shares > 0 || member.loot > 0, "member must have at least one share or one loot");
-        require(memberToKick != summoner, "the summoner may not be kicked");
         require(members[memberToKick].jailed == 0, "member must not already be jailed");
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]

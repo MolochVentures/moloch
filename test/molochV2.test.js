@@ -47,7 +47,6 @@ const revertMessages = {
   submitWhitelistProposalAlreadyHaveWhitelistedToken: 'cannot already have whitelisted the token',
   submitGuildKickProposalMemberMustHaveAtLeastOneShare: 'member must have at least one share or one loot',
   submitGuildKickProposalMemberMustNotBeJailed: 'member must not already be jailed',
-  submitGuildKickProposalMemberMustNotBeSummoner: 'the summoner may not be kicked',
   sponsorProposalProposalHasAlreadyBeenSponsored: 'proposal has already been sponsored',
   sponsorProposalProposalHasAlreadyBeenCancelled: 'proposal has already been cancelled',
   sponsorProposalAlreadyProposedToWhitelist: 'already proposed to whitelist',
@@ -79,8 +78,6 @@ const revertMessages = {
   updateDelegateKeyCantOverwriteExistingMembers: 'cannot overwrite existing members',
   updateDelegateKeyCantOverwriteExistingDelegateKeys: 'cannot overwrite existing delegate keys',
   canRageQuitProposalDoesNotExist: 'proposal does not exist',
-  safeRageQuitTokenMustBeWhitelisted: 'token must be whitelisted',
-  safeRageQuitTokenListMustBeUniqueAndInAscendingOrder: 'token list must be unique and in ascending order',
   ragekickMustBeInJail: 'member must be in jail',
   ragekickMustHaveSomeLoot: 'member must have some loot',
   ragekickPendingProposals: 'cannot ragequit until highest index proposal member voted YES on is processed',
@@ -222,9 +219,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       const proposalCount = await moloch.proposalCount()
       assert.equal(proposalCount, 0)
-
-      const summonerAddress = await moloch.summoner()
-      assert.equal(summonerAddress, summoner)
 
       const periodDuration = await moloch.periodDuration()
       assert.equal(+periodDuration, deploymentConfig.PERIOD_DURATION_IN_SECONDS)
@@ -957,14 +951,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         'kick me!',
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustHaveAtLeastOneShare)
-    })
-
-    it('require fail - summoner can not be kicked', async () => {
-      await moloch.submitGuildKickProposal(
-        summoner,
-        'kick me!',
-        { from: proposal1.applicant }
-      ).should.be.rejectedWith(revertMessages.submitGuildKickProposalMemberMustNotBeSummoner)
     })
 
     it('happy case - second submitted proposal returns incremented proposalId', async () => {
