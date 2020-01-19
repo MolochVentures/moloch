@@ -1,3 +1,4 @@
+
 STEAL THIS CODE
 
 # Moloch v2
@@ -147,15 +148,6 @@ Molochs](https://cdn.discordapp.com/attachments/583914506389028865/6433035892545
 
 Moloch v2 is minimally different from Moloch v1, please read the [original documentation](https://github.com/MolochVentures/moloch/tree/master/v1_contracts) first, and then the changelog below.
 
-## GuildBank.sol
-- removed constructor
-- removed `approvedToken` reference
-- removed **SafeMath** dependency
-- updated `withdraw` to support multi-token withdrawals
-- add `withdrawToken` to allow for token payments of specific amounts
-- add `fairShare` to prevent overflows from large token balances
-- inline `onlyOwner` modifier and remove dependency on `Owned.sol`
-
 ## Moloch.sol
 
 ### General Changes
@@ -182,6 +174,8 @@ struct Proposal {
 In order to mitigate a number of potential vulnerabilities around token transfers, all token transfers now follow the "pull pattern". This means that functions that would have previously called into an ERC20 token contract to move a balance now simply update an internal record of token balances instead. This prevents suddenly implemented token transfer restrictions from halting the proper execution of `Moloch.sol`, especially the `processProposal` function.
 
 **As a result, the `GuildBank.sol` contract has been removed.**
+
+Note - in this documentation we still refer to the "Guild Bank" as it remains a useful concept, but the balance is no longer tracked in the `GuildBank.sol` contract, but instead the `userTokenBalances[GUILD]` mapping of balances per token.
 
 ##### Globals
 We add the nested mapping `userTokenBalances` to track balances by user & token. `userTokenBalances[userAddress][tokenAddress] = balance`.
@@ -338,7 +332,6 @@ After a member has been jailed as a result of a passing guild kick proposal, onc
 - a new function to kick jailed members
 - checks that member is jailed and has loot
 
-
 ### Loot
 To allow the DAO to issue non-voting shares, we introduce the concept of Loot. Just like shares, loot is requested via proposal, issued to specific members and non-transferrable, and can be redeemed (via ragequit) on par with shares for a proportional fraction of assets in the Guild Bank. However, loot do not count towards votes and DAO members with *only* loot will not be able to sponsor proposals or vote on them. Non-shareholder members with loot will also be prevented from updating their delegate keys as they wouldn't be able to use them for anything anyways.
 
@@ -402,3 +395,4 @@ To enforce consistency of the proposal deposits and processing fees (which were 
 
 
 ![Goodbye](https://cdn.discordapp.com/attachments/583914506389028865/636359193154289687/image0.jpg)
+[Goodbye](https://cdn.discordapp.com/attachments/583914506389028865/636359193154289687/image0.jpg)
