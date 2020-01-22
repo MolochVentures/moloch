@@ -418,5 +418,7 @@ To enforce consistency of the proposal deposits and processing fees (which were 
 - transfer processing reward in `depositToken` to whoever called `processProposal`
 - return remaining deposit to proposer
 
+##### NEW EVENTS
+
 
 ![Goodbye](https://cdn.discordapp.com/attachments/583914506389028865/636359193154289687/image0.jpg)
