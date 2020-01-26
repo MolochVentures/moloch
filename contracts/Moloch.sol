@@ -421,7 +421,7 @@ contract Moloch is ReentrancyGuard {
 
         _returnDeposit(proposal.sponsor);
 
-        emit ProcessProposal(proposalIndex, proposalId, didPass);
+        emit ProcessWhitelistProposal(proposalIndex, proposalId, didPass);
     }
 
     function processGuildKickProposal(uint256 proposalIndex) public nonReentrant {
@@ -452,7 +452,7 @@ contract Moloch is ReentrancyGuard {
 
         _returnDeposit(proposal.sponsor);
 
-        emit ProcessProposal(proposalIndex, proposalId, didPass);
+        emit ProcessGuildKickProposal(proposalIndex, proposalId, didPass);
     }
 
     function _didPass(uint256 proposalIndex) internal returns (bool didPass) {
