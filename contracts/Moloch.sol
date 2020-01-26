@@ -179,7 +179,7 @@ contract Moloch is ReentrancyGuard {
 
         // collect tribute from proposer and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
-        addToBalance(ESCROW, tributeToken, tributeOffered);
+        unsafeAddToBalance(ESCROW, tributeToken, tributeOffered);
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
 
@@ -249,7 +249,7 @@ contract Moloch is ReentrancyGuard {
     function sponsorProposal(uint256 proposalId) public nonReentrant onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
         require(IERC20(depositToken).transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
-        addToBalance(ESCROW, depositToken, proposalDeposit);
+        unsafeAddToBalance(ESCROW, depositToken, proposalDeposit);
 
         Proposal storage proposal = proposals[proposalId];
 
@@ -541,7 +541,7 @@ contract Moloch is ReentrancyGuard {
 
     function _withdrawBalance(address token, uint256 amount) internal {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
-        subtractFromBalance(msg.sender, token, amount);
+        unsafeSubtractFromBalance(msg.sender, token, amount);
         require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
