@@ -30,6 +30,7 @@ contract Moloch is ReentrancyGuard {
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
+    uint256 constant MAX_TOKEN_COUNT = 10; // maximum number of tokens // TODO: actual limit to be determined; insert here and in tests
 
     // ***************
     // EVENTS
@@ -134,6 +135,7 @@ contract Moloch is ReentrancyGuard {
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
+        require(_approvedTokens.length <= MAX_TOKEN_COUNT, "too many tokens");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
 
         depositToken = _approvedTokens[0];
@@ -193,6 +195,7 @@ contract Moloch is ReentrancyGuard {
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public nonReentrant returns (uint256 proposalId) {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
+        require(approvedTokens.length < MAX_TOKEN_COUNT, "cannot submit more whitelist proposals");
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         flags[4] = true; // whitelist
@@ -265,6 +268,7 @@ contract Moloch is ReentrancyGuard {
         if (proposal.flags[4]) {
             require(!tokenWhitelist[address(proposal.tributeToken)], "cannot already have whitelisted the token");
             require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
+            require(approvedTokens.length < MAX_TOKEN_COUNT, "cannot sponsor more whitelist proposals");
             proposedToWhitelist[address(proposal.tributeToken)] = true;
 
         // guild kick proposal
@@ -402,6 +406,10 @@ contract Moloch is ReentrancyGuard {
         proposal.flags[1] = true; // processed
 
         bool didPass = _didPass(proposalIndex);
+
+        if (approvedTokens.length >= MAX_TOKEN_COUNT) {
+            didPass = false;
+        }
 
         if (didPass) {
             proposal.flags[2] = true; // didPass
@@ -615,6 +623,10 @@ contract Moloch is ReentrancyGuard {
         require(members[memberAddress].exists, "member does not exist");
         require(proposalIndex < proposalQueue.length, "proposal does not exist");
         return proposals[proposalQueue[proposalIndex]].votesByMember[memberAddress];
+    }
+
+    function getTokenCount() public view returns (uint256) {
+        return approvedTokens.length;
     }
 
     /***************
