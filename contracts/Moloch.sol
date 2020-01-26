@@ -34,6 +34,7 @@ contract Moloch is ReentrancyGuard {
     // ***************
     // EVENTS
     // ***************
+    event SummonComplete(address indexed summoner, address[] tokens, uint256 summoningTime, uint256 periodDuration, uint256 votingPeriodLength, uint256 gracePeriodLength, uint256 proposalDeposit, uint256 dilutionBound, uint256 processingReward);
     event SubmitProposal(address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken, string details, bool[6] flags, uint256 proposalIndex, address indexed delegateKey, address indexed memberAddress);
     event SponsorProposal(address indexed delegateKey, address indexed memberAddress, uint256 proposalIndex, uint256 proposalQueueIndex, uint256 startingPeriod);
     event SubmitVote(uint256 proposalIndex, uint256 indexed proposalQueueIndex, address indexed delegateKey, address indexed memberAddress, uint8 uintVote);
@@ -43,8 +44,7 @@ contract Moloch is ReentrancyGuard {
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
-    event SummonComplete(address indexed summoner, address[] tokens, uint256 summoningTime, uint256 periodDuration, uint256 votingPeriodLength, uint256 gracePeriodLength, uint256 proposalDeposit, uint256 dilutionBound, uint256 processingReward);
-
+    
     // *******************
     // INTERNAL ACCOUNTING
     // *******************
@@ -550,7 +550,7 @@ contract Moloch is ReentrancyGuard {
             _withdrawBalance(tokens[i], withdrawAmount);
         }
     }
-
+    //TODO: fire off an event to event source withdrawal in subgraph
     function _withdrawBalance(address token, uint256 amount) internal {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
         subtractFromBalance(msg.sender, token, amount);
@@ -566,6 +566,9 @@ contract Moloch is ReentrancyGuard {
         proposal.flags[3] = true; // cancelled
 
         internalTransfer(ESCROW, proposal.proposer, proposal.tributeToken, proposal.tributeOffered);
+        // TODO: add member address since msg.sender might be delegate key and members are indexed by memberaddress since initially delegatekey==memberaddress
+        // address memberAddress = memberAddressByDelegateKey[msg.sender];
+        
         emit CancelProposal(proposalId, msg.sender);
     }
 
