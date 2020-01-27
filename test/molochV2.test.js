@@ -1008,7 +1008,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedAllowance: deploymentConfig.PROPOSAL_DEPOSIT
       })
     })
-
+    //TODO: Sponsor each type of proposal tests
     it.skip('emits SponsorProposal event', async () => {
       const newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
       const proposer = proposal1.applicant
@@ -1795,7 +1795,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.submitVote(firstProposalIndex, yes, { from: creator })
         .should.be.rejectedWith('not a delegate')
     })
-
+    //TODO: events not emitted when should fail
     it.skip('emits SubmitVote event', async () => {
       await moveForwardPeriods(1)
       const emittedLogs = await moloch.submitVote(0, 1, { from: summoner })
@@ -1929,7 +1929,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   describe('processProposal', () => {
     let proposer, applicant
     beforeEach(async () => {})
-
+    //TODO: emits event for each proposal type
     it.skip('emits ProcessProposal event', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -2820,7 +2820,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalIndex, proposalId, didPass } = log.args
-      assert.equal(log.event, 'ProcessProposal')
+      assert.equal(log.event, 'ProcessWhitelistProposal')
       assert.equal(proposalIndex, 0)
       assert.equal(proposalId, 0)
       assert.equal(didPass, true)
@@ -2951,7 +2951,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalIndex, proposalId, didPass } = log.args
-      assert.equal(log.event, 'ProcessProposal')
+      assert.equal(log.event, 'ProcessGuildKickProposal')
       assert.equal(proposalIndex, secondProposalIndex)
       assert.equal(proposalId, 1)
       assert.equal(didPass, true)
@@ -3720,7 +3720,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           }
         })
       })
-
+      //TODO: single token, multiple token
       it.skip('emits Ragequit event', async () => {
         const log = emittedLogs[0]
         const { memberAddress, sharesToBurn, tokenList } = log.args
@@ -3770,7 +3770,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
           }
         })
       })
-
+      //TODO: partial ragequit event
       it.skip('emits Ragequit event', async () => {
         const log = emittedLogs[0]
         const { memberAddress, sharesToBurn, tokenList } = log.args
@@ -4046,7 +4046,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.cancelProposal(firstProposalIndex, { from: creator })
         .should.be.rejectedWith(revertMessages.cancelProposalSolelyTheProposerCanCancel)
     })
-
+    //TODO: Cancel proposal fails
     it.skip('emits CancelProposal event', async () => {
       const emittedLogs = await moloch.cancelProposal(0, { from: proposal1.applicant })
       const { logs } = emittedLogs
