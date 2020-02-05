@@ -2756,7 +2756,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalIndex, proposalId, didPass } = log.args
-      // TODO FIX EVENT assert.equal(log.event, 'ProcessWhitelistProposal')
+      assert.equal(log.event, 'ProcessWhitelistProposal')
       assert.equal(proposalIndex, 0)
       assert.equal(proposalId, 0)
       assert.equal(didPass, true)
@@ -2887,7 +2887,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const { logs } = emittedLogs
       const log = logs[0]
       const { proposalIndex, proposalId, didPass } = log.args
-      // TODO FIX EVENT assert.equal(log.event, 'ProcessGuildKickProposal')
+      assert.equal(log.event, 'ProcessGuildKickProposal')
       assert.equal(proposalIndex, secondProposalIndex)
       assert.equal(proposalId, 1)
       assert.equal(didPass, true)

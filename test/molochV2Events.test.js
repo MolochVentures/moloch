@@ -212,7 +212,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe.skip('constructor events', () => {
+  describe('constructor events', () => {
     it('verify deployment parameters', async () => {
       // eslint-disable-next-line no-unused-vars
       const now = await blockTime()
@@ -314,7 +314,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.skip('submitProposal events', () => {
+  describe('submitProposal events', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: applicant1,
@@ -596,7 +596,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.skip('submitWhitelistProposal events', () => {
+  describe('submitWhitelistProposal events', () => {
     let newToken
     beforeEach(async () => {
       newToken = await Token.new(deploymentConfig.TOKEN_SUPPLY)
@@ -834,7 +834,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.skip('submitGuildKickProposal events', () => {
+  describe('submitGuildKickProposal events', () => {
     let proposer, applicant
     beforeEach(async () => {
       // cant kick the summoner, so we have to vote in a new member
@@ -1155,7 +1155,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.skip('sponsorProposal events', () => {
+  describe('sponsorProposal events', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: summoner,
@@ -1566,7 +1566,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   })
 
-  describe.skip('submitVote events', () => {
+  describe('submitVote events', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -1690,7 +1690,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   })
 
-  describe.skip('processProposal events', () => {
+  describe('processProposal events', () => {
     let proposer, applicant
     beforeEach(async () => {
 
@@ -1904,7 +1904,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   })
 
-  describe.skip('processWhitelistProposal events', () => {
+  describe('processWhitelistProposal events', () => {
     let proposer, applicant
     beforeEach(async () => {
       await fundAndApproveToMoloch({
@@ -2107,7 +2107,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const log = logs[0]
       assert.equal(log.event, 'ProcessWhitelistProposal')
       //event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
-      
 
       const proposalQueueLength = 0
       const {proposalIndex,proposalId,didPass} = log.args
@@ -2115,10 +2114,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(proposalId, firstProposalIndex)
       assert.equal(didPass, false)
     })
-
   })
 
-  describe.skip('processGuildKickProposal events', () => {
+  describe('processGuildKickProposal events', () => {
     let proposer, applicant
     beforeEach(async () => {
       // cant kick the summoner, so we have to vote in a new member
@@ -2363,7 +2361,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   })
 
 
-  describe.skip('rageQuit events', () => {
+  describe('rageQuit events', () => {
     //NOTE: add applicant1 as a member
     beforeEach(async () => {
       await fundAndApproveToMoloch({
@@ -2543,7 +2541,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   })
 
-  describe.skip('withdraw events', async () => {
+  describe('withdraw events', async () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -2685,7 +2683,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     //TODO: test withdrawBalances? should still be fine since it just calls withdraw internally and is covered in other tests
   })
 
-  describe.skip('cancelProposal events', () => {
+  describe('cancelProposal events', () => {
     beforeEach(async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
@@ -2759,7 +2757,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe.skip('updateDelegateKey', () => {
+  describe('updateDelegateKey', () => {
     it('require success - emits UpdateDelegateKey event', async () => {
       const emittedLogs = await  moloch.updateDelegateKey(processor, { from: summoner })
 
