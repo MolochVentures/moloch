@@ -27,7 +27,8 @@ contract Moloch is ReentrancyGuard {
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
-    uint256 constant MAX_TOKEN_COUNT = 10; // maximum number of tokens // TODO: actual limit to be determined; insert here and in tests
+    uint256 constant MAX_TOKEN_WHITELIST_COUNT = 9001; // maximum number of whitelisted tokens
+    uint256 constant MAX_TOKEN_GUILDBANK_COUNT = 300; // maximum number of tokens with non-zero balance in guildbank
 
     // ***************
     // EVENTS
@@ -47,6 +48,8 @@ contract Moloch is ReentrancyGuard {
     uint256 public proposalCount = 0; // total proposals submitted
     uint256 public totalShares = 0; // total shares across all members
     uint256 public totalLoot = 0; // total loot across all members
+
+    uint256 public totalGuildBankTokens = 0; // total tokens with non-zero balance in guild bank
 
     address public constant GUILD = address(0xdead);
     address public constant ESCROW = address(0xbeef);
@@ -132,7 +135,7 @@ contract Moloch is ReentrancyGuard {
         require(_dilutionBound > 0, "_dilutionBound cannot be 0");
         require(_dilutionBound <= MAX_DILUTION_BOUND, "_dilutionBound exceeds limit");
         require(_approvedTokens.length > 0, "need at least one approved token");
-        require(_approvedTokens.length <= MAX_TOKEN_COUNT, "too many tokens");
+        require(_approvedTokens.length <= MAX_TOKEN_WHITELIST_COUNT, "too many tokens");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
 
         depositToken = _approvedTokens[0];
@@ -179,6 +182,11 @@ contract Moloch is ReentrancyGuard {
         require(applicant != address(0), "applicant cannot be 0");
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
+        // TODO test
+        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0) {
+            require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot submit more tribute proposals for new tokens - guildbank is full');
+        }
+
         // collect tribute from proposer and store it in the Moloch until the proposal is processed
         require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
         unsafeAddToBalance(ESCROW, tributeToken, tributeOffered);
@@ -192,7 +200,7 @@ contract Moloch is ReentrancyGuard {
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public nonReentrant returns (uint256 proposalId) {
         require(tokenToWhitelist != address(0), "must provide token address");
         require(!tokenWhitelist[tokenToWhitelist], "cannot already have whitelisted the token");
-        require(approvedTokens.length < MAX_TOKEN_COUNT, "cannot submit more whitelist proposals");
+        require(approvedTokens.length < MAX_TOKEN_WHITELIST_COUNT, "cannot submit more whitelist proposals");
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
         flags[4] = true; // whitelist
@@ -261,11 +269,16 @@ contract Moloch is ReentrancyGuard {
         require(!proposal.flags[3], "proposal has been cancelled");
         require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
+        // TODO test
+        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0) {
+            require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot sponsor more tribute proposals for new tokens - guildbank is full');
+        }
+
         // whitelist proposal
         if (proposal.flags[4]) {
             require(!tokenWhitelist[address(proposal.tributeToken)], "cannot already have whitelisted the token");
             require(!proposedToWhitelist[address(proposal.tributeToken)], 'already proposed to whitelist');
-            require(approvedTokens.length < MAX_TOKEN_COUNT, "cannot sponsor more whitelist proposals");
+            require(approvedTokens.length < MAX_TOKEN_WHITELIST_COUNT, "cannot sponsor more whitelist proposals");
             proposedToWhitelist[address(proposal.tributeToken)] = true;
 
         // guild kick proposal
@@ -351,6 +364,12 @@ contract Moloch is ReentrancyGuard {
             didPass = false;
         }
 
+        // Make the proposal fail if it would result in too many tokens with non-zero balance in guild bank
+        // TODO test
+        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
+           didPass = false;
+        }
+
         // PROPOSAL PASSED
         if (didPass) {
             proposal.flags[2] = true; // didPass
@@ -378,8 +397,19 @@ contract Moloch is ReentrancyGuard {
             totalShares = totalShares.add(proposal.sharesRequested);
             totalLoot = totalLoot.add(proposal.lootRequested);
 
+            // if the proposal tribute is the first tokens of its kind to make it into the guild bank, increment total guild bank tokens
+            if (getUserTokenBalance[GUILD][proposal.tributeToken] == 0 && proposal.tributeOffered > 0) {
+                totalGuildBankTokens += 1;
+            }
+
             unsafeInternalTransfer(ESCROW, GUILD, proposal.tributeToken, proposal.tributeOffered);
             unsafeInternalTransfer(GUILD, proposal.applicant, proposal.paymentToken, proposal.paymentRequested);
+
+            // if the proposal spends 100% of guild bank balance for a token, decrement total guild bank tokens
+            // NOTE - it's possible that the tribute offered and payment requested cancel each other out, which is why we put this at the end
+            if (getUserTokenBalance[GUILD][proposal.tributeToken] == 0) {
+                totalGuildBankTokens -= 1;
+            }
 
         // PROPOSAL FAILED
         } else {
@@ -404,7 +434,7 @@ contract Moloch is ReentrancyGuard {
 
         bool didPass = _didPass(proposalIndex);
 
-        if (approvedTokens.length >= MAX_TOKEN_COUNT) {
+        if (approvedTokens.length >= MAX_TOKEN_WHITELIST_COUNT) {
             didPass = false;
         }
 
