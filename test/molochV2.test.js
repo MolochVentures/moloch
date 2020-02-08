@@ -264,6 +264,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const totalShares = await moloch.totalShares()
       assert.equal(+totalShares, summonerShares)
 
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(+totalLoot, 0)
+
+      const totalGuildBankTokens = await moloch.totalGuildBankTokens()
+      assert.equal(+totalGuildBankTokens, 0)
+
       // confirm initial deposit token supply and summoner balance
       const tokenSupply = await tokenAlpha.totalSupply()
       assert.equal(+tokenSupply.toString(), deploymentConfig.TOKEN_SUPPLY)
@@ -1886,7 +1892,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     let proposer, applicant
     beforeEach(async () => {})
 
-    it('happy path - pass - yes wins', async () => {
+    it.only('happy path - pass - yes wins', async () => {
       await fundAndApproveToMoloch({
         to: proposal1.applicant,
         from: creator,
@@ -1956,6 +1962,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedTotalLoot: proposal1.lootRequested,
         expectedMaxSharesAndLootAtYesVote: 1
       })
+
+      const totalGuildBankTokens = await moloch.totalGuildBankTokens()
+      assert.equal(+totalGuildBankTokens, 0)
 
       await verifyFlags({
         moloch: moloch,
