@@ -41,6 +41,7 @@ contract Moloch is ReentrancyGuard {
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
+    event TokensCollected(address token, uint256 amount);
 
     // *******************
     // INTERNAL ACCOUNTING
@@ -53,6 +54,7 @@ contract Moloch is ReentrancyGuard {
 
     address public constant GUILD = address(0xdead);
     address public constant ESCROW = address(0xbeef);
+    address public constant TOTAL = address(0xbabe);
     mapping (address => mapping(address => uint256)) public userTokenBalances; // userTokenBalances[userAddress][tokenAddress]
 
     enum Vote {
@@ -584,6 +586,15 @@ contract Moloch is ReentrancyGuard {
         require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
+    // TODO test
+    function collectTokens(address token) public nonReentrant {
+        uint256 tokensToCollect = IERC20(token).balanceOf(address(this).sub(userTokenBalances[TOTAL][token]);
+        if (tokensToCollect > 0) {
+            unsafeAddToBalance(GUILD, token, tokensToCollect);
+            emit TokensCollected(token, amount);
+        }
+    }
+
     function cancelProposal(uint256 proposalId) public nonReentrant {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
@@ -662,10 +673,12 @@ contract Moloch is ReentrancyGuard {
     ***************/
     function unsafeAddToBalance(address user, address token, uint256 amount) internal {
         userTokenBalances[user][token] += amount;
+        userTokenBalances[TOTAL][token] += amount;
     }
 
     function unsafeSubtractFromBalance(address user, address token, uint256 amount) internal {
         userTokenBalances[user][token] -= amount;
+        userTokenBalances[TOTAL][token] -= amount;
     }
 
     function unsafeInternalTransfer(address from, address to, address token, uint256 amount) internal {
