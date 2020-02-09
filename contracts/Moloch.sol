@@ -183,7 +183,7 @@ contract Moloch is ReentrancyGuard {
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // TODO test
-        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0) {
+        if (tributeOffered > 0 && userTokenBalances[GUILD][tributeToken] == 0) {
             require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot submit more tribute proposals for new tokens - guildbank is full');
         }
 
@@ -270,7 +270,7 @@ contract Moloch is ReentrancyGuard {
         require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // TODO test
-        if (proposal.tributeOffered > 0 && getUserTokenBalance[GUILD][proposal.tributeToken] == 0) {
+        if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0) {
             require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot sponsor more tribute proposals for new tokens - guildbank is full');
         }
 
@@ -366,7 +366,7 @@ contract Moloch is ReentrancyGuard {
 
         // Make the proposal fail if it would result in too many tokens with non-zero balance in guild bank
         // TODO test
-        if (proposal.tributeOffered > 0 && getUserTokenBalance[GUILD][proposal.tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
+        if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
            didPass = false;
         }
 
@@ -398,7 +398,7 @@ contract Moloch is ReentrancyGuard {
             totalLoot = totalLoot.add(proposal.lootRequested);
 
             // if the proposal tribute is the first tokens of its kind to make it into the guild bank, increment total guild bank tokens
-            if (getUserTokenBalance[GUILD][proposal.tributeToken] == 0 && proposal.tributeOffered > 0) {
+            if (userTokenBalances[GUILD][proposal.tributeToken] == 0 && proposal.tributeOffered > 0) {
                 totalGuildBankTokens += 1;
             }
 
@@ -406,8 +406,7 @@ contract Moloch is ReentrancyGuard {
             unsafeInternalTransfer(GUILD, proposal.applicant, proposal.paymentToken, proposal.paymentRequested);
 
             // if the proposal spends 100% of guild bank balance for a token, decrement total guild bank tokens
-            // NOTE - it's possible that the tribute offered and payment requested cancel each other out, which is why we put this at the end
-            if (getUserTokenBalance[GUILD][proposal.paymentToken] == 0 && proposal.paymentRequested > 0) {
+            if (userTokenBalances[GUILD][proposal.paymentToken] == 0 && proposal.paymentRequested > 0) {
                 totalGuildBankTokens -= 1;
             }
 

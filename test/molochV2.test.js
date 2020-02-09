@@ -1964,7 +1964,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const totalGuildBankTokens = await moloch.totalGuildBankTokens()
-      assert.equal(+totalGuildBankTokens, 0)
+      assert.equal(+totalGuildBankTokens, 1)
 
       await verifyFlags({
         moloch: moloch,
