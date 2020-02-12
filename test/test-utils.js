@@ -5,7 +5,19 @@ const { assert } = chai
 
 const verifyBalance = async ({ token, address, expectedBalance }) => {
   const balance = await token.balanceOf(address)
-  assert.equal(+balance, expectedBalance, `token balance incorrect for ${token.address} with ${address}`)
+  assert.equal(balance.toString(), expectedBalance.toString(), `token balance incorrect for ${token.address} with ${address}`)
+}
+
+const verifyInternalBalance = async ({ moloch, token, user, expectedBalance }) => {
+  const balance = await moloch.userTokenBalances.call(user, token.address)
+  assert.equal(balance.toString(), expectedBalance.toString(), `internal token balance incorrect for user ${user} and token ${token.address}`)
+}
+
+const verifyInternalBalances = async ({ moloch, token, userBalances }) => {
+  const users = Object.keys(userBalances)
+  for (i = 0; i < users.length; i++) {
+    await verifyInternalBalance({ moloch, token, user: users[i], expectedBalance: userBalances[users[i]]})
+  }
 }
 
 const verifyAllowance = async ({ token, owner, spender, expectedAllowance }) => {
@@ -69,30 +81,16 @@ const verifyBalances = async (
     token,
     moloch, // FIXME rename as slightly misleading
     expectedMolochBalance,
-    guildBank,
-    expectedGuildBankBalance,
     applicant,
-    expectedApplicantBalance,
-    sponsor,
-    expectedSponsorBalance,
-    processor,
-    expectedProcessorBalance
+    expectedApplicantBalance
   }
 ) => {
   const molochBalance = await token.balanceOf(moloch)
-  assert.equal(+molochBalance, +expectedMolochBalance, `moloch token balance incorrect for ${token.address} with ${moloch}`)
 
-  const guildBankBalance = await token.balanceOf(guildBank)
-  assert.equal(+guildBankBalance, +expectedGuildBankBalance, `Guild Bank token balance incorrect for ${token.address} with ${guildBank}`)
+  assert.equal(molochBalance.toString(), expectedMolochBalance.toString(), `moloch token balance incorrect for ${token.address} with ${moloch}`)
 
   const applicantBalance = await token.balanceOf(applicant)
-  assert.equal(+applicantBalance, +expectedApplicantBalance, `Applicant token balance incorrect for ${token.address} with ${applicant}`)
-
-  const sponsorBalance = await token.balanceOf(sponsor)
-  assert.equal(+sponsorBalance, +expectedSponsorBalance, `Sponsor token balance incorrect for ${token.address} with ${sponsor}`)
-
-  const processorBalance = await token.balanceOf(processor)
-  assert.equal(+processorBalance, +expectedProcessorBalance, `Processor token balance incorrect for ${token.address} with ${processor}`)
+  assert.equal(applicantBalance.toString(), expectedApplicantBalance.toString(), `Applicant token balance incorrect for ${token.address} with ${applicant}`)
 }
 
 const verifySubmitVote = async (
@@ -172,6 +170,8 @@ Object.assign(exports, {
   verifyProposal,
   verifyFlags,
   verifyBalance,
+  verifyInternalBalance,
+  verifyInternalBalances,
   verifyBalances,
   verifyAllowance,
   verifySubmitVote,

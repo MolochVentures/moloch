@@ -1,3 +1,4 @@
+
 STEAL THIS CODE
 
 # Moloch v2
@@ -147,20 +148,9 @@ Molochs](https://cdn.discordapp.com/attachments/583914506389028865/6433035892545
 
 Moloch v2 is minimally different from Moloch v1, please read the [original documentation](https://github.com/MolochVentures/moloch/tree/master/v1_contracts) first, and then the changelog below.
 
-## GuildBank.sol
-- removed constructor
-- removed `approvedToken` reference
-- removed **SafeMath** dependency
-- updated `withdraw` to support multi-token withdrawals
-- add `withdrawToken` to allow for token payments of specific amounts
-- add `fairShare` to prevent overflows from large token balances
-- inline `onlyOwner` modifier and remove dependency on `Owned.sol`
-
 ## Moloch.sol
 
 ### General Changes
-
-* store the `summoner` address, which is used to assist with **bailouts**
 
 In order to circumvent Solidity's 16 parameter "stack too deep" error we
 combined several proposal flags in the Proposal struct into the *flags* array.
@@ -178,6 +168,39 @@ struct Proposal {
   // ...
 }
 ```
+
+### Pull Pattern
+
+In order to mitigate a number of potential vulnerabilities around token transfers, all token transfers now follow the "pull pattern". This means that functions that would have previously called into an ERC20 token contract to move a balance now simply update an internal record of token balances instead. This prevents suddenly implemented token transfer restrictions from halting the proper execution of `Moloch.sol`, especially the `processProposal` function.
+
+**As a result, the `GuildBank.sol` contract has been removed.**
+
+Note - in this documentation we still refer to the "Guild Bank" as it remains a useful concept, but the balance is no longer tracked in the `GuildBank.sol` contract, but instead the `userTokenBalances[GUILD]` mapping of balances per token.
+
+##### Globals
+We add the nested mapping `userTokenBalances` to track balances by user & token. `userTokenBalances[userAddress][tokenAddress] = balance`.
+```
+    address public constant GUILD = address(0xdead);
+    address public constant ESCROW = address(0xbeef);
+    mapping (address => mapping(address => uint256)) public userTokenBalances;
+```
+The Guild balance is the sum of accepted tributes and would have previously been held in the `GuildBank.sol` contract, and the Escrow balance is the sum of pending tributes and would have previously been held on the `Moloch.sol` contract. A user's balance is the sum of token payments, ragequit proceeds, processor rewards, and returns proposal deposits that would have previously been automatically transferred to them, but is now held on their behalf until they withdraw.
+
+##### `withdrawToken`
+
+New function to withdraw a single token balance.
+
+##### `withdrawTokens`
+
+New function to withdraw multiple token balances at once. Can be called with `max = true` to withdraw 100% of each provided token address.
+
+##### `processProposal`
+
+No longer transfers payment tokens, returned deposits, and processor rewards automatically, instead updates internal token balances.
+
+##### `ragequit` & `ragekick`
+
+No longer transfers token balances automatically, instead updates internal token balances.
 
 ### Multi-Token Support
 
@@ -204,13 +227,10 @@ Track the whitelisted tokens in a mapping (to check if that token is on the whit
 
 ##### `processProposal`
 - auto-fail the proposal if guild bank doesn't have enough tokens for requested payment
-- on successful proposal, transfer requested payment tokens to applicant using `guildBank.withdrawToken`
+- on successful proposal, update applicant's balance with payment tokens requested
 
 ##### `ragequit`
-- withdraw proportional share of all whitelisted tokens by calling `guildBank.withdraw` with the array of approved tokens
-
-##### `safeRagequit`
-- allow a member to specify the array of tokens to withdraw (and thus, which to leave behind) in case any whitelisted tokens get stuck in the guild bank
+- withdraw proportional share of all whitelisted tokens, deducting from the internal guild bank balance and updating the user's internal balance
 
 ### Adding Tokens to Whitelist
 
@@ -232,29 +252,6 @@ Track the whitelisted tokens in a mapping (to check if that token is on the whit
 - on a passing whitelist proposal, add the token to whitelist
 - remove token from `proposedToWhitelist` so another proposal to whitelist the token can be made (assuming it failed)
 
-### Emergency Processing
-Multi-token support comes with the risk of any individual token breaking or getting stuck in escrow if for whatever reason transfer restrictions prevent it from being transferred. For example, if the members add USDC to the whitelist, a proposal is made with USDC offered as tribute, and before the proposal is processed the applicant is added to the USDC blacklist, then should the proposal fail the applicant will be unable to have their escrowed USDC tribute offering returned to them because the USDC transfer would fail, which in turn would make the entire `processProposal` function call fail. To make matters worse, because Moloch proposals must be processed *in order*, none of the proposals after the failing one would be able to be processed either, and even though the guild bank funds would be safe and could be ragequit, any escrowed tribute on active proposals would be stuck forever.
-
-To counter this, we add a concept of `emergencyProcessing` which kicks in for proposals that still haven't been processed after an `emergencyProcessingWait` period (e.g 1 week) has passed from the time they should have been processed. During `emergencyProcessing`, a proposal auto-fails (even if the votes were passing) but skips returning the escrowed tribute offered to the applicant.
-
-Fortunately, after the stuck proposal is processed all subsequent proposals also stuck as result will be able to be processed immediately. *Unfortunately* this breaks one of the core assumptions of Moloch, which is that members should have ample opportunity to ragequit ahead of passing proposals they strongly oppose. Consider the case where a member votes YES on good proposal #10, which enters emergency processing, but wants to ragequit before bad proposal #11. If the stuck proposals are processed all at once, the member will almost certainly not have the chance to ragequit before bad proposal #11.
-
-To address the case above, we track the index of the last proposal to enter emergency processing, and should any subsequently processed proposals be calculated to have been in the grace period when that proposal was emergency processed, they automatically fail, even if the vote passed. This provides better security for the members because failing proposals can't spend their money, so the potential cost to the members is only being forced to re-submit any proposals that might have failed in order to try again.
-
-The emergency processing is the second line of defense after the token whitelist to defend against malicious or disfunctional tokens. If a whitelisted token breaks, however, any member can submit a proposal using the broken token as tribute and get it stuck in processing, so the best course of action is likely for the members to all ragequit and reform, and take extra precautions against whitelisting tokens with transfer restrictions.
-
-##### Globals
-- add `uint256 public emergencyProcessingWait`
-- add `bool emergencyWarning` -> true if any proposal has ever triggered emergency processing
-- add `uint256 lastEmergencyProposalIndex` -> used to auto-fail proposals that are in the grace period when a previous proposal is emergency processed
-
-##### `constructor`
-- save `emergencyProcessingWait`
-
-##### `processProposal`
-- if the proposal should have been processed more than `emergencyProcessingWait` periods ago, active `emergencyProcessing` and auto-fail the proposal
-- if `emergencyProcessing` has been activated, skip returning tribute to the applicant
-- if this proposal was in the grace period when a previous proposal was emergency processed, automatically fail
 
 ### Submit -> Sponsor Flow
 As Nomic Labs explained in their [audit report](https://medium.com/nomic-labs-blog/moloch-dao-audit-report-f31505e85c70), approving ERC20 tokens to Moloch is unsafe.
@@ -334,28 +331,6 @@ After a member has been jailed as a result of a passing guild kick proposal, onc
 ##### `ragekick`
 - a new function to kick jailed members
 - checks that member is jailed and has loot
-- checks that `bailoutWait` hasn't passed
-
-### Bailout
-It is possible that a jailed member can not be ragekicked and chooses not to ragequit themselves. For example, if a member has their address blacklisted by one of the approved tokens in the guildbank, all attempts to `ragekick` will fail. The member could still call `safeRagequit` to withdraw all assets *except* the token that blacklisted them, but if they choose not to (or have lost access t their member key) then something else must be done.
-
-Enter the new `bailout` function, which allows anyone to, after waiting the `bailoutWait` time, transfer all the member's loot to the summoner. The summoner is then expected to withdraw the assets and return it to the member, although this is not enforced by the smart contracts.
-
-##### `bailout`
-- a new function to transfer a stuck jailed member's loot to the summoner
-
-##### Globals
-- add `bailoutWait` to eventually allow stuck jailed members to be bailed out by the summoner
-
-##### `constructor`
-- enforce that `bailoutWait` is greater than `emergecyProcessingWait` (see below for explanation)
-
-##### `canBailout`
-- a new function to check if the `bailoutWait` has passed
-
-Specifically, the `bailoutWait` starts from either the time the guild kick proposal passed (if the member had no YES votes on proposals pending processing) or from the time that their final YES vote proposal is processed. If the `bailoutWait` is set to 2 weeks, then the member could be bailed out after 2 weeks (if no YES votes) or a maximum of 4 weeks (if they voted YES on a proposal that *just* entered the voting period right before the guild kick propoosal against them was processed).
-
-Please note that even in the edge case where a member votes YES on a proposal that just entered the voting period right before they are guild kicked, it is still possible for the voted-on proposal to have its processing delayed by entering `emergencyProcessing`. As a result, the constructor enforces that the `bailoutWait` must be greater than the `emergencyProcessingWait` to avoid this edge case.
 
 ### Loot
 To allow the DAO to issue non-voting shares, we introduce the concept of Loot. Just like shares, loot is requested via proposal, issued to specific members and non-transferrable, and can be redeemed (via ragequit) on par with shares for a proportional fraction of assets in the Guild Bank. However, loot do not count towards votes and DAO members with *only* loot will not be able to sponsor proposals or vote on them. Non-shareholder members with loot will also be prevented from updating their delegate keys as they wouldn't be able to use them for anything anyways.
@@ -420,3 +395,4 @@ To enforce consistency of the proposal deposits and processing fees (which were 
 
 
 ![Goodbye](https://cdn.discordapp.com/attachments/583914506389028865/636359193154289687/image0.jpg)
+[Goodbye](https://cdn.discordapp.com/attachments/583914506389028865/636359193154289687/image0.jpg)

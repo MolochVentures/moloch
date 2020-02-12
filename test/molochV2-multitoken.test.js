@@ -7,6 +7,8 @@ const BN = web3.utils.BN
 const {
   verifyProposal,
   verifyFlags,
+  verifyInternalBalance,
+  verifyInternalBalances,
   verifyBalances,
   verifySubmitVote,
   verifyProcessProposal,
@@ -18,12 +20,21 @@ chai
   .should()
 
 const Moloch = artifacts.require('./Moloch')
-const GuildBank = artifacts.require('./GuildBank')
 const Token = artifacts.require('./Token')
+
+const revertMessages = {
+  withdrawBalanceInsufficientBalance: 'insufficient balance',
+  withdrawBalanceArrayLengthsMatch: 'tokens and amounts arrays must be matching lengths',
+  submitWhitelistProposalMaximumNumberOfTokensReached: 'cannot submit more whitelist proposals',
+  sponsorProposalMaximumNumberOfTokensReached: 'cannot sponsor more whitelist proposals'
+}
 
 const SolRevert = 'VM Exception while processing transaction: revert'
 
 const zeroAddress = '0x0000000000000000000000000000000000000000'
+const GUILD  = '0x000000000000000000000000000000000000dead'
+const ESCROW = '0x000000000000000000000000000000000000beef'
+const MAX_TOKEN_COUNT = new BN('10') // TODO: actual number to be determined
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -52,8 +63,6 @@ const deploymentConfig = {
   'PERIOD_DURATION_IN_SECONDS': 17280,
   'VOTING_DURATON_IN_PERIODS': 35,
   'GRACE_DURATON_IN_PERIODS': 35,
-  'EMERGENCY_EXIT_WAIT_IN_PERIODS': 35,
-  'BAILOUT_WAIT_IN_PERIODS': 70,
   'PROPOSAL_DEPOSIT': 10,
   'DILUTION_BOUND': 3,
   'PROCESSING_REWARD': 1,
@@ -69,8 +78,17 @@ async function moveForwardPeriods (periods) {
   return true
 }
 
+function addressArray(length) {
+  // returns an array of distinct non-zero addresses
+  let array = []
+  for (let i = 1; i <= length; i++) {
+    array.push('0x' + (new BN(i)).toString(16, 40))
+  }
+  return array
+}
+
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
-  let moloch, guildBank, tokenAlpha, tokenBeta
+  let moloch, tokenAlpha, tokenBeta, tokenGamma, tokenDelta, tokenEpsilon, tokenCount
   let proposal1, proposal2, proposal3, depositToken
 
   const firstProposalIndex = 0
@@ -96,6 +114,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   before('deploy contracts', async () => {
     tokenAlpha = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
     tokenBeta = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+    tokenGamma = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+    tokenDelta = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+    tokenEpsilon = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
 
     moloch = await Moloch.new(
       summoner,
@@ -103,15 +124,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       deploymentConfig.PERIOD_DURATION_IN_SECONDS,
       deploymentConfig.VOTING_DURATON_IN_PERIODS,
       deploymentConfig.GRACE_DURATON_IN_PERIODS,
-      deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS,
-      deploymentConfig.BAILOUT_WAIT_IN_PERIODS,
       deploymentConfig.PROPOSAL_DEPOSIT,
       deploymentConfig.DILUTION_BOUND,
       deploymentConfig.PROCESSING_REWARD
     )
-
-    const guildBankAddress = await moloch.guildBank()
-    guildBank = await GuildBank.at(guildBankAddress)
 
     const depositTokenAddress = await moloch.depositToken()
     assert.equal(depositTokenAddress, tokenAlpha.address)
@@ -160,7 +176,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     await restore(snapshotId)
   })
 
-  describe('rageQuit - multi-token', async () => {
+  describe('multi-token ragequit + withdraw', async () => {
     beforeEach(async () => {
       // 1st proposal for with token alpha tribute
       await fundAndApproveToMoloch({
@@ -202,15 +218,21 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT)), // tribute now in bank,
         applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
       })
 
       await verifyMember({
@@ -262,30 +284,42 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await verifyBalances({
         token: tokenBeta,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal2.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal2.tributeOffered,
         applicant: proposal2.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: 0, // sponsor in deposit token (not this one)
-        processor: processor,
-        expectedProcessorBalance: 0 // rewarded in deposit token
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: tokenBeta,
+        userBalances: {
+          [GUILD]: proposal2.tributeOffered,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: 0,
+          [processor]: 0
+        }
       })
 
       // check sponsor in deposit token returned
       await verifyBalances({
         token: depositToken,
         moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
+        expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)), // tribute now in bank,
         applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2
+        expectedApplicantBalance: 0
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+          [processor]: deploymentConfig.PROCESSING_REWARD * 2
+        }
       })
 
       await verifyMember({
@@ -302,6 +336,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const sharesToQuit = new BN('1') // all
       let initialShares
       let initialLoot
+
       beforeEach(async () => {
         initialShares = await moloch.totalShares()
         initialLoot = await moloch.totalLoot()
@@ -326,509 +361,450 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         await verifyBalances({
           token: depositToken,
           moloch: moloch.address,
-          expectedMolochBalance: 0,
-          guildBank: guildBank.address,
-          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+          expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)),
           applicant: proposal1.applicant,
-          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)),
-          sponsor: summoner,
-          expectedSponsorBalance: ((deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2), // sponsor - deposit returned
-          processor: processor,
-          expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2
+          expectedApplicantBalance: 0
+        })
+
+        await verifyInternalBalances({
+          moloch,
+          token: depositToken,
+          userBalances: {
+            [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+            [ESCROW]: 0,
+            [proposal1.applicant]: _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)),
+            [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+            [processor]: deploymentConfig.PROCESSING_REWARD * 2
+          }
         })
 
         await verifyBalances({
           token: tokenBeta,
           moloch: moloch.address,
-          expectedMolochBalance: 0,
-          guildBank: guildBank.address,
-          expectedGuildBankBalance: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+          expectedMolochBalance: proposal2.tributeOffered,
           applicant: proposal1.applicant,
-          expectedApplicantBalance: _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)),
-          sponsor: summoner,
-          expectedSponsorBalance: 0,
-          processor: processor,
-          expectedProcessorBalance: 0
+          expectedApplicantBalance: 0
+        })
+
+        await verifyInternalBalances({
+          moloch,
+          token: tokenBeta,
+          userBalances: {
+            [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+            [ESCROW]: 0,
+            [proposal1.applicant]: _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)),
+            [summoner]: 0,
+            [processor]: 0
+          }
+        })
+      })
+
+      describe('withdraw balances', () => {
+        let tokens, applicantTokenBalances
+        let zeroesArray = [0, 0]
+
+        beforeEach(async () => {
+          tokens = [depositToken.address, tokenBeta.address]
+          applicantTokenBalances = [_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot)), _1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))]
+        })
+
+        it('set max = true', async () => {
+          await moloch.withdrawBalances(tokens, zeroesArray, true, { from: proposal1.applicant })
+
+          await verifyBalances({
+            token: depositToken,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)).sub(applicantTokenBalances[0]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[0]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: depositToken,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+              [processor]: deploymentConfig.PROCESSING_REWARD * 2
+            }
+          })
+
+          await verifyBalances({
+            token: tokenBeta,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal2.tributeOffered.sub(applicantTokenBalances[1]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[1]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: tokenBeta,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: 0,
+              [processor]: 0
+            }
+          })
+        })
+
+        it('full withdrawal (without max)', async () => {
+          await moloch.withdrawBalances(tokens, applicantTokenBalances, false, { from: proposal1.applicant })
+
+          await verifyBalances({
+            token: depositToken,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)).sub(applicantTokenBalances[0]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[0]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: depositToken,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+              [processor]: deploymentConfig.PROCESSING_REWARD * 2
+            }
+          })
+
+          await verifyBalances({
+            token: tokenBeta,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal2.tributeOffered.sub(applicantTokenBalances[1]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[1]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: tokenBeta,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: 0,
+              [processor]: 0
+            }
+          })
+        })
+
+        it('partial withdrawal', async () => {
+          let withdrawAmounts = []
+          withdrawAmounts[0] = applicantTokenBalances[0].sub(_1)
+          withdrawAmounts[1] = applicantTokenBalances[1].sub(new BN(37))
+
+          await moloch.withdrawBalances(tokens, withdrawAmounts, false, { from: proposal1.applicant })
+
+          await verifyBalances({
+            token: depositToken,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)).sub(withdrawAmounts[0]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: withdrawAmounts[0]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: depositToken,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 1, // withdraw all but 1
+              [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+              [processor]: deploymentConfig.PROCESSING_REWARD * 2
+            }
+          })
+
+          await verifyBalances({
+            token: tokenBeta,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal2.tributeOffered.sub(withdrawAmounts[1]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: withdrawAmounts[1]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: tokenBeta,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 37, // withdraw all but 37
+              [summoner]: 0,
+              [processor]: 0
+            }
+          })
+        })
+
+        it('repeat token (zero balance 2nd time)', async () => {
+          tokens.push(depositToken.address)
+          applicantTokenBalances.push(0)
+
+          await moloch.withdrawBalances(tokens, applicantTokenBalances, false, { from: proposal1.applicant })
+
+          await verifyBalances({
+            token: depositToken,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)).sub(applicantTokenBalances[0]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[0]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: depositToken,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+              [processor]: deploymentConfig.PROCESSING_REWARD * 2
+            }
+          })
+
+          await verifyBalances({
+            token: tokenBeta,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal2.tributeOffered.sub(applicantTokenBalances[1]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[1]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: tokenBeta,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: 0,
+              [processor]: 0
+            }
+          })
+        })
+
+        it('repeat token (some balance each time)', async () => {
+          tokens.push(depositToken.address)
+          withdrawAmounts = applicantTokenBalances.slice()
+          withdrawAmounts[0] = withdrawAmounts[0].sub(new BN(10))
+          withdrawAmounts[2] = 10
+
+          await moloch.withdrawBalances(tokens, withdrawAmounts, false, { from: proposal1.applicant })
+
+          await verifyBalances({
+            token: depositToken,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal1.tributeOffered.add(new BN(deploymentConfig.PROPOSAL_DEPOSIT * 2)).sub(applicantTokenBalances[0]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: applicantTokenBalances[0]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: depositToken,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2,
+              [processor]: deploymentConfig.PROCESSING_REWARD * 2
+            }
+          })
+
+          await verifyBalances({
+            token: tokenBeta,
+            moloch: moloch.address,
+            expectedMolochBalance: proposal2.tributeOffered.sub(withdrawAmounts[1]),
+            applicant: proposal1.applicant,
+            expectedApplicantBalance: withdrawAmounts[1]
+          })
+
+          await verifyInternalBalances({
+            moloch,
+            token: tokenBeta,
+            userBalances: {
+              [GUILD]: _1e18.sub(_1e18.mul(sharesToQuit).div(initialShares.add(initialLoot))),
+              [ESCROW]: 0,
+              [proposal1.applicant]: 0, // full withdraw
+              [summoner]: 0,
+              [processor]: 0
+            }
+          })
+        })
+
+        it('require fail - insufficient balance (1st token)', async () => {
+          applicantTokenBalances[0] = applicantTokenBalances[0].add(_1)
+          await moloch.withdrawBalances(tokens, applicantTokenBalances, false, { from: proposal1.applicant })
+            .should.be.rejectedWith(revertMessages.withdrawBalanceInsufficientBalance)
+        })
+
+        it('require fail - insufficient balance (2nd token)', async () => {
+          applicantTokenBalances[1] = applicantTokenBalances[1].add(_1)
+          await moloch.withdrawBalances(tokens, applicantTokenBalances, false, { from: proposal1.applicant })
+            .should.be.rejectedWith(revertMessages.withdrawBalanceInsufficientBalance)
+        })
+
+        it('require fail - insufficient balance (repeat token)', async () => {
+          tokens.push(depositToken.address)
+          applicantTokenBalances[2] = _1
+          await moloch.withdrawBalances(tokens, applicantTokenBalances, false, { from: proposal1.applicant })
+            .should.be.rejectedWith(revertMessages.withdrawBalanceInsufficientBalance)
+        })
+
+        it('require fail - token & amounts array lengths must match', async () => {
+          tokens.push(depositToken.address)
+          await moloch.withdrawBalances(tokens, applicantTokenBalances, false, { from: proposal1.applicant })
+            .should.be.rejectedWith(revertMessages.withdrawBalanceArrayLengthsMatch)
         })
       })
     })
+
+    // TODO bring back token w/ transfer restriction setup and test
+    // - withdraw balance "transfer failed"
   })
 
-  describe('processProposal - failing token transfer', async () => {
+  describe('token count limit - deploy with maximum token count', async () => {
+    it('deploy with maximum token count', async () => {
+      moloch = await Moloch.new(
+        summoner,
+        [tokenAlpha.address].concat(addressArray(MAX_TOKEN_COUNT - 1)),
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      )
 
+      tokenCount = await moloch.getTokenCount()
+      assert.equal(+tokenCount, +MAX_TOKEN_COUNT)
+
+      // check only first token
+      const isWhitelisted = await moloch.tokenWhitelist.call(tokenAlpha.address)
+      assert.equal(isWhitelisted, true)
+      const firstTokenAddress = await moloch.approvedTokens(0)
+      assert.equal(firstTokenAddress, tokenAlpha.address)
+      const depositTokenAddress = await moloch.depositToken()
+      assert.equal(depositTokenAddress, tokenAlpha.address)
+    })
+  })
+
+  describe('token count limit - add tokens during operation', async () => {
     beforeEach(async () => {
-      // 1st proposal for with token alpha tribute
-      await fundAndApproveToMoloch({
-        token: tokenAlpha,
-        to: proposal1.applicant,
-        from: creator,
-        value: proposal1.tributeOffered
-      })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        proposal1.sharesRequested,
-        proposal1.lootRequested,
-        proposal1.tributeOffered,
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
+      // deploy with maximum - 1 tokens, so we can add 1 more
+      moloch = await Moloch.new(
+        summoner,
+        [tokenAlpha.address].concat(addressArray(MAX_TOKEN_COUNT - 2)),
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
       )
+
+      tokenCount = await moloch.getTokenCount()
+      assert.equal(+tokenCount, MAX_TOKEN_COUNT - 1)
+
+      // check only first token
+      const alphaIsWhitelisted = await moloch.tokenWhitelist.call(tokenAlpha.address)
+      assert.equal(alphaIsWhitelisted, true)
+      const firstTokenAddress = await moloch.approvedTokens(0)
+      assert.equal(firstTokenAddress, tokenAlpha.address)
+      const depositTokenAddress = await moloch.depositToken()
+      assert.equal(depositTokenAddress, tokenAlpha.address)
 
       await fundAndApproveToMoloch({
         token: tokenAlpha,
         to: summoner,
         from: creator,
-        value: deploymentConfig.PROPOSAL_DEPOSIT
+        value: 3 * deploymentConfig.PROPOSAL_DEPOSIT
       })
+
+      await moloch.submitWhitelistProposal( // first
+        tokenBeta.address,
+        'whitelist beta!',
+        { from: summoner }
+      )
+
+      await moloch.submitWhitelistProposal( // second
+        tokenGamma.address,
+        'whitelist gamma!',
+        { from: summoner }
+      )
+
+      await moloch.submitWhitelistProposal( // third
+        tokenDelta.address,
+        'whitelist delta!',
+        { from: summoner }
+      )
 
       await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-
       await moveForwardPeriods(1)
       await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
-
-      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-    })
-
-    describe('proposal.tributeToken.transfer()', async () => {
-      it('require fail - reverts because token transfer fails', async () => {
-
-        // Force the transfer method to revert
-        await tokenAlpha.updateTransfersEnabled(false)
-
-        // Attempt to process the proposal
-        await moloch.processProposal(firstProposalIndex, { from: processor })
-          .should.be.rejectedWith(SolRevert)
-
-        // Ensure balances do not change
-        await verifyBalances({
-          token: depositToken,
-          moloch: moloch.address,
-          expectedMolochBalance: proposal1.tributeOffered, // maintains tribute from proposal
-          guildBank: guildBank.address,
-          expectedGuildBankBalance: 0,  // balance of zero as failed to process
-          applicant: proposal1.applicant,
-          expectedApplicantBalance: 0,
-          sponsor: summoner,
-          expectedSponsorBalance: 0,
-          processor: processor,
-          expectedProcessorBalance: 0
-        })
-
-        // Ensure not actually a member
-        await verifyMember({
-          moloch: moloch,
-          member: proposal1.applicant,
-          expectedDelegateKey: zeroAddress,
-          expectedShares: 0,
-          expectedLoot: 0,
-          expectedMemberAddressByDelegateKey: zeroAddress,
-          expectedExists: false
-        })
-      })
-
-      it('require fail - reverts with reason because token transfer fails', async () => {
-
-        // Force the transfer method to return false skipping token transfer
-        await tokenAlpha.updateTransfersReturningFalse(true)
-
-        // Attempt to process the proposal
-        await moloch.processProposal(firstProposalIndex, { from: processor })
-          .should.be.rejectedWith('token transfer to guild bank failed')
-
-        // Ensure balances do not change
-        await verifyBalances({
-          token: depositToken,
-          moloch: moloch.address,
-          expectedMolochBalance: proposal1.tributeOffered, // maintains tribute from proposal
-          guildBank: guildBank.address,
-          expectedGuildBankBalance: 0,  // balance of zero as failed to process
-          applicant: proposal1.applicant,
-          expectedApplicantBalance: 0,
-          sponsor: summoner,
-          expectedSponsorBalance: 0,
-          processor: processor,
-          expectedProcessorBalance: 0
-        })
-
-        // Ensure not actually a member
-        await verifyMember({
-          moloch: moloch,
-          member: proposal1.applicant,
-          expectedDelegateKey: zeroAddress,
-          expectedShares: 0,
-          expectedLoot: 0,
-          expectedMemberAddressByDelegateKey: zeroAddress,
-          expectedExists: false
-        })
-      })
-    })
-
-    describe('guildBank.withdrawToken()', async () => {
-      it('require revert - fail to withdraw payment token with message', async function () {
-        await moloch.processProposal(firstProposalIndex, { from: processor })
-
-        // 2nd proposal for with token beta tribute
-        await fundAndApproveToMoloch({
-          token: tokenBeta,
-          to: proposal2.applicant,
-          from: creator,
-          value: proposal2.tributeOffered
-        })
-
-        await moloch.submitProposal(
-          proposal2.applicant,
-          proposal2.sharesRequested,
-          proposal2.lootRequested,
-          proposal2.tributeOffered,
-          proposal2.tributeToken,
-          proposal2.paymentRequested,
-          proposal2.paymentToken,
-          proposal2.details,
-          { from: proposal2.applicant }
-        )
-
-        await fundAndApproveToMoloch({
-          token: tokenAlpha,
-          to: summoner,
-          from: creator,
-          value: deploymentConfig.PROPOSAL_DEPOSIT
-        })
-
-        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-        await moveForwardPeriods(1)
-        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-
-        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-        await moloch.processProposal(secondProposalIndex, { from: processor })
-
-        // Force the transfer method on beta to revert
-        await tokenBeta.updateTransfersReturningFalse(true)
-
-        // 3rd proposal for with token alpha tribute, token beta payment
-        await moloch.submitProposal(
-          proposal3.applicant,
-          proposal3.sharesRequested,
-          proposal3.lootRequested,
-          proposal3.tributeOffered,
-          proposal3.tributeToken,
-          proposal3.paymentRequested,
-          proposal3.paymentToken,
-          proposal3.details,
-          { from: proposal2.applicant }
-        )
-
-        await fundAndApproveToMoloch({
-          token: tokenAlpha,
-          to: summoner,
-          from: creator,
-          value: deploymentConfig.PROPOSAL_DEPOSIT
-        })
-
-        await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
-
-        await moveForwardPeriods(1)
-        await moloch.submitVote(thirdProposalIndex, yes, { from: summoner })
-
-        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-        await moloch.processProposal(thirdProposalIndex, { from: processor })
-          .should.be.rejectedWith('token payment to applicant failed')
-      })
-
-      it('require revert - fail to withdraw payment token with no revert message', async function () {
-        await moloch.processProposal(firstProposalIndex, { from: processor })
-
-        // 2nd proposal for with token beta tribute
-        await fundAndApproveToMoloch({
-          token: tokenBeta,
-          to: proposal2.applicant,
-          from: creator,
-          value: proposal2.tributeOffered
-        })
-
-        await moloch.submitProposal(
-          proposal2.applicant,
-          proposal2.sharesRequested,
-          proposal2.lootRequested,
-          proposal2.tributeOffered,
-          proposal2.tributeToken,
-          proposal2.paymentRequested,
-          proposal2.paymentToken,
-          proposal2.details,
-          { from: proposal2.applicant }
-        )
-
-        await fundAndApproveToMoloch({
-          token: tokenAlpha,
-          to: summoner,
-          from: creator,
-          value: deploymentConfig.PROPOSAL_DEPOSIT
-        })
-
-        await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
-        await moveForwardPeriods(1)
-        await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
-
-        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-        await moloch.processProposal(secondProposalIndex, { from: processor })
-
-        // Force the transfer method on beta to revert
-        await tokenBeta.updateTransfersEnabled(false)
-
-        // 3rd proposal for with token alpha tribute, token beta payment
-        await moloch.submitProposal(
-          proposal3.applicant,
-          proposal3.sharesRequested,
-          proposal3.lootRequested,
-          proposal3.tributeOffered,
-          proposal3.tributeToken,
-          proposal3.paymentRequested,
-          proposal3.paymentToken,
-          proposal3.details,
-          { from: proposal2.applicant }
-        )
-
-        await fundAndApproveToMoloch({
-          token: tokenAlpha,
-          to: summoner,
-          from: creator,
-          value: deploymentConfig.PROPOSAL_DEPOSIT
-        })
-
-        await moloch.sponsorProposal(thirdProposalIndex, { from: summoner })
-
-        await moveForwardPeriods(1)
-        await moloch.submitVote(thirdProposalIndex, yes, { from: summoner })
-
-        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-        await moloch.processProposal(thirdProposalIndex, { from: processor })
-          .should.be.rejectedWith(SolRevert)
-      })
-    })
-  })
-
-  describe('edge case - emergency exit with locked token', async () => {
-    it('can still process proposals after emergency exit', async () => {
-
-      await fundAndApproveToMoloch({
-        token: tokenBeta,
-        to: proposal2.applicant,
-        from: creator,
-        value: proposal2.tributeOffered
-      })
-
-      // using non-deposit token as tribute
-      await moloch.submitProposal(
-        proposal2.applicant,
-        proposal2.sharesRequested,
-        proposal2.lootRequested,
-        proposal2.tributeOffered,
-        proposal2.tributeToken,
-        proposal2.paymentRequested,
-        proposal2.paymentToken,
-        proposal2.details,
-        { from: proposal2.applicant }
-      )
-
-      await fundAndApproveToMoloch({
-        token: tokenAlpha,
-        to: summoner,
-        from: creator,
-        value: deploymentConfig.PROPOSAL_DEPOSIT
-      })
-
-      // sponsor
-      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [true, false, false, false, false, false]
-      })
-
-      // vote
-      await moveForwardPeriods(1)
-      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
-
-      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
-      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
-
-      await verifyMember({
-        moloch: moloch,
-        member: proposal2.applicant,
-        expectedExists: false,
-        expectedShares: 0,
-        expectedLoot: 0
-      })
-
-      await verifyBalances({
-        token: depositToken,
-        moloch: moloch.address,
-        expectedMolochBalance: deploymentConfig.PROPOSAL_DEPOSIT,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
-        applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: 0,
-        processor: processor,
-        expectedProcessorBalance: 0
-      })
-
-      await verifyBalances({
-        token: tokenBeta,
-        moloch: moloch.address,
-        expectedMolochBalance: proposal2.tributeOffered,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
-        applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: 0,
-        processor: processor,
-        expectedProcessorBalance: 0
-      })
-
-      // Force the transfer method to revert (tokenBeta used on proposal 2)
-      await tokenBeta.updateTransfersReturningFalse(true)
-
-      // fails as token has transfer disabled (fails moving to guild bank)
-      await moloch.processProposal(firstProposalIndex, { from: processor })
-        .should.be.rejectedWith('token transfer to guild bank failed')
-
-      // move past emergency exit
-      await moveForwardPeriods(deploymentConfig.EMERGENCY_EXIT_WAIT_IN_PERIODS)
-
-      // should process
-      await moloch.processProposal(firstProposalIndex, { from: processor })
-
-      await verifyProcessProposal({
-        moloch: moloch,
-        proposalIndex: firstProposalIndex,
-        expectedYesVotes: 1,
-        expectedTotalShares: 1,
-        expectedFinalTotalSharesRequested: 0,
-        expectedMaxSharesAndLootAtYesVote: 1
-      })
-
-      await verifyFlags({
-        moloch: moloch,
-        proposalId: firstProposalIndex,
-        expectedFlags: [true, true, false, false, false, false] // didPass is false
-      })
-
-      // sponsor and reward returned
-      await verifyBalances({
-        token: depositToken,
-        moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
-        applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD
-      })
-
-      // tribute still in DAO
-      await verifyBalances({
-        token: tokenBeta,
-        moloch: moloch.address,
-        expectedMolochBalance: proposal2.tributeOffered,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: 0,
-        applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: 0,
-        processor: processor,
-        expectedProcessorBalance: 0
-      })
-
-      // still no shares
-      await verifyMember({
-        moloch: moloch,
-        member: proposal2.applicant,
-        expectedExists: false,
-        expectedShares: 0,
-        expectedLoot: 0
-      })
-
-      // next proposal should be work as expected
-      await fundAndApproveToMoloch({
-        token: tokenAlpha,
-        to: proposal1.applicant,
-        from: creator,
-        value: proposal1.tributeOffered
-      })
-
-      await moloch.submitProposal(
-        proposal1.applicant,
-        proposal1.sharesRequested,
-        proposal1.lootRequested,
-        proposal1.tributeOffered,
-        proposal1.tributeToken,
-        proposal1.paymentRequested,
-        proposal1.paymentToken,
-        proposal1.details,
-        { from: proposal1.applicant }
-      )
-
-      await fundAndApproveToMoloch({
-        token: tokenAlpha,
-        to: summoner,
-        from: creator,
-        value: deploymentConfig.PROPOSAL_DEPOSIT
-      })
 
       await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
-
       await moveForwardPeriods(1)
       await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
 
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      await moloch.processProposal(secondProposalIndex, { from: processor })
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: summoner })
 
-      await verifyBalances({
-        token: depositToken,
-        moloch: moloch.address,
-        expectedMolochBalance: 0,
-        guildBank: guildBank.address,
-        expectedGuildBankBalance: proposal1.tributeOffered, // tribute now in bank
-        applicant: proposal1.applicant,
-        expectedApplicantBalance: 0,
-        sponsor: summoner,
-        expectedSponsorBalance: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * 2, // sponsor's 2nd proposal
-        processor: processor,
-        expectedProcessorBalance: deploymentConfig.PROCESSING_REWARD * 2 // processor's 2nd proposal
-      })
+      tokenCount = await moloch.getTokenCount()
+      assert.equal(+tokenCount, +MAX_TOKEN_COUNT)
 
-      await verifyMember({
+      const lastTokenAddress = await moloch.approvedTokens(MAX_TOKEN_COUNT - 1)
+      assert.equal(lastTokenAddress, tokenBeta.address)
+      const betaIsWhitelisted = await moloch.tokenWhitelist.call(tokenBeta.address)
+      assert.equal(betaIsWhitelisted, true)
+    })
+
+    it('proposal to add another token fails when maximum reached', async () => {
+      await moloch.processWhitelistProposal(secondProposalIndex, { from: summoner })
+
+      await verifyProcessProposal({
         moloch: moloch,
-        member: proposal1.applicant,
-        expectedDelegateKey: proposal1.applicant,
-        expectedShares: proposal1.sharesRequested,
-        expectedLoot: proposal1.lootRequested,
-        expectedMemberAddressByDelegateKey: proposal1.applicant
+        proposalIndex: secondProposalIndex,
+        expectedYesVotes: summonerShares,
+        expectedNoVotes: 0,
+        expectedTotalShares: summonerShares,
+        expectedMaxSharesAndLootAtYesVote: summonerShares
       })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: secondProposalIndex,
+        expectedFlags: [true, true, false, false, true, false] // failed
+      })
+
+      const gammaIsWhitelisted = await moloch.tokenWhitelist.call(tokenGamma.address)
+      assert.equal(gammaIsWhitelisted, false)
+    })
+
+    it('require fail - sponsor another whitelist proposal when maximum reached', async () => {
+      await moloch.sponsorProposal(
+        thirdProposalIndex,
+        { from: summoner }
+      ).should.be.rejectedWith(revertMessages.sponsorProposalMaximumNumberOfTokensReached)
+    })
+
+
+    it('require fail - submit another whitelist proposal when maximum reached', async () => {
+      await moloch.submitWhitelistProposal(
+        tokenEpsilon.address,
+        'whitelist epsilon!',
+        { from: summoner }
+      ).should.be.rejectedWith(revertMessages.submitWhitelistProposalMaximumNumberOfTokensReached)
     })
   })
 })
