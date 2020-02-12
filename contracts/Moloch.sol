@@ -27,8 +27,8 @@ contract Moloch is ReentrancyGuard {
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
-    uint256 constant MAX_TOKEN_WHITELIST_COUNT = 9001; // maximum number of whitelisted tokens
-    uint256 constant MAX_TOKEN_GUILDBANK_COUNT = 300; // maximum number of tokens with non-zero balance in guildbank
+    uint256 constant MAX_TOKEN_WHITELIST_COUNT = 10; // maximum number of whitelisted tokens
+    uint256 constant MAX_TOKEN_GUILDBANK_COUNT = 5; // maximum number of tokens with non-zero balance in guildbank
 
     // ***************
     // EVENTS
@@ -184,7 +184,6 @@ contract Moloch is ReentrancyGuard {
         require(applicant != address(0), "applicant cannot be 0");
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
-        // TODO test
         if (tributeOffered > 0 && userTokenBalances[GUILD][tributeToken] == 0) {
             require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot submit more tribute proposals for new tokens - guildbank is full');
         }
@@ -271,7 +270,6 @@ contract Moloch is ReentrancyGuard {
         require(!proposal.flags[3], "proposal has been cancelled");
         require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
-        // TODO test
         if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0) {
             require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot sponsor more tribute proposals for new tokens - guildbank is full');
         }
@@ -367,7 +365,6 @@ contract Moloch is ReentrancyGuard {
         }
 
         // Make the proposal fail if it would result in too many tokens with non-zero balance in guild bank
-        // TODO test
         if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
            didPass = false;
         }
@@ -586,12 +583,12 @@ contract Moloch is ReentrancyGuard {
         require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
-    // TODO test
     function collectTokens(address token) public nonReentrant {
-        uint256 tokensToCollect = IERC20(token).balanceOf(address(this).sub(userTokenBalances[TOTAL][token]);
-        if (tokensToCollect > 0) {
-            unsafeAddToBalance(GUILD, token, tokensToCollect);
-            emit TokensCollected(token, amount);
+        uint256 amountToCollect = IERC20(token).balanceOf(address(this)).sub(userTokenBalances[TOTAL][token]);
+        // only collect if 1) there are tokens to collect 2) token is whitelisted 3) token has non-zero balance
+        if (amountToCollect > 0 && tokenWhitelist[token] && userTokenBalances[GUILD][token] > 0) {
+            unsafeAddToBalance(GUILD, token, amountToCollect);
+            emit TokensCollected(token, amountToCollect);
         }
     }
 
