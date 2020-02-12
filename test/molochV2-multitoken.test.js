@@ -23,12 +23,15 @@ const Moloch = artifacts.require('./Moloch')
 const Token = artifacts.require('./Token')
 
 const revertMessages = {
+  onlyDelegate: 'not a delegate',
   withdrawBalanceInsufficientBalance: 'insufficient balance',
   withdrawBalanceArrayLengthsMatch: 'tokens and amounts arrays must be matching lengths',
   submitWhitelistProposalMaximumNumberOfTokensReached: 'cannot submit more whitelist proposals',
   sponsorProposalMaximumNumberOfTokensReached: 'cannot sponsor more whitelist proposals',
   submitTributeProposalMaxGuildBankTokensReached: 'cannot submit more tribute proposals for new tokens - guildbank is full',
-  sponsorTributeProposalMaxGuildBankTokensReached: 'cannot sponsor more tribute proposals for new tokens - guildbank is full'
+  sponsorTributeProposalMaxGuildBankTokensReached: 'cannot sponsor more tribute proposals for new tokens - guildbank is full',
+  collectTokensMustBeWhitelisted: 'token to collect must be whitelisted',
+  collectTokensMustHaveBalance: 'token to collect must have non-zero guild bank balance'
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -177,6 +180,164 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   afterEach(async () => {
     await restore(snapshotId)
+  })
+
+  describe('collectTokens', () => {
+    let tokensToCollect = 100
+
+    beforeEach(async () => {
+      proposal1.tributeOffered = 69
+
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: proposal1.applicant,
+        from: creator,
+        value: proposal1.tributeOffered
+      })
+
+      await moloch.submitProposal(
+        proposal1.applicant,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      )
+
+      const proposalData = await moloch.proposals(firstProposalIndex)
+
+      await verifyProposal({
+        moloch: moloch,
+        proposal: proposal1,
+        proposalId: firstProposalIndex,
+        proposer: proposal1.applicant,
+        expectedProposalCount: 1,
+        expectedProposalQueueLength: 0
+      })
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processProposal(firstProposalIndex, { from: processor })
+
+      await verifyInternalBalances({
+        moloch,
+        token: tokenAlpha,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
+      })
+    })
+
+    it('happy case - collect tokens', async () => {
+      await tokenAlpha.transfer(moloch.address, 100, { from: creator })
+
+      const molochTokenAlphaBalance = +(await tokenAlpha.balanceOf(moloch.address))
+      assert.equal(molochTokenAlphaBalance, proposal1.tributeOffered + tokensToCollect + deploymentConfig.PROPOSAL_DEPOSIT)
+
+      await moloch.collectTokens(tokenAlpha.address, { from: summoner })
+
+      await verifyInternalBalances({
+        moloch,
+        token: tokenAlpha,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered + tokensToCollect,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
+      })
+    })
+
+    it('require fail - must be member to collect', async () => {
+      await tokenAlpha.transfer(moloch.address, 100, { from: creator })
+
+      const molochTokenAlphaBalance = +(await tokenAlpha.balanceOf(moloch.address))
+      assert.equal(molochTokenAlphaBalance, proposal1.tributeOffered + tokensToCollect + deploymentConfig.PROPOSAL_DEPOSIT)
+
+      await moloch.collectTokens(tokenAlpha.address, { from: proposal2.applicant }) // attempt to collect from non-member
+        .should.be.rejectedWith(revertMessages.onlyDelegate)
+
+      await verifyInternalBalances({
+        moloch,
+        token: tokenAlpha,
+        userBalances: {
+          [GUILD]: proposal1.tributeOffered, // tokens to collect does not show up
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD, // sponsor - deposit returned,
+          [processor]: deploymentConfig.PROCESSING_REWARD
+        }
+      })
+    })
+
+    it('require fail - token to collect not whitelisted', async () => {
+      // attempt to collect tokenGamma (not whitelisted))
+      
+      await tokenGamma.transfer(moloch.address, 100, { from: creator })
+
+      const molochTokenGammaBalance = +(await tokenGamma.balanceOf(moloch.address))
+      assert.equal(molochTokenGammaBalance, tokensToCollect)
+
+      await moloch.collectTokens(tokenGamma.address, { from: summoner })
+        .should.be.rejectedWith(revertMessages.collectTokensMustBeWhitelisted)
+
+      await verifyInternalBalances({
+        moloch,
+        token: tokenBeta,
+        userBalances: {
+          [GUILD]: 0,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: 0,
+          [processor]: 0
+        }
+      })
+    })
+
+    it('require fail - guild bank balance for token to collect is zero', async () => {
+      // attempt to collect tokenBeta (whitelisted but no balance)
+      
+      await tokenBeta.transfer(moloch.address, 100, { from: creator })
+
+      const molochTokenBetaBalance = +(await tokenBeta.balanceOf(moloch.address))
+      assert.equal(molochTokenBetaBalance, tokensToCollect)
+
+      await moloch.collectTokens(tokenBeta.address, { from: summoner })
+        .should.be.rejectedWith(revertMessages.collectTokensMustHaveBalance)
+
+      await verifyInternalBalances({
+        moloch,
+        token: tokenBeta,
+        userBalances: {
+          [GUILD]: 0,
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: 0,
+          [processor]: 0
+        }
+      })
+    })
   })
 
   describe('multi-token ragequit + withdraw', async () => {

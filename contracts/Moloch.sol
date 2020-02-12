@@ -583,13 +583,15 @@ contract Moloch is ReentrancyGuard {
         require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
-    function collectTokens(address token) public nonReentrant {
+    function collectTokens(address token) public onlyDelegate nonReentrant {
         uint256 amountToCollect = IERC20(token).balanceOf(address(this)).sub(userTokenBalances[TOTAL][token]);
         // only collect if 1) there are tokens to collect 2) token is whitelisted 3) token has non-zero balance
-        if (amountToCollect > 0 && tokenWhitelist[token] && userTokenBalances[GUILD][token] > 0) {
-            unsafeAddToBalance(GUILD, token, amountToCollect);
-            emit TokensCollected(token, amountToCollect);
-        }
+        require(amountToCollect > 0, 'no tokens to collect');
+        require(tokenWhitelist[token], 'token to collect must be whitelisted');
+        require(userTokenBalances[GUILD][token] > 0, 'token to collect must have non-zero guild bank balance');
+        
+        unsafeAddToBalance(GUILD, token, amountToCollect);
+        emit TokensCollected(token, amountToCollect);
     }
 
     function cancelProposal(uint256 proposalId) public nonReentrant {
