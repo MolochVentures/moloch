@@ -182,6 +182,7 @@ contract Moloch is ReentrancyGuard {
         require(tokenWhitelist[tributeToken], "tributeToken is not whitelisted");
         require(tokenWhitelist[paymentToken], "payment is not whitelisted");
         require(applicant != address(0), "applicant cannot be 0");
+        require(applicant != GUILD && applicant != ESCROW && applicant != TOTAL, "applicant address cannot be reserved");
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
         if (tributeOffered > 0 && userTokenBalances[GUILD][tributeToken] == 0) {
@@ -411,8 +412,8 @@ contract Moloch is ReentrancyGuard {
 
         // PROPOSAL FAILED
         } else {
-            // return all tokens to the applicant
-            unsafeInternalTransfer(ESCROW, proposal.applicant, proposal.tributeToken, proposal.tributeOffered);
+            // return all tokens to the proposer (not the applicant, because funds come from proposer)
+            unsafeInternalTransfer(ESCROW, proposal.proposer, proposal.tributeToken, proposal.tributeOffered);
         }
 
         _returnDeposit(proposal.sponsor);
