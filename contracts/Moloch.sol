@@ -41,6 +41,7 @@ contract Moloch is ReentrancyGuard {
     event CancelProposal(uint256 indexed proposalIndex, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event SummonComplete(address indexed summoner, uint256 shares);
+    event TokensCollected(address token, uint256 amount);
 
     // *******************
     // INTERNAL ACCOUNTING
@@ -53,6 +54,7 @@ contract Moloch is ReentrancyGuard {
 
     address public constant GUILD = address(0xdead);
     address public constant ESCROW = address(0xbeef);
+    address public constant TOTAL = address(0xbabe);
     mapping (address => mapping(address => uint256)) public userTokenBalances; // userTokenBalances[userAddress][tokenAddress]
 
     enum Vote {
@@ -183,7 +185,7 @@ contract Moloch is ReentrancyGuard {
         require(members[applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // TODO test
-        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0) {
+        if (tributeOffered > 0 && userTokenBalances[GUILD][tributeToken] == 0) {
             require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot submit more tribute proposals for new tokens - guildbank is full');
         }
 
@@ -270,7 +272,7 @@ contract Moloch is ReentrancyGuard {
         require(members[proposal.applicant].jailed == 0, "proposal applicant must not be jailed");
 
         // TODO test
-        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0) {
+        if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0) {
             require(totalGuildBankTokens < MAX_TOKEN_GUILDBANK_COUNT, 'cannot sponsor more tribute proposals for new tokens - guildbank is full');
         }
 
@@ -366,7 +368,7 @@ contract Moloch is ReentrancyGuard {
 
         // Make the proposal fail if it would result in too many tokens with non-zero balance in guild bank
         // TODO test
-        if (tributeOffered > 0 && getUserTokenBalance[GUILD][tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
+        if (proposal.tributeOffered > 0 && userTokenBalances[GUILD][proposal.tributeToken] == 0 && totalGuildBankTokens >= MAX_TOKEN_GUILDBANK_COUNT) {
            didPass = false;
         }
 
@@ -398,7 +400,7 @@ contract Moloch is ReentrancyGuard {
             totalLoot = totalLoot.add(proposal.lootRequested);
 
             // if the proposal tribute is the first tokens of its kind to make it into the guild bank, increment total guild bank tokens
-            if (getUserTokenBalance[GUILD][proposal.tributeToken] == 0 && proposal.tributeOffered > 0) {
+            if (userTokenBalances[GUILD][proposal.tributeToken] == 0 && proposal.tributeOffered > 0) {
                 totalGuildBankTokens += 1;
             }
 
@@ -406,8 +408,7 @@ contract Moloch is ReentrancyGuard {
             unsafeInternalTransfer(GUILD, proposal.applicant, proposal.paymentToken, proposal.paymentRequested);
 
             // if the proposal spends 100% of guild bank balance for a token, decrement total guild bank tokens
-            // NOTE - it's possible that the tribute offered and payment requested cancel each other out, which is why we put this at the end
-            if (getUserTokenBalance[GUILD][proposal.tributeToken] == 0) {
+            if (userTokenBalances[GUILD][proposal.paymentToken] == 0 && proposal.paymentRequested > 0) {
                 totalGuildBankTokens -= 1;
             }
 
@@ -585,6 +586,15 @@ contract Moloch is ReentrancyGuard {
         require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
     }
 
+    // TODO test
+    function collectTokens(address token) public nonReentrant {
+        uint256 tokensToCollect = IERC20(token).balanceOf(address(this).sub(userTokenBalances[TOTAL][token]);
+        if (tokensToCollect > 0) {
+            unsafeAddToBalance(GUILD, token, tokensToCollect);
+            emit TokensCollected(token, amount);
+        }
+    }
+
     function cancelProposal(uint256 proposalId) public nonReentrant {
         Proposal storage proposal = proposals[proposalId];
         require(!proposal.flags[0], "proposal has already been sponsored");
@@ -663,10 +673,12 @@ contract Moloch is ReentrancyGuard {
     ***************/
     function unsafeAddToBalance(address user, address token, uint256 amount) internal {
         userTokenBalances[user][token] += amount;
+        userTokenBalances[TOTAL][token] += amount;
     }
 
     function unsafeSubtractFromBalance(address user, address token, uint256 amount) internal {
         userTokenBalances[user][token] -= amount;
+        userTokenBalances[TOTAL][token] -= amount;
     }
 
     function unsafeInternalTransfer(address from, address to, address token, uint256 amount) internal {
