@@ -39,7 +39,7 @@ contract Moloch is ReentrancyGuard {
     event ProcessWhitelistProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
     event ProcessGuildKickProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
-    event Ragekick(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
+    event Ragekick(address indexed memberAddress, uint256 lootToBurn);
     event CancelProposal(uint256 indexed proposalId, address memberAddress, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event InternalTransfer(address indexed from, address indexed to, address indexed token, uint256 amount);
@@ -532,7 +532,7 @@ contract Moloch is ReentrancyGuard {
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
         
-        emit Ragekick(memberToKick, 0, member.loot);
+        emit Ragekick(memberToKick, member.loot);
         _ragequit(memberToKick, 0, member.loot, approvedTokens); 
     }
 
