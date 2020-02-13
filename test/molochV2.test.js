@@ -2638,7 +2638,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedApplicantBalance: 0,
       })
 
-      const emittedLogs = await moloch.processWhitelistProposal(firstProposalIndex, { from: processor })
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: processor })
 
       const newApprovedToken = await moloch.approvedTokens(1) // second token to be added
       assert.equal(newApprovedToken, newToken.address)
@@ -2677,14 +2677,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         }
       })
 
-      // Verify process proposal event
-      const { logs } = emittedLogs
-      const log = logs[0]
-      const { proposalIndex, proposalId, didPass } = log.args
-      assert.equal(log.event, 'ProcessWhitelistProposal')
-      assert.equal(proposalIndex, 0)
-      assert.equal(proposalId, 0)
-      assert.equal(didPass, true)
     })
 
     it('happy path - guild kick member', async () => {
@@ -2780,7 +2772,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
       await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
 
-      const emittedLogs = await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
+      await moloch.processGuildKickProposal(secondProposalIndex, { from: applicant })
 
       // shares removed
       await verifyMember({
@@ -2808,14 +2800,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedFlags: [true, true, true, false, false, true]
       })
 
-      // Verify process proposal event
-      const { logs } = emittedLogs
-      const log = logs[0]
-      const { proposalIndex, proposalId, didPass } = log.args
-      assert.equal(log.event, 'ProcessGuildKickProposal')
-      assert.equal(proposalIndex, secondProposalIndex)
-      assert.equal(proposalId, 1)
-      assert.equal(didPass, true)
     })
 
     it('edge case - paymentRequested more than funds in the bank', async () => {
