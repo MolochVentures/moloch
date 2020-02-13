@@ -34,6 +34,7 @@ const revertMessages = {
   molochConstructorDilutionBoundCannotBe0: '_dilutionBound cannot be 0',
   molochConstructorDilutionBoundExceedsLimit: '_dilutionBound exceeds limit',
   molochConstructorNeedAtLeastOneApprovedToken: 'need at least one approved token',
+  molochConstructorTooManyTokens: 'too many tokens',
   molochConstructorDepositCannotBeSmallerThanProcessingReward: '_proposalDeposit cannot be smaller than _processingReward',
   molochConstructorApprovedTokenCannotBe0: '_approvedToken cannot be 0',
   molochConstructorDuplicateApprovedToken: 'revert duplicate approved token',
@@ -90,6 +91,7 @@ const SolRevert = 'VM Exception while processing transaction: revert'
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 const GUILD  = '0x000000000000000000000000000000000000dead'
 const ESCROW = '0x000000000000000000000000000000000000beef'
+const MAX_TOKEN_COUNT = new BN('10') // TODO: actual number to be determined
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -130,6 +132,15 @@ async function moveForwardPeriods (periods) {
   await forceMine()
   await blockTime()
   return true
+}
+
+function addressArray(length) {
+  // returns an array of distinct non-zero addresses
+  let array = []
+  for (let i = 1; i <= length; i++) {
+    array.push('0x' + (new BN(i)).toString(16, 40))
+  }
+  return array
 }
 
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
@@ -418,6 +429,19 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         deploymentConfig.DILUTION_BOUND,
         deploymentConfig.PROCESSING_REWARD
       ).should.be.rejectedWith(revertMessages.molochConstructorNeedAtLeastOneApprovedToken)
+    })
+
+    it('require fail - too many tokens', async () => {
+      await Moloch.new(
+        summoner,
+        addressArray(MAX_TOKEN_COUNT + 1),
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      ).should.be.rejectedWith(revertMessages.molochConstructorTooManyTokens)
     })
 
     it('require fail - deposit cannot be smaller than processing reward', async () => {

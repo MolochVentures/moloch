@@ -24,7 +24,9 @@ const Token = artifacts.require('./Token')
 
 const revertMessages = {
   withdrawBalanceInsufficientBalance: 'insufficient balance',
-  withdrawBalanceArrayLengthsMatch: 'tokens and amounts arrays must be matching lengths'
+  withdrawBalanceArrayLengthsMatch: 'tokens and amounts arrays must be matching lengths',
+  submitWhitelistProposalMaximumNumberOfTokensReached: 'cannot submit more whitelist proposals',
+  sponsorProposalMaximumNumberOfTokensReached: 'cannot sponsor more whitelist proposals'
 }
 
 const SolRevert = 'VM Exception while processing transaction: revert'
@@ -32,6 +34,7 @@ const SolRevert = 'VM Exception while processing transaction: revert'
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 const GUILD  = '0x000000000000000000000000000000000000dead'
 const ESCROW = '0x000000000000000000000000000000000000beef'
+const MAX_TOKEN_COUNT = new BN('10') // TODO: actual number to be determined
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -75,8 +78,17 @@ async function moveForwardPeriods (periods) {
   return true
 }
 
+function addressArray(length) {
+  // returns an array of distinct non-zero addresses
+  let array = []
+  for (let i = 1; i <= length; i++) {
+    array.push('0x' + (new BN(i)).toString(16, 40))
+  }
+  return array
+}
+
 contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, delegateKey, nonMemberAccount, ...otherAccounts]) => {
-  let moloch, tokenAlpha, tokenBeta
+  let moloch, tokenAlpha, tokenBeta, tokenGamma, tokenDelta, tokenEpsilon, tokenCount
   let proposal1, proposal2, proposal3, depositToken
 
   const firstProposalIndex = 0
@@ -102,6 +114,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   before('deploy contracts', async () => {
     tokenAlpha = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
     tokenBeta = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+    tokenGamma = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+    tokenDelta = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+    tokenEpsilon = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
 
     moloch = await Moloch.new(
       summoner,
@@ -654,5 +669,142 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
     // TODO bring back token w/ transfer restriction setup and test
     // - withdraw balance "transfer failed"
+  })
+
+  describe('token count limit - deploy with maximum token count', async () => {
+    it('deploy with maximum token count', async () => {
+      moloch = await Moloch.new(
+        summoner,
+        [tokenAlpha.address].concat(addressArray(MAX_TOKEN_COUNT - 1)),
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      )
+
+      tokenCount = await moloch.getTokenCount()
+      assert.equal(+tokenCount, +MAX_TOKEN_COUNT)
+
+      // check only first token
+      const isWhitelisted = await moloch.tokenWhitelist.call(tokenAlpha.address)
+      assert.equal(isWhitelisted, true)
+      const firstTokenAddress = await moloch.approvedTokens(0)
+      assert.equal(firstTokenAddress, tokenAlpha.address)
+      const depositTokenAddress = await moloch.depositToken()
+      assert.equal(depositTokenAddress, tokenAlpha.address)
+    })
+  })
+
+  describe('token count limit - add tokens during operation', async () => {
+    beforeEach(async () => {
+      // deploy with maximum - 1 tokens, so we can add 1 more
+      moloch = await Moloch.new(
+        summoner,
+        [tokenAlpha.address].concat(addressArray(MAX_TOKEN_COUNT - 2)),
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      )
+
+      tokenCount = await moloch.getTokenCount()
+      assert.equal(+tokenCount, MAX_TOKEN_COUNT - 1)
+
+      // check only first token
+      const alphaIsWhitelisted = await moloch.tokenWhitelist.call(tokenAlpha.address)
+      assert.equal(alphaIsWhitelisted, true)
+      const firstTokenAddress = await moloch.approvedTokens(0)
+      assert.equal(firstTokenAddress, tokenAlpha.address)
+      const depositTokenAddress = await moloch.depositToken()
+      assert.equal(depositTokenAddress, tokenAlpha.address)
+
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: summoner,
+        from: creator,
+        value: 3 * deploymentConfig.PROPOSAL_DEPOSIT
+      })
+
+      await moloch.submitWhitelistProposal( // first
+        tokenBeta.address,
+        'whitelist beta!',
+        { from: summoner }
+      )
+
+      await moloch.submitWhitelistProposal( // second
+        tokenGamma.address,
+        'whitelist gamma!',
+        { from: summoner }
+      )
+
+      await moloch.submitWhitelistProposal( // third
+        tokenDelta.address,
+        'whitelist delta!',
+        { from: summoner }
+      )
+
+      await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+
+      await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+      await moveForwardPeriods(1)
+      await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+      await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+      await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+      await moloch.processWhitelistProposal(firstProposalIndex, { from: summoner })
+
+      tokenCount = await moloch.getTokenCount()
+      assert.equal(+tokenCount, +MAX_TOKEN_COUNT)
+
+      const lastTokenAddress = await moloch.approvedTokens(MAX_TOKEN_COUNT - 1)
+      assert.equal(lastTokenAddress, tokenBeta.address)
+      const betaIsWhitelisted = await moloch.tokenWhitelist.call(tokenBeta.address)
+      assert.equal(betaIsWhitelisted, true)
+    })
+
+    it('proposal to add another token fails when maximum reached', async () => {
+      await moloch.processWhitelistProposal(secondProposalIndex, { from: summoner })
+
+      await verifyProcessProposal({
+        moloch: moloch,
+        proposalIndex: secondProposalIndex,
+        expectedYesVotes: summonerShares,
+        expectedNoVotes: 0,
+        expectedTotalShares: summonerShares,
+        expectedMaxSharesAndLootAtYesVote: summonerShares
+      })
+
+      await verifyFlags({
+        moloch: moloch,
+        proposalId: secondProposalIndex,
+        expectedFlags: [true, true, false, false, true, false] // failed
+      })
+
+      const gammaIsWhitelisted = await moloch.tokenWhitelist.call(tokenGamma.address)
+      assert.equal(gammaIsWhitelisted, false)
+    })
+
+    it('require fail - sponsor another whitelist proposal when maximum reached', async () => {
+      await moloch.sponsorProposal(
+        thirdProposalIndex,
+        { from: summoner }
+      ).should.be.rejectedWith(revertMessages.sponsorProposalMaximumNumberOfTokensReached)
+    })
+
+
+    it('require fail - submit another whitelist proposal when maximum reached', async () => {
+      await moloch.submitWhitelistProposal(
+        tokenEpsilon.address,
+        'whitelist epsilon!',
+        { from: summoner }
+      ).should.be.rejectedWith(revertMessages.submitWhitelistProposalMaximumNumberOfTokensReached)
+    })
   })
 })
