@@ -395,7 +395,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
   
       //event SubmitProposal(address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken, string details, bool[6] flags, uint256 proposalId, address indexed delegateKey, address indexed memberAddress);
       const { applicant,sharesRequested,lootRequested,tributeOffered,tributeToken,paymentRequested,paymentToken,details,flags,proposalId,delegateKey,memberAddress } = log.args
@@ -477,7 +477,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
   
       //event SubmitProposal(address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken, string details, bool[6] flags, uint256 proposalId, address indexed delegateKey, address indexed memberAddress);
       const { applicant,sharesRequested,lootRequested,tributeOffered,tributeToken,paymentRequested,paymentToken,details,flags,proposalId,delegateKey,memberAddress } = log.args
@@ -574,7 +574,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
   
       //event SubmitProposal(address indexed applicant, uint256 sharesRequested, uint256 lootRequested, uint256 tributeOffered, address tributeToken, uint256 paymentRequested, address paymentToken, string details, bool[6] flags, uint256 proposalId, address indexed delegateKey, address indexed memberAddress);
       assert.equal(log.event, 'SubmitProposal');
@@ -1272,7 +1272,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
       const {delegateKey,memberAddress,proposalId,proposalIndex,startingPeriod} = log.args
       const expectedStartingPeriod = 1
       const expectedProposalQueueLength = 0
@@ -1386,7 +1386,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
       const {delegateKey,memberAddress,proposalId,proposalIndex,startingPeriod} = log.args
       const expectedStartingPeriod = 1
       const expectedProposalQueueLength = 0
@@ -1550,7 +1550,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
       const {delegateKey,memberAddress,proposalId,proposalIndex,startingPeriod} = log.args
       const expectedStartingPeriod = deploymentConfig.VOTING_DURATON_IN_PERIODS+deploymentConfig.GRACE_DURATON_IN_PERIODS+2
       const expectedProposalQueueLength = 1
@@ -1801,7 +1801,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[4]
       assert.equal(log.event, 'ProcessProposal')
       //event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
       
@@ -1890,7 +1890,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
 
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[3]
       assert.equal(log.event, 'ProcessProposal')
       //event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
       
@@ -2033,7 +2033,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[2]
       assert.equal(log.event, 'ProcessWhitelistProposal')
       //event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
       
@@ -2104,7 +2104,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[2]
       assert.equal(log.event, 'ProcessWhitelistProposal')
       //event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
       
@@ -2274,7 +2274,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[2]
   
       //event ProcessGuildKickProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
       assert.equal(log.event, 'ProcessGuildKickProposal')
@@ -2347,7 +2347,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[2]
   
       //event ProcessGuildKickProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
       assert.equal(log.event, 'ProcessGuildKickProposal')
@@ -2362,7 +2362,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
   })
 
-
+  
   describe('rageQuit events', () => {
     //NOTE: add applicant1 as a member
     beforeEach(async () => {
@@ -2740,7 +2740,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
 
       
       const { logs } = emittedLogs
-      const log = logs[0]
+      const log = logs[1]
   
       //event CancelProposal(uint256 indexed proposalId, address memberAddress, address applicantAddress);
       const {proposalId,memberAddress,applicantAddress} = log.args
@@ -2759,7 +2759,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
   })
 
-  describe('updateDelegateKey', () => {
+  describe('updateDelegateKey event', () => {
     it('require success - emits UpdateDelegateKey event', async () => {
       const emittedLogs = await  moloch.updateDelegateKey(processor, { from: summoner })
 
@@ -2783,5 +2783,187 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     })
 
   })
+
+
+describe('rageKick event', () => {
+  let proposer, applicant
+  beforeEach(async () => {
+    // cant kick the summoner, so we have to vote in a new member
+    await fundAndApproveToMoloch({
+      to: proposal1.applicant,
+      from: creator,
+      value: proposal1.tributeOffered
+    })
+
+    // submit
+    const proposer = proposal1.applicant
+    const applicant = proposal1.applicant
+    await moloch.submitProposal(
+      applicant,
+      proposal1.sharesRequested,
+      proposal1.lootRequested,
+      proposal1.tributeOffered,
+      proposal1.tributeToken,
+      proposal1.paymentRequested,
+      proposal1.paymentToken,
+      proposal1.details,
+      { from: proposer }
+    )
+
+    await fundAndApproveToMoloch({
+      to: summoner,
+      from: creator,
+      value: deploymentConfig.PROPOSAL_DEPOSIT
+    })
+
+    await moloch.sponsorProposal(firstProposalIndex, { from: summoner })
+    await moveForwardPeriods(1)
+    await moloch.submitVote(firstProposalIndex, yes, { from: summoner })
+    await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+    await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+    await moloch.processProposal(firstProposalIndex, { from: processor })
+
+    await verifyMember({
+      moloch: moloch,
+      member: proposal1.applicant,
+      expectedDelegateKey: proposal1.applicant,
+      expectedShares: proposal1.sharesRequested,
+      expectedLoot: proposal1.lootRequested,
+      expectedMemberAddressByDelegateKey: proposal1.applicant
+    })
+
+    const guildKickProposal = {
+      applicant: proposal1.applicant,
+      proposer: proposer,
+      sharesRequested: 0,
+      tributeOffered: 0,
+      tributeToken: zeroAddress,
+      paymentRequested: 0,
+      paymentToken: zeroAddress,
+      details: 'kick me!'
+    }
+
+    await moloch.submitGuildKickProposal(
+      guildKickProposal.applicant,
+      guildKickProposal.details,
+      { from: proposer }
+    )
+
+
+    await verifyProposal({
+      moloch: moloch,
+      proposal: guildKickProposal,
+      proposalId: secondProposalIndex,
+      proposer: proposer,
+      expectedProposalCount: 2,
+      expectedProposalQueueLength: 1
+    })
+
+    await verifyFlags({
+      moloch: moloch,
+      proposalId: secondProposalIndex,
+      expectedFlags: [false, false, false, false, false, true] // guild kick flag set to true after proposal
+    })
+
+    await fundAndApproveToMoloch({
+      to: summoner,
+      from: creator,
+      value: deploymentConfig.PROPOSAL_DEPOSIT
+    })
+
+    await moloch.sponsorProposal(secondProposalIndex, { from: summoner })
+
+    await verifyFlags({
+      moloch: moloch,
+      proposalId: secondProposalIndex,
+      expectedFlags: [true, false, false, false, false, true] // sponsored flag set
+    })
+
+    await moveForwardPeriods(1)
+
+    await moloch.submitVote(secondProposalIndex, yes, { from: summoner })
+
+    await verifySubmitVote({
+      moloch: moloch,
+      proposalIndex: secondProposalIndex,
+      memberAddress: summoner,
+      expectedMaxSharesAndLootAtYesVote: summonerShares+proposal1.lootRequested+proposal1.sharesRequested,
+      expectedVote: yes
+    })
+
+    await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+    await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+
+    await verifyBalances({
+      token: depositToken,
+      moloch: moloch.address,
+      expectedMolochBalance: 2*deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
+      applicant: proposal1.applicant,
+      expectedApplicantBalance: 0,
+    })
+
+    await moloch.processGuildKickProposal(secondProposalIndex, { from: processor })
+
+    await verifyProcessProposal({
+      moloch: moloch,
+      proposalIndex: secondProposalIndex,
+      expectedYesVotes: 1,
+      expectedTotalShares: summonerShares, // add the 1 the summoner has
+      expectedTotalLoot: proposal1.sharesRequested + proposal1.lootRequested,
+      expectedMaxSharesAndLootAtYesVote: summonerShares+proposal1.lootRequested+proposal1.sharesRequested
+    })
+
+    await verifyFlags({
+      moloch: moloch,
+      proposalId: secondProposalIndex,
+      expectedFlags: [true, true, true, false, false, true]
+    })
+
+    await verifyBalances({
+      token: depositToken,
+      moloch: moloch.address,
+      expectedMolochBalance: 2*deploymentConfig.PROPOSAL_DEPOSIT + proposal1.tributeOffered,
+      applicant: proposal1.applicant,
+      expectedApplicantBalance: 0,
+    })
+
+    await verifyInternalBalances({
+      moloch,
+      token: depositToken,
+      userBalances: {
+        [GUILD]: proposal1.tributeOffered,
+        [ESCROW]: 0,
+        [summoner]: 2*(deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD),
+        [processor]: 2*deploymentConfig.PROCESSING_REWARD
+      }
+    })
+    
+  })
+
+  it('require success - emits Ragekick event', async () => {
+    
+    const emittedLogs= await moloch.ragekick(proposal1.applicant,{ from: proposer })
+    await verifyMember({
+      moloch: moloch,
+      member: proposal1.applicant,
+      expectedDelegateKey: proposal1.applicant,
+      expectedShares: 0,
+      expectedMemberAddressByDelegateKey: proposal1.applicant,
+      expectedJailed: 1
+    })
+
+    const { logs } = emittedLogs
+    const log = logs[0]
+
+    assert.equal(log.event, 'Ragekick')
+    //event Ragekick(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
+    
+    const {memberAddress,lootToBurn} = log.args
+    assert.equal(memberAddress, proposal1.applicant)
+    assert.equal(lootToBurn, proposal1.lootRequested + proposal1.sharesRequested)
+
+  })
+
+})
 
 })
