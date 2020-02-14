@@ -2741,10 +2741,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const log = logs[0]
   
       //event CancelProposal(uint256 indexed proposalId, address memberAddress, address applicantAddress);
-      const {proposalId,memberAddress,applicantAddress} = log.args
+      const {proposalId,applicantAddress} = log.args
       assert.equal(log.event, 'CancelProposal')
       assert.equal(proposalId, firstProposalIndex)
-      assert.equal(memberAddress, zeroAddress)
       assert.equal(applicantAddress, proposal1.applicant)
     })
 

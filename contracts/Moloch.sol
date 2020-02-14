@@ -42,7 +42,7 @@ contract Moloch is ReentrancyGuard {
     event ProcessGuildKickProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
     event Ragequit(address indexed memberAddress, uint256 sharesToBurn, uint256 lootToBurn);
     event TokensCollected(address indexed token, uint256 amountToCollect);
-    event CancelProposal(uint256 indexed proposalId, address memberAddress, address applicantAddress);
+    event CancelProposal(uint256 indexed proposalId, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event Withdraw(address indexed memberAddress, address token, uint256 amount);
 
@@ -370,7 +370,7 @@ contract Moloch is ReentrancyGuard {
         }
 
         // Make the proposal fail if it is requesting more tokens as payment than the available guild bank balance
-        if (proposal.paymentToken != address(0) && proposal.paymentRequested > userTokenBalances[GUILD][proposal.paymentToken]) {
+        if (proposal.paymentRequested > userTokenBalances[GUILD][proposal.paymentToken]) {
             didPass = false;
         }
 
@@ -526,10 +526,10 @@ contract Moloch is ReentrancyGuard {
     }
 
     function ragequit(uint256 sharesToBurn, uint256 lootToBurn) public nonReentrant onlyMember {
-        _ragequit(msg.sender, sharesToBurn, lootToBurn, approvedTokens);
+        _ragequit(msg.sender, sharesToBurn, lootToBurn);
     }
 
-    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn, address[] memory tokens) internal {
+    function _ragequit(address memberAddress, uint256 sharesToBurn, uint256 lootToBurn) internal {
         uint256 initialTotalSharesAndLoot = totalShares.add(totalLoot);
 
         Member storage member = members[memberAddress];
@@ -547,13 +547,13 @@ contract Moloch is ReentrancyGuard {
         totalShares = totalShares.sub(sharesToBurn);
         totalLoot = totalLoot.sub(lootToBurn);
 
-        for (uint256 i = 0; i < tokens.length; i++) {
-            uint256 amountToRagequit = fairShare(userTokenBalances[GUILD][tokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
+        for (uint256 i = 0; i < approvedTokens.length; i++) {
+            uint256 amountToRagequit = fairShare(userTokenBalances[GUILD][approvedTokens[i]], sharesAndLootToBurn, initialTotalSharesAndLoot);
             if (amountToRagequit > 0) { // gas optimization to allow a higher maximum token limit
                 // deliberately not using safemath here to keep overflows from preventing the function execution (which would break ragekicks)
                 // if a token overflows, it is because the supply was artificially inflated to oblivion, so we probably don't care about it anyways
-                userTokenBalances[GUILD][tokens[i]] -= amountToRagequit;
-                userTokenBalances[memberAddress][tokens[i]] += amountToRagequit;
+                userTokenBalances[GUILD][approvedTokens[i]] -= amountToRagequit;
+                userTokenBalances[memberAddress][approvedTokens[i]] += amountToRagequit;
             }
         }
 
@@ -567,7 +567,7 @@ contract Moloch is ReentrancyGuard {
         require(member.loot > 0, "member must have some loot"); // note - should be impossible for jailed member to have shares
         require(canRagequit(member.highestIndexYesVote), "cannot ragequit until highest index proposal member voted YES on is processed");
 
-        _ragequit(memberToKick, 0, member.loot, approvedTokens);
+        _ragequit(memberToKick, 0, member.loot);
     }
 
     function withdrawBalance(address token, uint256 amount) public nonReentrant {
@@ -613,12 +613,9 @@ contract Moloch is ReentrancyGuard {
         require(msg.sender == proposal.proposer, "solely the proposer can cancel");
 
         proposal.flags[3] = true; // cancelled
-
-        // NOTE: add member address since msg.sender is delegate key and members are indexed by memberaddress since initially delegatekey==memberaddress
-        address memberAddress = memberAddressByDelegateKey[msg.sender];
         
         unsafeInternalTransfer(ESCROW, proposal.proposer, proposal.tributeToken, proposal.tributeOffered);
-        emit CancelProposal(proposalId, memberAddress, msg.sender);
+        emit CancelProposal(proposalId, msg.sender);
     }
 
     function updateDelegateKey(address newDelegateKey) public nonReentrant onlyShareholder {
