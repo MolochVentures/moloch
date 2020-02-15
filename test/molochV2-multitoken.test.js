@@ -39,8 +39,8 @@ const SolRevert = 'VM Exception while processing transaction: revert'
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 const GUILD  = '0x000000000000000000000000000000000000dead'
 const ESCROW = '0x000000000000000000000000000000000000beef'
-const MAX_TOKEN_WHITELIST_COUNT = new BN('50')
-const MAX_TOKEN_GUILDBANK_COUNT = new BN('10') 
+const MAX_TOKEN_WHITELIST_COUNT = new BN('10')
+const MAX_TOKEN_GUILDBANK_COUNT = new BN('5') 
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
