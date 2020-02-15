@@ -10,6 +10,7 @@ module.exports = {
       }
     }
   },
+  
   networks: {
     development: {
       host: '127.0.0.1',
@@ -19,4 +20,9 @@ module.exports = {
       network_id: '*', // Match any network id
     },
   },
+
+  mocha: {
+    enableTimeouts: false,
+    before_timeout: 120000 // 2min
+  }
 }

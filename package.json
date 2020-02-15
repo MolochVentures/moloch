@@ -16,13 +16,13 @@
     "eslint-plugin-promise": "^4.1.1",
     "eslint-plugin-standard": "^4.0.0",
     "eth-lightwallet": "3.0.0",
-    "ganache-cli": "^6.4.3",
+    "ganache-cli": "^6.9.1",
     "ganache-cli-coverage": "https://github.com/frangio/ganache-cli/releases/download/v6.4.1-coverage/ganache-cli-coverage-6.4.1.tgz",
     "prompt-confirm": "^2.0.4",
     "solidity-coverage": "github:rotcivegaf/solidity-coverage#5875f5b7bc74d447f3312c9c0e9fc7814b482477",
     "standard": "^11.0.0",
-    "web3": "1.2.4",
-    "truffle-flattener": "^1.4.2"
+    "truffle-flattener": "^1.4.2",
+    "web3": "1.2.4"
   },
   "scripts": {
     "compile": "node_modules/.bin/buidler compile",

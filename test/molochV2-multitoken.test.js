@@ -39,8 +39,8 @@ const SolRevert = 'VM Exception while processing transaction: revert'
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 const GUILD  = '0x000000000000000000000000000000000000dead'
 const ESCROW = '0x000000000000000000000000000000000000beef'
-const MAX_TOKEN_WHITELIST_COUNT = new BN('10') // TODO: actual number to be determined
-const MAX_TOKEN_GUILDBANK_COUNT = new BN('5') // TODO: actual number to be determined
+const MAX_TOKEN_WHITELIST_COUNT = new BN('50')
+const MAX_TOKEN_GUILDBANK_COUNT = new BN('10') 
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -836,10 +836,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   })
 
   describe('token count limit - deploy with maximum token count', async () => {
+    let token_whitelist_limit = 10
+
     it('deploy with maximum token count', async () => {
       moloch = await Moloch.new(
         summoner,
-        [tokenAlpha.address].concat(addressArray(MAX_TOKEN_WHITELIST_COUNT - 1)),
+        [tokenAlpha.address].concat(addressArray(token_whitelist_limit - 1)),
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -849,7 +851,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       tokenCount = await moloch.getTokenCount()
-      assert.equal(+tokenCount, +MAX_TOKEN_WHITELIST_COUNT)
+      assert.equal(+tokenCount, +token_whitelist_limit)
 
       // check only first token
       const isWhitelisted = await moloch.tokenWhitelist.call(tokenAlpha.address)
@@ -866,7 +868,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       // deploy with maximum - 1 tokens, so we can add 1 more
       moloch = await Moloch.new(
         summoner,
-        [tokenAlpha.address].concat(addressArray(MAX_TOKEN_WHITELIST_COUNT - 2)),
+        [tokenAlpha.address].concat(addressArray(token_whitelist_limit - 2)),
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -876,7 +878,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       )
 
       tokenCount = await moloch.getTokenCount()
-      assert.equal(+tokenCount, MAX_TOKEN_WHITELIST_COUNT - 1)
+      assert.equal(+tokenCount, token_whitelist_limit - 1)
 
       // check only first token
       const alphaIsWhitelisted = await moloch.tokenWhitelist.call(tokenAlpha.address)
@@ -925,9 +927,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processWhitelistProposal(firstProposalIndex, { from: summoner })
 
       tokenCount = await moloch.getTokenCount()
-      assert.equal(+tokenCount, +MAX_TOKEN_WHITELIST_COUNT)
+      assert.equal(+tokenCount, +token_whitelist_limit)
 
-      const lastTokenAddress = await moloch.approvedTokens(MAX_TOKEN_WHITELIST_COUNT - 1)
+      const lastTokenAddress = await moloch.approvedTokens(token_whitelist_limit - 1)
       assert.equal(lastTokenAddress, tokenBeta.address)
       const betaIsWhitelisted = await moloch.tokenWhitelist.call(tokenBeta.address)
       assert.equal(betaIsWhitelisted, true)
@@ -973,6 +975,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
   })
 
   describe('guild bank token limit', () => {
+    let token_guildbank_limit = 10
     let tokens, tokenAddresses
 
     beforeEach(async () => {
@@ -983,7 +986,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       proposal1.tributeOffered = 69
 
       // mint max guildbank tokens, in addition to tokenAlpha this should provide us 1 extra whitelisted token to test the boundary
-      for (let i=0; i < MAX_TOKEN_GUILDBANK_COUNT; i++) {
+      for (let i=0; i < token_guildbank_limit; i++) {
         let token = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
         tokens.push(token)
       }
@@ -1062,7 +1065,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const initialProposalQueueLength = +(await moloch.getProposalQueueLength());
 
       const totalGuildBankTokens = await moloch.totalGuildBankTokens()
-      assert(totalGuildBankTokens, MAX_TOKEN_GUILDBANK_COUNT - 1)
+      assert(totalGuildBankTokens, token_guildbank_limit - 1)
 
       let token = tokens[tokens.length - 2]
 
@@ -1105,7 +1108,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(initialProposalCount, { from: processor })
 
       const totalGuildBankTokensAfter = await moloch.totalGuildBankTokens()
-      assert(totalGuildBankTokensAfter, MAX_TOKEN_GUILDBANK_COUNT)
+      assert(totalGuildBankTokensAfter, token_guildbank_limit)
       
       let extraToken = tokens[tokens.length - 1]
       await fundAndApproveToMoloch({
@@ -1156,7 +1159,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const initialProposalQueueLength = +(await moloch.getProposalQueueLength());
 
       const totalGuildBankTokens = await moloch.totalGuildBankTokens()
-      assert(totalGuildBankTokens, MAX_TOKEN_GUILDBANK_COUNT - 1)
+      assert(totalGuildBankTokens, token_guildbank_limit - 1)
 
       // fund/approve/submit both tribute tokens
       let token1 = tokens[tokens.length - 2]
@@ -1230,7 +1233,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(initialProposalCount, { from: processor })
 
       const totalGuildBankTokensAfter = await moloch.totalGuildBankTokens()
-      assert(totalGuildBankTokensAfter, MAX_TOKEN_GUILDBANK_COUNT)
+      assert(totalGuildBankTokensAfter, token_guildbank_limit)
       
       await moloch.sponsorProposal(initialProposalCount + 1, { from: summoner })
         .should.be.rejectedWith(revertMessages.sponsorTributeProposalMaxGuildBankTokensReached)
@@ -1241,7 +1244,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const initialProposalQueueLength = +(await moloch.getProposalQueueLength());
 
       const totalGuildBankTokens = await moloch.totalGuildBankTokens()
-      assert(totalGuildBankTokens, MAX_TOKEN_GUILDBANK_COUNT - 1)
+      assert(totalGuildBankTokens, token_guildbank_limit - 1)
 
       // fund/approve/submit both tribute tokens
       let token1 = tokens[tokens.length - 2]
@@ -1320,7 +1323,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       await moloch.processProposal(initialProposalCount, { from: processor })
 
       const totalGuildBankTokensAfter = await moloch.totalGuildBankTokens()
-      assert(totalGuildBankTokensAfter, MAX_TOKEN_GUILDBANK_COUNT)
+      assert(totalGuildBankTokensAfter, token_guildbank_limit)
 
       // process the last tribute proposal after the guild bank limit is reached
       await moloch.processProposal(initialProposalCount + 1, { from: processor })
@@ -1331,6 +1334,194 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposalId: initialProposalCount + 1,
         expectedFlags: [true, true, false, false, false, false]
       })
+    })
+  })
+  
+  describe('RAGEQUIT AND WITHDRAW TOKENS AT MAXIMUM TOKEN LIMITS', () => {
+    let tokens, tokenAddresses, guildbank_tokens, guildbank_token_addresses
+
+    beforeEach(async function() {
+      this.timeout(1200000)
+
+      // 1. create max tokens
+      // 2. whitelist max tokens
+      // 3. add tribute in 1 less than max tokens
+      tokens = [tokenAlpha]
+      proposal1.tributeOffered = _1e18
+
+      // mint max whitelist minus 1 (deposit token)
+      for (let i=0; i < MAX_TOKEN_WHITELIST_COUNT - 1; i++) {
+        let token = await Token.new(deploymentConfig.TOKEN_SUPPLY, { from: creator })
+        tokens.push(token)
+      }
+
+      tokenAddresses = tokens.map(t => t.address)
+      guildbank_tokens = tokens.slice(0, MAX_TOKEN_GUILDBANK_COUNT)
+      guildbank_token_addresses = guildbank_tokens.map(t => t.address)
+
+      // add tokens to whitelist in a new moloch constructor so we can skip proposals for it
+      moloch = await Moloch.new(
+        summoner,
+        [tokenAddresses[0]],
+        deploymentConfig.PERIOD_DURATION_IN_SECONDS,
+        deploymentConfig.VOTING_DURATON_IN_PERIODS,
+        deploymentConfig.GRACE_DURATON_IN_PERIODS,
+        deploymentConfig.PROPOSAL_DEPOSIT,
+        deploymentConfig.DILUTION_BOUND,
+        deploymentConfig.PROCESSING_REWARD
+      )
+
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * MAX_TOKEN_WHITELIST_COUNT
+      })
+
+      // whitelist all the tokens
+      for (let i=1; i < tokens.length; i++) { // start at i=1, skip deposit token
+        let token = tokens[i]
+
+        await moloch.submitWhitelistProposal(
+          token.address,
+          'whitelist this token!',
+          { from: proposal1.applicant }
+        )
+  
+        await moloch.sponsorProposal(i - 1, { from: summoner })
+        await moveForwardPeriods(1)
+
+        await moloch.submitVote(i - 1, yes, { from: summoner })
+  
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+  
+        await moloch.processWhitelistProposal(i - 1, { from: processor })
+      }
+
+      let tokenCount = +(await moloch.getTokenCount())
+      assert.equal(tokenCount, tokens.length)
+
+      await fundAndApproveToMoloch({
+        token: tokenAlpha,
+        to: summoner,
+        from: creator,
+        value: deploymentConfig.PROPOSAL_DEPOSIT * MAX_TOKEN_GUILDBANK_COUNT
+      })
+
+      // max out the tokens with a guild bank balance
+      for (let i=0; i < MAX_TOKEN_GUILDBANK_COUNT; i++) {
+        let token = tokens[i]
+
+        await fundAndApproveToMoloch({
+          token: token,
+          to: proposal1.applicant,
+          from: creator,
+          value: proposal1.tributeOffered
+        })
+
+        await moloch.submitProposal(
+          proposal1.applicant,
+          1, // only 1 share per proposal
+          0,
+          proposal1.tributeOffered,
+          token.address,
+          proposal1.paymentRequested,
+          proposal1.paymentToken,
+          proposal1.details,
+          { from: proposal1.applicant }
+        )
+  
+        await moloch.sponsorProposal(i + tokenCount - 1, { from: summoner })
+        await moveForwardPeriods(1)
+
+        await moloch.submitVote(i + tokenCount - 1, yes, { from: summoner })
+  
+        await moveForwardPeriods(deploymentConfig.VOTING_DURATON_IN_PERIODS)
+        await moveForwardPeriods(deploymentConfig.GRACE_DURATON_IN_PERIODS)
+  
+        await moloch.processProposal(i + tokenCount - 1, { from: processor })
+
+        await verifyInternalBalances({
+          moloch,
+          token: token,
+          userBalances: {
+            [GUILD]: _1e18,
+            [ESCROW]: 0,
+            [proposal1.applicant]: 0
+          }
+        })
+      }
+    })
+
+    it.only('can still ragequit and withdraw', async function() {
+      this.timeout(1200000)
+
+      const memberData = await moloch.members(proposal1.applicant)
+
+      let sharesToQuit = new BN(MAX_TOKEN_GUILDBANK_COUNT) // 1 share per guildbank token
+      let initialShares = sharesToQuit.add(_1)
+      await moloch.ragequit(sharesToQuit, 0, { from: proposal1.applicant })
+
+      await verifyMember({
+        moloch: moloch,
+        member: proposal1.applicant,
+        expectedDelegateKey: proposal1.applicant,
+        expectedShares: 0,
+        expectedLoot: 0,
+        expectedMemberAddressByDelegateKey: proposal1.applicant
+      })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: _1e18.mul(_1).divRound(initialShares),
+          [ESCROW]: 0,
+          [proposal1.applicant]: _1e18.mul(sharesToQuit).divRound(initialShares),
+          [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * +(MAX_TOKEN_GUILDBANK_COUNT.add(MAX_TOKEN_WHITELIST_COUNT).sub(_1).toString()),
+          [processor]: deploymentConfig.PROCESSING_REWARD * +(MAX_TOKEN_GUILDBANK_COUNT.add(MAX_TOKEN_WHITELIST_COUNT).sub(_1).toString())
+        }
+      })
+
+      for (let i=1; i < guildbank_tokens.length; i++) {
+        await verifyInternalBalances({
+          moloch,
+          token: guildbank_tokens[i],
+          userBalances: {
+            [GUILD]: _1e18.mul(_1).divRound(initialShares),
+            [ESCROW]: 0,
+            [proposal1.applicant]: _1e18.mul(sharesToQuit).divRound(initialShares)
+          }
+        })
+      }
+      
+      let zeroesArray = guildbank_tokens.map(a => 0)
+      await moloch.withdrawBalances(guildbank_token_addresses, zeroesArray, true, { from: proposal1.applicant })
+
+      await verifyInternalBalances({
+        moloch,
+        token: depositToken,
+        userBalances: {
+          [GUILD]: _1e18.mul(_1).divRound(initialShares),
+          [ESCROW]: 0,
+          [proposal1.applicant]: 0,
+          [summoner]: (deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD) * +(MAX_TOKEN_GUILDBANK_COUNT.add(MAX_TOKEN_WHITELIST_COUNT).sub(_1).toString()),
+          [processor]: deploymentConfig.PROCESSING_REWARD * +(MAX_TOKEN_GUILDBANK_COUNT.add(MAX_TOKEN_WHITELIST_COUNT).sub(_1).toString())
+        }
+      })
+
+      for (let i=0; i < guildbank_tokens.length - 1; i++) {
+        await verifyInternalBalances({
+          moloch,
+          token: guildbank_tokens[i],
+          userBalances: {
+            [GUILD]: _1e18.mul(_1).divRound(initialShares),
+            [ESCROW]: 0,
+            [proposal1.applicant]: 0
+          }
+        })
+      }
     })
   })
 })

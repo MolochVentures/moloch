@@ -27,8 +27,8 @@ contract Moloch is ReentrancyGuard {
     uint256 constant MAX_GRACE_PERIOD_LENGTH = 10**18; // maximum length of grace period
     uint256 constant MAX_DILUTION_BOUND = 10**18; // maximum dilution bound
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
-    uint256 constant MAX_TOKEN_WHITELIST_COUNT = 10; // maximum number of whitelisted tokens
-    uint256 constant MAX_TOKEN_GUILDBANK_COUNT = 5; // maximum number of tokens with non-zero balance in guildbank
+    uint256 constant MAX_TOKEN_WHITELIST_COUNT = 1000; // maximum number of whitelisted tokens
+    uint256 constant MAX_TOKEN_GUILDBANK_COUNT = 300; // maximum number of tokens with non-zero balance in guildbank
 
     // ***************
     // EVENTS
