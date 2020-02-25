@@ -41,10 +41,10 @@ module.exports = {
     }
   },
   solc: {
-    version: "0.5.3",
-    evmVersion: "constantinople",
+    version: "0.5.12",
     optimizer: {
-      enabled: true
+      enabled: true,
+      runs: 200
     }
   },
   etherscan: {
