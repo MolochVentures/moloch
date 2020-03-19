@@ -10,6 +10,7 @@ require("./scripts/pool-tasks");
 const INFURA_API_KEY = "";
 const MAINNET_PRIVATE_KEY = "";
 const ROPSTEN_PRIVATE_KEY = "";
+const ETHERSCAN_API_KEY = "";
 
 module.exports = {
   networks: {
@@ -41,7 +42,7 @@ module.exports = {
     }
   },
   solc: {
-    version: "0.5.12",
+    version: "0.5.3",
     optimizer: {
       enabled: true,
       runs: 200
@@ -53,6 +54,6 @@ module.exports = {
     url: "https://api.etherscan.io/api",
     // Your API key for Etherscan
     // Obtain one at https://etherscan.io/
-    apiKey: "2ZAZ2R4NX6Z7522TCTTIIVITV145SWTW63"
+    apiKey: ETHERSCAN_API_KEY
   }
 };
