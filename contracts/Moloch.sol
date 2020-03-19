@@ -1,8 +1,8 @@
-pragma solidity 0.5.12;
+pragma solidity 0.5.3;
 
-import "./oz/SafeMath.sol";
-import "./oz/IERC20.sol";
-import "./oz/ReentrancyGuard.sol";
+import "./SafeMath.sol";
+import "./IERC20.sol";
+import "./ReentrancyGuard.sol";
 
 contract Moloch is ReentrancyGuard {
     using SafeMath for uint256;

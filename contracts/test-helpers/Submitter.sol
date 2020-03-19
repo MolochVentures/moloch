@@ -1,6 +1,6 @@
 // helper for testing moloch.submitProposal return value
 
-pragma solidity 0.5.12;
+pragma solidity 0.5.3;
 
 import "../Moloch.sol";
 
