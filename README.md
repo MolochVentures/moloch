@@ -55,6 +55,8 @@ To compute their code coverage run `npm run coverage`.
 
 This project includes Buidler tasks for deploying and using DAOs and Pools.
 
+Note that if you are using the Moloch contract outside of this repo, it must be compiled with the solidity optimizer enabled (runs=200), or attempting to deploy it will result in an out-of-gas exception.
+
 #### Deploying a new DAO
 
 Follow this instructions to deploy a new DAO:
