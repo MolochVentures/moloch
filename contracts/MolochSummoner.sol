@@ -1,14 +1,14 @@
-pragma solidity 0.5.3;
+pragma solidity 0.5.12;
 
 import "./Moloch.sol";
 
 contract MolochSummoner {
 
-    Moloch private M;
+    Moloch private m;
 
-    address[] public Molochs;
+    address[] public molochs;
 
-    event Summoned(address indexed M, address indexed _summoner);
+    event Summoned(address indexed m, address indexed _summoner);
 
     function summonMoloch(
         address _summoner,
@@ -20,7 +20,7 @@ contract MolochSummoner {
         uint256 _dilutionBound,
         uint256 _processingReward) public {
 
-        M = new Moloch(
+        m = new Moloch(
             _summoner,
             _approvedTokens,
             _periodDuration,
@@ -30,13 +30,13 @@ contract MolochSummoner {
             _dilutionBound,
             _processingReward);
 
-        Molochs.push(address(M));
+        molochs.push(address(m));
 
-        emit Summoned(address(M), _summoner);
+        emit Summoned(address(m), _summoner);
 
     }
 
     function getMolochCount() public view returns (uint256 MolochCount) {
-        return Molochs.length;
+        return molochs.length;
     }
 }
