@@ -202,7 +202,7 @@ contract Moloch is ReentrancyGuard {
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
 
         _submitProposal(applicant, sharesRequested, lootRequested, tributeOffered, tributeToken, paymentRequested, paymentToken, details, flags);
-        return proposalCount - 1; // return proposalId - contracts calling submit might want it
+        return proposalCount.sub(1); // return proposalId - contracts calling submit might want it
     }
 
     function submitWhitelistProposal(address tokenToWhitelist, string memory details) public nonReentrant returns (uint256 proposalId) {
@@ -214,7 +214,7 @@ contract Moloch is ReentrancyGuard {
         flags[4] = true; // whitelist
 
         _submitProposal(address(0), 0, 0, 0, tokenToWhitelist, 0, address(0), details, flags);
-        return proposalCount - 1;
+        return proposalCount.sub(1);
     }
 
     function submitGuildKickProposal(address memberToKick, string memory details) public nonReentrant returns (uint256 proposalId) {
@@ -227,7 +227,7 @@ contract Moloch is ReentrancyGuard {
         flags[5] = true; // guild kick
 
         _submitProposal(memberToKick, 0, 0, 0, address(0), 0, address(0), details, flags);
-        return proposalCount - 1;
+        return proposalCount.sub(1);
     }
 
     function _submitProposal(
@@ -702,12 +702,12 @@ contract Moloch is ReentrancyGuard {
 
         if (balance == 0) { return 0; }
 
-        uint256 prod = balance * shares;
+        uint256 prod = balance.mul(shares);
 
-        if (prod / balance == shares) { // no overflow in multiplication above?
-            return prod / totalShares;
+        if (prod.div(balance) == shares) { // no overflow in multiplication above?
+            return prod.div(totalShares);
         }
 
-        return (balance / totalShares) * shares;
+        return (balance.div(totalShares)).mul(shares);
     }
 }
