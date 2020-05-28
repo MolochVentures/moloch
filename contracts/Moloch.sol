@@ -1,11 +1,13 @@
-pragma solidity 0.5.3;
+pragma solidity 0.5.12;
 
-import "./SafeMath.sol";
 import "./IERC20.sol";
+import "./SafeMath.sol";
+import "./SafeERC20.sol";
 import "./ReentrancyGuard.sol";
 
 contract Moloch is ReentrancyGuard {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     /***************
     GLOBAL CONSTANTS
@@ -167,7 +169,6 @@ contract Moloch is ReentrancyGuard {
         members[_summoner] = Member(_summoner, 1, 0, true, 0, 0);
         memberAddressByDelegateKey[_summoner] = _summoner;
         totalShares = 1;
-       
     }
 
     /*****************
@@ -195,7 +196,7 @@ contract Moloch is ReentrancyGuard {
         }
 
         // collect tribute from proposer and store it in the Moloch until the proposal is processed
-        require(IERC20(tributeToken).transferFrom(msg.sender, address(this), tributeOffered), "tribute token transfer failed");
+        IERC20(tributeToken).safeTransferFrom(msg.sender, address(this), tributeOffered);
         unsafeAddToBalance(ESCROW, tributeToken, tributeOffered);
 
         bool[6] memory flags; // [sponsored, processed, didPass, cancelled, whitelist, guildkick]
@@ -267,7 +268,7 @@ contract Moloch is ReentrancyGuard {
 
     function sponsorProposal(uint256 proposalId) public nonReentrant onlyDelegate {
         // collect proposal deposit from sponsor and store it in the Moloch until the proposal is processed
-        require(IERC20(depositToken).transferFrom(msg.sender, address(this), proposalDeposit), "proposal deposit token transfer failed");
+        IERC20(depositToken).safeTransferFrom(msg.sender, address(this), proposalDeposit);
         unsafeAddToBalance(ESCROW, depositToken, proposalDeposit);
 
         Proposal storage proposal = proposals[proposalId];
@@ -590,7 +591,7 @@ contract Moloch is ReentrancyGuard {
     function _withdrawBalance(address token, uint256 amount) internal {
         require(userTokenBalances[msg.sender][token] >= amount, "insufficient balance");
         unsafeSubtractFromBalance(msg.sender, token, amount);
-        require(IERC20(token).transfer(msg.sender, amount), "transfer failed");
+        IERC20(token).safeTransfer(msg.sender, amount);
         emit Withdraw(msg.sender, token, amount);
     }
 
@@ -648,7 +649,6 @@ contract Moloch is ReentrancyGuard {
     /***************
     GETTER FUNCTIONS
     ***************/
-
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
         return x >= y ? x : y;
     }
