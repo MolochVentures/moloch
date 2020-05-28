@@ -33,7 +33,6 @@ contract MolochSummoner {
         molochs.push(address(m));
 
         emit Summoned(address(m), _summoner);
-
     }
 
     function getMolochCount() public view returns (uint256 MolochCount) {
