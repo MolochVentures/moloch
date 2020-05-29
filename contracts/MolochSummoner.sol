@@ -3,9 +3,7 @@ pragma solidity 0.5.12;
 import "./Moloch.sol";
 
 contract MolochSummoner {
-
     Moloch private m;
-
     address[] public molochs;
 
     event Summoned(address indexed m, address indexed _summoner);
@@ -31,7 +29,6 @@ contract MolochSummoner {
             _processingReward);
 
         molochs.push(address(m));
-
         emit Summoned(address(m), _summoner);
     }
 
