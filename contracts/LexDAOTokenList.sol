@@ -110,6 +110,16 @@ contract LexDAOTokenList is SecretaryRole {
     event TokenUnlisted(address indexed _token);
     event MessageUpdated(string indexed _message);
     
+    constructor (address[] memory _tokens, string memory _message) public {
+        for (uint256 i = 0; i < _tokens.length; i++) {
+             require(_tokens[i] != address(0), "token address cannot be 0");
+             tokenList[_tokens[i]].tokenIndex = tokens.push(_tokens[i]) - 1;
+             tokenList[_tokens[i]].listed = true;
+        }
+        
+        message = _message;
+    }
+    
     /****************
     LISTING FUNCTIONS
     ****************/
