@@ -97,7 +97,7 @@ contract SecretaryRole is Context {
 }
 
 contract LexDAOTokenList is SecretaryRole {
-    address[] tokens;
+    address[] public listings;
     string public message;
     mapping(address => Token) public tokenList;
     
@@ -110,11 +110,11 @@ contract LexDAOTokenList is SecretaryRole {
     event TokenUnlisted(address indexed _token);
     event MessageUpdated(string indexed _message);
     
-    constructor (address[] memory _tokens, string memory _message) public {
-        for (uint256 i = 0; i < _tokens.length; i++) {
-             require(_tokens[i] != address(0), "token address cannot be 0");
-             tokenList[_tokens[i]].tokenIndex = tokens.push(_tokens[i]) - 1;
-             tokenList[_tokens[i]].listed = true;
+    constructor (address[] memory _listings, string memory _message) public {
+        for (uint256 i = 0; i < _listings.length; i++) {
+             require(_listings[i] != address(0), "token address cannot be 0");
+             tokenList[_listings[i]].tokenIndex = listings.push(_listings[i]) - 1;
+             tokenList[_listings[i]].listed = true;
         }
         
         message = _message;
@@ -125,7 +125,7 @@ contract LexDAOTokenList is SecretaryRole {
     ****************/
     function list(address _token) public onlySecretary { 
         require(tokenList[_token].listed != true, "token already listed");
-        tokenList[_token].tokenIndex = tokens.push(_token) - 1;
+        tokenList[_token].tokenIndex = listings.push(_token) - 1;
         tokenList[_token].listed = true;
         emit TokenListed(_token);
     }
@@ -133,11 +133,11 @@ contract LexDAOTokenList is SecretaryRole {
     function unlist(address _token) public onlySecretary {
         require(tokenList[_token].listed == true, "no such token to remove");
         uint256 tokenToUnlist = tokenList[_token].tokenIndex;
-        address keyToMove = tokens[tokens.length - 1];
-        tokens[tokenToUnlist] = keyToMove;
-        tokenList[keyToMove].tokenIndex = tokenToUnlist;
+        address tkn = listings[listings.length - 1];
+        listings[tokenToUnlist] = tkn;
+        tokenList[tkn].tokenIndex = tokenToUnlist;
         tokenList[_token].listed = false;
-        tokens.length--;
+        listings.length--;
         emit TokenUnlisted(_token);
     }
     
@@ -150,15 +150,15 @@ contract LexDAOTokenList is SecretaryRole {
     // GETTERS
     // *******
     function isListed(address _token) public view returns (bool listed) {
-        if(tokens.length == 0) return false;
-        return (tokens[tokenList[_token].tokenIndex] == _token);
+        if(listings.length == 0) return false;
+        return (listings[tokenList[_token].tokenIndex] == _token);
     }
     
     function TokenCount() public view returns(uint256 tokenCount) {
-        return tokens.length;
+        return listings.length;
     }
     
     function TokenList() public view returns (address[] memory) {
-        return tokens;
+        return listings;
     }
 }
