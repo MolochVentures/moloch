@@ -1,4 +1,4 @@
-pragma solidity 0.5.3;
+pragma solidity 0.5.17;
 
 import "./SafeMath.sol";
 import "./IERC20.sol";
@@ -147,7 +147,6 @@ contract Moloch is ReentrancyGuard {
         // NOTE: move event up here, avoid stack too deep if too many approved tokens
         emit SummonComplete(_summoner, _approvedTokens, now, _periodDuration, _votingPeriodLength, _gracePeriodLength, _proposalDeposit, _dilutionBound, _processingReward);
 
-
         for (uint256 i = 0; i < _approvedTokens.length; i++) {
             require(_approvedTokens[i] != address(0), "_approvedToken cannot be 0");
             require(!tokenWhitelist[_approvedTokens[i]], "duplicate approved token");
@@ -166,8 +165,7 @@ contract Moloch is ReentrancyGuard {
 
         members[_summoner] = Member(_summoner, 1, 0, true, 0, 0);
         memberAddressByDelegateKey[_summoner] = _summoner;
-        totalShares = 1;
-       
+        totalShares = 1; 
     }
 
     /*****************
@@ -491,7 +489,7 @@ contract Moloch is ReentrancyGuard {
         emit ProcessGuildKickProposal(proposalIndex, proposalId, didPass);
     }
 
-    function _didPass(uint256 proposalIndex) internal returns (bool didPass) {
+    function _didPass(uint256 proposalIndex) internal view returns (bool didPass) {
         Proposal memory proposal = proposals[proposalQueue[proposalIndex]];
 
         didPass = proposal.yesVotes > proposal.noVotes;
@@ -648,7 +646,6 @@ contract Moloch is ReentrancyGuard {
     /***************
     GETTER FUNCTIONS
     ***************/
-
     function max(uint256 x, uint256 y) internal pure returns (uint256) {
         return x >= y ? x : y;
     }
@@ -697,17 +694,17 @@ contract Moloch is ReentrancyGuard {
         unsafeAddToBalance(to, token, amount);
     }
 
-    function fairShare(uint256 balance, uint256 shares, uint256 totalShares) internal pure returns (uint256) {
-        require(totalShares != 0);
+    function fairShare(uint256 balance, uint256 shares, uint256 totalSharesAndLoot) internal pure returns (uint256) {
+        require(totalSharesAndLoot != 0);
 
         if (balance == 0) { return 0; }
 
         uint256 prod = balance * shares;
 
         if (prod / balance == shares) { // no overflow in multiplication above?
-            return prod / totalShares;
+            return prod / totalSharesAndLoot;
         }
 
-        return (balance / totalShares) * shares;
+        return (balance / totalSharesAndLoot) * shares;
     }
 }
