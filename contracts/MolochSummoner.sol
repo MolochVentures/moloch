@@ -1,15 +1,16 @@
-pragma solidity 0.5.12;
+pragma solidity 0.5.17;
 
 import "./Moloch.sol";
 
 contract MolochSummoner {
-    Moloch private m;
+    // presented by OpenESQ || LexDAO LLC ~ Use at own risk! || chat with us: lexdao.chat 
+    Moloch private baal;
     address[] public molochs;
 
-    event Summoned(address indexed m, address indexed _summoner);
+    event Summoned(address indexed baal, address[] indexed _summoner);
 
     function summonMoloch(
-        address _summoner,
+        address[] memory _summoners,
         address[] memory _approvedTokens,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
@@ -18,8 +19,8 @@ contract MolochSummoner {
         uint256 _dilutionBound,
         uint256 _processingReward) public {
 
-        m = new Moloch(
-            _summoner,
+        baal = new Moloch(
+            _summoners,
             _approvedTokens,
             _periodDuration,
             _votingPeriodLength,
@@ -28,11 +29,11 @@ contract MolochSummoner {
             _dilutionBound,
             _processingReward);
 
-        molochs.push(address(m));
-        emit Summoned(address(m), _summoner);
+        molochs.push(address(baal));
+        emit Summoned(address(baal), _summoners);
     }
 
-    function getMolochCount() public view returns (uint256 MolochCount) {
+    function getMolochCount() public view returns (uint256) {
         return molochs.length;
     }
 }
