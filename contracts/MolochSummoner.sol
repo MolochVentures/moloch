@@ -4,11 +4,11 @@ import "./Moloch.sol";
 
 contract MolochSummoner {
 
-    Moloch private M;
+    Moloch private baal;
 
     address[] public Molochs;
 
-    event Summoned(address indexed M, address indexed _summoner);
+    event Summoned(address indexed baal, address indexed _summoner);
 
     function summonMoloch(
         address _summoner,
@@ -20,7 +20,7 @@ contract MolochSummoner {
         uint256 _dilutionBound,
         uint256 _processingReward) public {
 
-        M = new Moloch(
+        baal = new Moloch(
             _summoner,
             _approvedTokens,
             _periodDuration,
@@ -30,13 +30,12 @@ contract MolochSummoner {
             _dilutionBound,
             _processingReward);
 
-        Molochs.push(address(M));
+        Molochs.push(address(baal));
 
-        emit Summoned(address(M), _summoner);
-
+        emit Summoned(address(baal), _summoner);
     }
 
-    function getMolochCount() public view returns (uint256 MolochCount) {
+    function getMolochCount() public view returns (uint256) {
         return Molochs.length;
     }
 }
