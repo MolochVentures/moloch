@@ -1,7 +1,7 @@
 LEXMOL: 
 >[Mainnet Summoner](https://etherscan.io/address/0xebb8d5e101df39e4df0913c2cf18223cdfab64d0#code)
 
->[Rinkeby Summoner](https://rinkeby.etherscan.io/address/0x532add7a1e85cdfef8bb973a765fba7fdb7c9c48#code)
+>[Rinkeby Summoner](https://rinkeby.etherscan.io/address/0x673edc44776f0b1c965dec5b553b9318f144f1ae#code)
 
 STEAL THIS CODE
 
