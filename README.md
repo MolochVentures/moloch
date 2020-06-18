@@ -14,6 +14,10 @@ try things out:
 
 >[Rinkeby Summoner](https://rinkeby.etherscan.io/address/0x673edc44776f0b1c965dec5b553b9318f144f1ae#code)
 
+open questions:
+
+* add OZ Context.sol for GSN compatability?
+
 STEAL THIS CODE
 
 # Moloch v2
