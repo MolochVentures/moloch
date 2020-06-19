@@ -1,8 +1,9 @@
-pragma solidity 0.5.17;
+pragma solidity ^0.5.17;
 
 import "./SafeMath.sol";
 import "./IERC20.sol";
 import "./ReentrancyGuard.sol";
+import "./Minion.sol";
 
 contract Moloch is ReentrancyGuard {
     using SafeMath for uint256;
@@ -17,6 +18,8 @@ contract Moloch is ReentrancyGuard {
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
+    Minion public minion; // address executing member governance updates
+
     
     address public depositToken; // deposit token contract reference; default = wETH
 
@@ -45,6 +48,7 @@ contract Moloch is ReentrancyGuard {
     event CancelProposal(uint256 indexed proposalId, address applicantAddress);
     event UpdateDelegateKey(address indexed memberAddress, address newDelegateKey);
     event Withdraw(address indexed memberAddress, address token, uint256 amount);
+    event QuickMemberAdded(address indexed newMemberAddress, uint256 tributeOffered, uint256 shares);
 
     // *******************
     // INTERNAL ACCOUNTING
@@ -57,7 +61,6 @@ contract Moloch is ReentrancyGuard {
     address public constant GUILD = address(0xdead);
     address public constant ESCROW = address(0xbeef);
     address public constant TOTAL = address(0xbabe);
-    address public constant minion; // address executing member governance updates
     mapping (address => mapping(address => uint256)) public userTokenBalances; // userTokenBalances[userAddress][tokenAddress]
 
     enum Vote {
@@ -125,7 +128,6 @@ contract Moloch is ReentrancyGuard {
     constructor(
         address[] memory _summoners,
         address[] memory _approvedTokens,
-        address _minion,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
@@ -160,7 +162,7 @@ contract Moloch is ReentrancyGuard {
             approvedTokens.push(_approvedTokens[i]);
         }
         
-        minion = _minion;
+        minion = new Minion(address(this));
         periodDuration = _periodDuration;
         votingPeriodLength = _votingPeriodLength;
         gracePeriodLength = _gracePeriodLength;
@@ -646,6 +648,45 @@ contract Moloch is ReentrancyGuard {
         return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
     }
     
+    
+    /**********
+    QUICK MEMBER
+    **********/
+    
+    function  quickAddMember (address _newMemberAddress, uint256 _tributeAmount, uint256 _shareDiv) onlyMember public returns(bool) {
+        require(_newMemberAddress != address(0), "new member applicant cannot be 0");
+        require(_tributeAmount >= _shareDiv, "applicant cannot give less than share div, no fractional shares");
+
+        //rounds down to nearest number of shares based on tribute offered and share div 
+        uint256 shares = (_tributeAmount) / (_shareDiv);
+
+        if (members[_newMemberAddress].exists) {
+            members[_newMemberAddress].shares = members[_newMemberAddress].shares.add(shares);
+        // the applicant is a new member, create a new record for them
+        } else {
+        // if the applicant address is already taken by a member's delegateKey, reset it to their member address
+        if (members[memberAddressByDelegateKey[_newMemberAddress]].exists) {
+            address memberToOverride = memberAddressByDelegateKey[_newMemberAddress];
+            memberAddressByDelegateKey[memberToOverride] = memberToOverride;
+            members[memberToOverride].delegateKey = memberToOverride;
+            }
+            // use applicant address as delegateKey by default
+            members[_newMemberAddress] = Member(_newMemberAddress, shares, 0, true, 0, 0);
+            memberAddressByDelegateKey[_newMemberAddress] = _newMemberAddress;
+            }
+            
+
+        //increase total shares
+        totalShares = totalShares.add(shares);
+
+        //update DAO internal balances
+        unsafeAddToBalance(GUILD, depositToken, _tributeAmount);
+
+        //emit member added event
+        emit QuickMemberAdded(_newMemberAddress, _tributeAmount, shares);
+        
+    }
+    
     /**********
     MINION MGMT
     **********/
@@ -657,7 +698,7 @@ contract Moloch is ReentrancyGuard {
         uint256 _proposalDeposit, 
         uint256 _dilutionBound, 
         uint256 _processingReward) public {
-        require(msg.sender == minion);
+        require(msg.sender == address(minion));
         
         depositToken = _depositToken;
         periodDuration = _periodDuration;
