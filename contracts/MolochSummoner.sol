@@ -12,6 +12,7 @@ contract MolochSummoner {
     function summonMoloch(
         address[] memory _summoners,
         address[] memory _approvedTokens,
+        address _minion,
         uint256 _periodDuration,
         uint256 _votingPeriodLength,
         uint256 _gracePeriodLength,
@@ -22,6 +23,7 @@ contract MolochSummoner {
         baal = new Moloch(
             _summoners,
             _approvedTokens,
+            _minion,
             _periodDuration,
             _votingPeriodLength,
             _gracePeriodLength,
@@ -31,9 +33,5 @@ contract MolochSummoner {
 
         molochs.push(address(baal));
         emit Summoned(address(baal), _summoners);
-    }
-
-    function getMolochCount() public view returns (uint256) {
-        return molochs.length;
     }
 }
