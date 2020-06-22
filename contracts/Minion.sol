@@ -1,6 +1,6 @@
 pragma solidity 0.5.17;
 
-import "./MolochwMinion.sol";
+import "./Moloch.sol";
 
 contract Minion {
 

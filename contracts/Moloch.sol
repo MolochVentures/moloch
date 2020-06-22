@@ -1,9 +1,8 @@
-pragma solidity ^0.5.17;
+pragma solidity ^0.6.0;
 
-import "./SafeMath.sol";
-import "./IERC20.sol";
-import "./ReentrancyGuard.sol";
-import "./Minion.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-solidity/contracts/utils/ReentrancyGuard.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-solidity/contracts/token/ERC20/IERC20.sol";
 
 contract Moloch is ReentrancyGuard {
     using SafeMath for uint256;
@@ -18,7 +17,7 @@ contract Moloch is ReentrancyGuard {
     uint256 public dilutionBound; // default = 3 - maximum multiplier a YES voter will be obligated to pay in case of mass ragequit
     uint256 public processingReward; // default = 0.1 - amount of ETH to give to whoever processes a proposal
     uint256 public summoningTime; // needed to determine the current period
-    Minion public minion; // address executing member governance updates
+    uint256 public defaultTribute; //default tribute amount 
 
     address public depositToken; // deposit token contract reference; default = wETH
 
@@ -31,6 +30,7 @@ contract Moloch is ReentrancyGuard {
     uint256 constant MAX_NUMBER_OF_SHARES_AND_LOOT = 10**18; // maximum number of shares that can be minted
     uint256 constant MAX_TOKEN_WHITELIST_COUNT = 400; // maximum number of whitelisted tokens
     uint256 constant MAX_TOKEN_GUILDBANK_COUNT = 200; // maximum number of tokens with non-zero balance in guildbank
+    uint256 constant MAX_SUMMONERS = 100; //maximum number of summoners 
 
     // ***************
     // EVENTS
@@ -72,6 +72,7 @@ contract Moloch is ReentrancyGuard {
         uint256 shares; // the # of voting shares assigned to this member
         uint256 loot; // the loot amount available to this member (combined with shares on ragequit)
         bool exists; // always true once a member has been created
+        bool summoner; //true if added in constructor 
         uint256 highestIndexYesVote; // highest proposal index # on which the member voted YES
         uint256 jailed; // set to proposalIndex of a passing guild kick proposal for this member, prevents voting on and sponsoring proposals
     }
@@ -122,6 +123,11 @@ contract Moloch is ReentrancyGuard {
         require(members[memberAddressByDelegateKey[msg.sender]].shares > 0, "not a delegate");
         _;
     }
+    
+    modifier onlySummoner {
+        require(members[msg.sender].summoner == true, "not a summoner");
+        _;
+    }
 
     constructor(
         address[] memory _summoners,
@@ -131,7 +137,8 @@ contract Moloch is ReentrancyGuard {
         uint256 _gracePeriodLength,
         uint256 _proposalDeposit,
         uint256 _dilutionBound,
-        uint256 _processingReward
+        uint256 _processingReward,
+        uint256 _defaultTribute
     ) public {
         require(_periodDuration > 0, "_periodDuration cannot be 0");
         require(_votingPeriodLength > 0, "_votingPeriodLength cannot be 0");
@@ -142,14 +149,15 @@ contract Moloch is ReentrancyGuard {
         require(_approvedTokens.length > 0, "need at least one approved token");
         require(_approvedTokens.length <= MAX_TOKEN_WHITELIST_COUNT, "too many tokens");
         require(_proposalDeposit >= _processingReward, "_proposalDeposit cannot be smaller than _processingReward");
-
+        require(_summoners.length <= MAX_SUMMONERS, "can't have more than 100 summoners");
+        
         depositToken = _approvedTokens[0];
         // NOTE: move event up here, avoid stack too deep if too many approved tokens
         emit SummonComplete(_summoners, _approvedTokens, now, _periodDuration, _votingPeriodLength, _gracePeriodLength, _proposalDeposit, _dilutionBound, _processingReward);
         
         for (uint256 i = 0; i < _summoners.length; i++) {
             require(_summoners[i] != address(0), "summoner cannot be 0");
-            members[_summoners[i]] = Member(_summoners[i], 1, 0, true, 0, 0);
+            members[_summoners[i]] = Member(_summoners[i], 1, 0, true, true, 0, 0);
             memberAddressByDelegateKey[_summoners[i]] = _summoners[i];
         }
 
@@ -166,16 +174,12 @@ contract Moloch is ReentrancyGuard {
         proposalDeposit = _proposalDeposit;
         dilutionBound = _dilutionBound;
         processingReward = _processingReward;
+        defaultTribute = _defaultTribute;
         summoningTime = now;
         totalShares = _summoners.length;
     }
-    
-    function summonMinion() public nonReentrant returns (address) {
-        address _moloch = address(this);
-        new Minion(_moloch);
-        
-        return address(minion);
-    }
+
+
 
     /*****************
     PROPOSAL FUNCTIONS
@@ -405,7 +409,7 @@ contract Moloch is ReentrancyGuard {
                 }
 
                 // use applicant address as delegateKey by default
-                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, 0, 0);
+                members[proposal.applicant] = Member(proposal.applicant, proposal.sharesRequested, proposal.lootRequested, true, false, 0, 0);
                 memberAddressByDelegateKey[proposal.applicant] = proposal.applicant;
             }
 
@@ -652,29 +656,31 @@ contract Moloch is ReentrancyGuard {
         return getCurrentPeriod() >= startingPeriod.add(votingPeriodLength);
     }
     
-    /**********
-    MINION MGMT
-    **********/
-        
-    function updateGovernance(
-        address _depositToken,
-        uint256 _periodDuration, 
-        uint256 _votingPeriodLength, 
-        uint256 _gracePeriodLength, 
-        uint256 _proposalDeposit, 
-        uint256 _dilutionBound, 
-        uint256 _processingReward) public {
-        require(msg.sender == address(minion));
-        
-        depositToken = _depositToken;
-        periodDuration = _periodDuration;
-        votingPeriodLength = _votingPeriodLength;
-        gracePeriodLength = _gracePeriodLength;
-        proposalDeposit = _proposalDeposit;
-        dilutionBound = _dilutionBound;
-        processingReward = _processingReward;
-    }
+    /*****************
+    SUMMONER ADD FUNCTIONS
+    *****************/    
+    function giveMeShares (uint256 _tribute) public onlySummoner {
+        require(_tribute == defaultTribute, "Can only give the default tribute, otherwise submit a proposal");
 
+        _giveShares(_tribute); 
+    } 
+    
+    function _giveShares(uint256 _tribute) internal {
+        require(IERC20(depositToken).transferFrom(msg.sender, address(this), _tribute), "donation transfer failed");
+
+        /*
+        * @dev a way for the summoners to get a normal amount of shares for contributing a default amount of tribute
+        * assumes that that the DAO has an established tribute to shares ratio that is 1:1 (e.g. 10 ETH = 10 Shares)
+        * also restricted to summoners set in the constructor and bound by the defaultTribute, so too many shares aren't issued
+        */ 
+        uint256 decimalFactor = 10**uint256(18);
+        uint256 shares = (_tribute).div(decimalFactor);
+        members[msg.sender].shares = members[msg.sender].shares.add(shares)-1;
+        
+        unsafeAddToBalance(GUILD, depositToken, _tribute);
+        totalShares = totalShares.add(shares);
+    }
+    
     /***************
     GETTER FUNCTIONS
     ***************/
@@ -739,4 +745,5 @@ contract Moloch is ReentrancyGuard {
 
         return (balance / totalSharesAndLoot) * shares;
     }
+    
 }
