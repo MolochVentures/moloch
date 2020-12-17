@@ -20,7 +20,7 @@ chai
   .should()
 
 const Moloch = artifacts.require('./Moloch')
-const Token = artifacts.require('./Token')
+const Token = artifacts.require('./ERC20')
 
 const revertMessages = {
   onlyDelegate: 'not a delegate',
