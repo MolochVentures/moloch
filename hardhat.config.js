@@ -20,7 +20,7 @@ module.exports = {
         pool: ""
       }
     },
-    ropsten: {
+    /* ropsten: {
       url: `https://ropsten.infura.io/v3/${INFURA_API_KEY}`,
       accounts: [ROPSTEN_PRIVATE_KEY],
       deployedContracts: {
@@ -35,12 +35,12 @@ module.exports = {
         moloch: "0x1fd169A4f5c59ACf79d0Fd5d91D1201EF1Bce9f1", // The original Moloch
         pool: ""
       }
-    },
+    }, */
     coverage: {
       url: "http://localhost:8555"
     }
   },
-  solc: {
+  solidity: {
     version: "0.5.3",
     settings: {
       optimizer: {
