@@ -1,9 +1,8 @@
-const buidler = require("@nomiclabs/buidler/config");
-const { usePlugin } = buidler;
+const hardhat = require("hardhat/config");
+const { usePlugin } = hardhat;
 
-usePlugin("@nomiclabs/buidler-etherscan");
-usePlugin("@nomiclabs/buidler-truffle5");
-
+require("@nomiclabs/hardhat-etherscan");
+require("@nomiclabs/hardhat-truffle5");
 require("./scripts/moloch-tasks");
 require("./scripts/pool-tasks");
 
@@ -43,9 +42,11 @@ module.exports = {
   },
   solc: {
     version: "0.5.3",
-    optimizer: {
-      enabled: true,
-      runs: 200
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200
+      }
     }
   },
   etherscan: {

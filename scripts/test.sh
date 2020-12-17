@@ -49,10 +49,10 @@ else
   start_ganache
 fi
 
-echo "Buidler version $(npx buidler --version)"
+echo "Hardhat version $(npx hardhat --version)"
 
 if [ "$SOLIDITY_COVERAGE" = true ]; then
   node_modules/.bin/solidity-coverage
 else
-  node_modules/.bin/buidler test --network develop "$@"
+  npx hardhat test --network develop "$@"
 fi
