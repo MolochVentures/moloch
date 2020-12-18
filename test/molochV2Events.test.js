@@ -22,7 +22,7 @@ const {
 } = require('./test-utils')
 
 const Moloch = artifacts.require('./Moloch')
-const Token = artifacts.require('./ERC20')
+const Token = artifacts.require('./Token')
 const Submitter = artifacts.require('./Submitter') // used to test submit proposal return values
 
 const revertMessages = {

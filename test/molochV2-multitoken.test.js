@@ -1,4 +1,4 @@
-const { artifacts, ethereum, web3 } = require('hardhat')
+const { artifacts, network, web3 } = require('hardhat')
 const chai = require('chai')
 const { assert } = chai
 
@@ -20,7 +20,7 @@ chai
   .should()
 
 const Moloch = artifacts.require('./Moloch')
-const Token = artifacts.require('./ERC20')
+const Token = artifacts.require('./Token')
 
 const revertMessages = {
   onlyDelegate: 'not a delegate',
@@ -54,15 +54,15 @@ async function blockTime () {
 }
 
 async function snapshot () {
-  return ethereum.send('evm_snapshot', [])
+  return network.provider.send('evm_snapshot', [])
 }
 
 async function restore (snapshotId) {
-  return ethereum.send('evm_revert', [snapshotId])
+  return network.provider.send('evm_revert', [snapshotId])
 }
 
 async function forceMine () {
-  return ethereum.send('evm_mine', [])
+  return network.provider.send('evm_mine', [])
 }
 
 const deploymentConfig = {
@@ -78,7 +78,7 @@ const deploymentConfig = {
 async function moveForwardPeriods (periods) {
   await blockTime()
   const goToTime = deploymentConfig.PERIOD_DURATION_IN_SECONDS * periods
-  await ethereum.send('evm_increaseTime', [goToTime])
+  await network.provider.send('evm_increaseTime', [goToTime])
   await forceMine()
   await blockTime()
   return true
