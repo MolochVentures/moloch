@@ -54,5 +54,5 @@ echo "Hardhat version $(npx hardhat --version)"
 if [ "$SOLIDITY_COVERAGE" = true ]; then
   node_modules/.bin/solidity-coverage
 else
-  npx hardhat test --network develop "$@"
+  npx hardhat test
 fi

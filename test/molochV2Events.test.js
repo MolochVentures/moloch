@@ -1,4 +1,4 @@
-const { artifacts, ethereum, web3 } = require('@nomiclabs/hardhat')
+const { artifacts, ethereum, web3 } = require('hardhat')
 const chai = require('chai')
 const { assert } = chai
 
