@@ -697,17 +697,17 @@ contract Moloch is ReentrancyGuard {
         unsafeAddToBalance(to, token, amount);
     }
 
-    function fairShare(uint256 balance, uint256 shares, uint256 totalShares) internal pure returns (uint256) {
-        require(totalShares != 0);
+    function fairShare(uint256 balance, uint256 shares, uint256 totalSharesAndLoot) internal pure returns (uint256) {
+        require(totalSharesAndLoot != 0);
 
         if (balance == 0) { return 0; }
 
         uint256 prod = balance * shares;
 
         if (prod / balance == shares) { // no overflow in multiplication above?
-            return prod / totalShares;
+            return prod / totalSharesAndLoot;
         }
 
-        return (balance / totalShares) * shares;
+        return (balance / totalSharesAndLoot) * shares;
     }
 }
