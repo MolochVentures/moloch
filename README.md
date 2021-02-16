@@ -51,7 +51,7 @@ To tests the contracts run `npm run test`.
 
 To compute their code coverage run `npm run coverage`.
 
-## Deploying an interacting with a Moloch DAO and a Pool
+## Deploying and interacting with a Moloch DAO and a Pool
 
 This project includes Hardhat tasks for deploying and using DAOs and Pools.
 
