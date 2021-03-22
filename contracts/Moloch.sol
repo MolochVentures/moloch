@@ -599,7 +599,7 @@ contract Moloch is ReentrancyGuard {
         // only collect if 1) there are tokens to collect 2) token is whitelisted 3) token has non-zero balance
         require(amountToCollect > 0, 'no tokens to collect');
         require(tokenWhitelist[token], 'token to collect must be whitelisted');
-        require(userTokenBalances[GUILD][token] > 0, 'token to collect must have non-zero guild bank balance');
+        require(userTokenBalances[GUILD][token] >= 0, 'token to collect must have non-zero guild bank balance');
         
         unsafeAddToBalance(GUILD, token, amountToCollect);
         emit TokensCollected(token, amountToCollect);
