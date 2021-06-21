@@ -20,7 +20,7 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
     // Make sure everything is compiled
     await run('compile')
 
-    console.log('Deploying a new DAO to the network ' + buidlerArguments.network)
+    console.log('Deploying a new DAO to the network ' + hre.network.name)
     console.log(
       'Deployment parameters:\n',
       '  summoner:', deploymentParams.SUMMONER, '\n',
@@ -28,7 +28,6 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
       '  periodSeconds:', deploymentParams.PERIOD_DURATION_IN_SECONDS, '\n',
       '  votingPeriods:', deploymentParams.VOTING_DURATON_IN_PERIODS, '\n',
       '  gracePeriods:', deploymentParams.GRACE_DURATON_IN_PERIODS, '\n',
-      '  abortPeriods:', deploymentParams.ABORT_WINDOW_IN_PERIODS, '\n',
       '  proposalDeposit:', deploymentParams.PROPOSAL_DEPOSIT, '\n',
       '  dilutionBound:', deploymentParams.DILUTION_BOUND, '\n',
       '  processingReward:', deploymentParams.PROCESSING_REWARD, '\n'
@@ -47,11 +46,10 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
     console.log("Deploying...")
     const moloch = await Moloch.new(
       deploymentParams.SUMMONER,
-      deploymentParams.TOKEN,
+      deploymentParams.APPROVED_TOKENS,
       deploymentParams.PERIOD_DURATION_IN_SECONDS,
       deploymentParams.VOTING_DURATON_IN_PERIODS,
       deploymentParams.GRACE_DURATON_IN_PERIODS,
-      deploymentParams.ABORT_WINDOW_IN_PERIODS,
       deploymentParams.PROPOSAL_DEPOSIT,
       deploymentParams.DILUTION_BOUND,
       deploymentParams.PROCESSING_REWARD
@@ -59,7 +57,7 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
 
     console.log("")
     console.log('Moloch DAO deployed. Address:', moloch.address)
-    console.log("Set this address in buidler.config.js's networks section to use the other tasks")
+    console.log("Set this address in hardhat.config.js's networks section to use the other tasks")
   })
 
 task('moloch-submit-proposal', 'Submits a proposal')
