@@ -1,4 +1,4 @@
-const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
+const { artifacts, ethereum, web3 } = require('hardhat')
 const chai = require('chai')
 const { assert } = chai
 
@@ -2107,7 +2107,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const log = logs[0]
       assert.equal(log.event, 'ProcessWhitelistProposal')
       //event ProcessProposal(uint256 indexed proposalIndex, uint256 indexed proposalId, bool didPass);
-      
 
       const proposalQueueLength = 0
       const {proposalIndex,proposalId,didPass} = log.args
@@ -2115,7 +2114,6 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       assert.equal(proposalId, firstProposalIndex)
       assert.equal(didPass, false)
     })
-
   })
 
   describe('processGuildKickProposal events', () => {
@@ -2743,10 +2741,9 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const log = logs[0]
   
       //event CancelProposal(uint256 indexed proposalId, address memberAddress, address applicantAddress);
-      const {proposalId,memberAddress,applicantAddress} = log.args
+      const {proposalId,applicantAddress} = log.args
       assert.equal(log.event, 'CancelProposal')
       assert.equal(proposalId, firstProposalIndex)
-      assert.equal(memberAddress, zeroAddress)
       assert.equal(applicantAddress, proposal1.applicant)
     })
 

@@ -1,4 +1,4 @@
-const { artifacts, ethereum, web3 } = require('@nomiclabs/buidler')
+const { artifacts, ethereum, web3 } = require('hardhat')
 const chai = require('chai')
 const { assert } = chai
 
@@ -43,6 +43,7 @@ const revertMessages = {
   submitProposalTributeTokenIsNotWhitelisted: 'tributeToken is not whitelisted',
   submitProposalPaymetTokenIsNotWhitelisted: 'payment is not whitelisted',
   submitProposalApplicantCannotBe0: 'revert applicant cannot be 0',
+  submitProposalApplicantCannotBeReserved: 'applicant address cannot be reserved',
   submitProposalApplicantIsJailed: 'proposal applicant must not be jailed',
   submitWhitelistProposalMustProvideTokenAddress: 'must provide token address',
   submitWhitelistProposalAlreadyHaveWhitelistedToken: 'cannot already have whitelisted the token',
@@ -91,7 +92,8 @@ const SolRevert = 'VM Exception while processing transaction: revert'
 const zeroAddress = '0x0000000000000000000000000000000000000000'
 const GUILD  = '0x000000000000000000000000000000000000dead'
 const ESCROW = '0x000000000000000000000000000000000000beef'
-const MAX_TOKEN_COUNT = new BN('10') // TODO: actual number to be determined
+const TOTAL = '0x000000000000000000000000000000000000babe'
+const MAX_TOKEN_WHITELIST_COUNT = new BN('10') // TODO: actual number to be determined
 
 const _1 = new BN('1')
 const _1e18 = new BN('1000000000000000000') // 1e18
@@ -264,6 +266,12 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       const totalShares = await moloch.totalShares()
       assert.equal(+totalShares, summonerShares)
 
+      const totalLoot = await moloch.totalLoot()
+      assert.equal(+totalLoot, 0)
+
+      const totalGuildBankTokens = await moloch.totalGuildBankTokens()
+      assert.equal(+totalGuildBankTokens, 0)
+
       // confirm initial deposit token supply and summoner balance
       const tokenSupply = await tokenAlpha.totalSupply()
       assert.equal(+tokenSupply.toString(), deploymentConfig.TOKEN_SUPPLY)
@@ -434,7 +442,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
     it('require fail - too many tokens', async () => {
       await Moloch.new(
         summoner,
-        addressArray(MAX_TOKEN_COUNT + 1),
+        addressArray(MAX_TOKEN_WHITELIST_COUNT + 1),
         deploymentConfig.PERIOD_DURATION_IN_SECONDS,
         deploymentConfig.VOTING_DURATON_IN_PERIODS,
         deploymentConfig.GRACE_DURATON_IN_PERIODS,
@@ -616,6 +624,44 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         proposal1.details,
         { from: proposal1.applicant }
       ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBe0)
+    })
+
+    it('require fail - applicant address can not be reserved', async () => {
+      await moloch.submitProposal(
+        GUILD,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBeReserved)
+
+      await moloch.submitProposal(
+        ESCROW,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBeReserved)
+
+      await moloch.submitProposal(
+        TOTAL,
+        proposal1.sharesRequested,
+        proposal1.lootRequested,
+        proposal1.tributeOffered,
+        proposal1.tributeToken,
+        proposal1.paymentRequested,
+        proposal1.paymentToken,
+        proposal1.details,
+        { from: proposal1.applicant }
+      ).should.be.rejectedWith(revertMessages.submitProposalApplicantCannotBeReserved)    
     })
 
     it('failure - too many shares requested', async () => {
@@ -1957,6 +2003,10 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         expectedMaxSharesAndLootAtYesVote: 1
       })
 
+      // Make sure the guild bank tokens are accounted for
+      const totalGuildBankTokens = await moloch.totalGuildBankTokens()
+      assert.equal(+totalGuildBankTokens, 1)
+
       await verifyFlags({
         moloch: moloch,
         proposalId: firstProposalIndex,
@@ -1992,15 +2042,16 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       })
     })
 
-    it('happy path - fail - no wins', async () => {
+    it('happy path - fail - no wins (proposer gets funds back)', async () => {
+      proposer = proposal2.applicant // need to test that funds go back to proposer, not applicant
+
       await fundAndApproveToMoloch({
-        to: proposal1.applicant,
+        to: proposer, // approve funds from proposer, not applicant
         from: creator,
         value: proposal1.tributeOffered
       })
 
       // submit
-      proposer = proposal1.applicant
       applicant = proposal1.applicant
       await moloch.submitProposal(
         applicant,
@@ -2091,7 +2142,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
         userBalances: {
           [GUILD]: 0,
           [ESCROW]: 0,
-          [proposal1.applicant]: proposal1.tributeOffered,
+          [proposer]: proposal1.tributeOffered,
           [summoner]: deploymentConfig.PROPOSAL_DEPOSIT - deploymentConfig.PROCESSING_REWARD,
           [processor]: deploymentConfig.PROCESSING_REWARD
         }

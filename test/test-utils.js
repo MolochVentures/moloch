@@ -50,8 +50,8 @@ const verifyProposal = async (
   assert.equal(proposalData.sponsor, sponsor, 'sponsor does not match')
 
   assert.equal(proposalData.sharesRequested, proposal.sharesRequested, 'sharesRequested does not match')
-
-  assert.equal(proposalData.tributeOffered, proposal.tributeOffered, 'tributeOffered does not match')
+  
+  assert.equal(proposalData.tributeOffered.toString(), proposal.tributeOffered.toString(), 'tributeOffered does not match')
   assert.equal(proposalData.tributeToken, proposal.tributeToken, 'tributeToken does not match')
 
   assert.equal(proposalData.paymentRequested, proposal.paymentRequested, 'paymentRequested does not match')
