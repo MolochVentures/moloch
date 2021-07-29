@@ -1,6 +1,6 @@
 // Deployment params
 module.exports.SUMMONER = ''
-module.exports.TOKEN = ''
+module.exports.TOKEN = ['']
 module.exports.PERIOD_DURATION_IN_SECONDS = 17280
 module.exports.VOTING_DURATON_IN_PERIODS = 35
 module.exports.GRACE_DURATON_IN_PERIODS = 35
