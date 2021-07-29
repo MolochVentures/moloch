@@ -20,7 +20,7 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
     // Make sure everything is compiled
     await run('compile')
 
-    console.log('Deploying a new DAO to the network ' + buidlerArguments.network)
+    console.log('Deploying a new DAO to the network ' + hardhatArguments.network)
     console.log(
       'Deployment parameters:\n',
       '  summoner:', deploymentParams.SUMMONER, '\n',

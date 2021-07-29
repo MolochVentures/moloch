@@ -10,7 +10,7 @@ const BN = require('bn.js')
 async function getDeployedMoloch () {
   const molochAddress = getMolochAddress()
   if (!molochAddress) {
-    console.error(`Please, set the DAO's address in buidler.config.js's networks.${buidlerArguments.network}.deployedContracts.moloch`)
+    console.error(`Please, set the DAO's address in buidler.config.js's networks.${hardhatArguments.network}.deployedContracts.moloch`)
     return
   }
 
@@ -25,7 +25,7 @@ async function getDeployedMoloch () {
 async function getDeployedPool () {
   const poolAddress = getPoolAddress()
   if (!poolAddress) {
-    console.error(`Please, set the Pool's address in buidler.config.js's networks.${buidlerArguments.network}.deployedContracts.pool`)
+    console.error(`Please, set the Pool's address in buidler.config.js's networks.${hardhatArguments.network}.deployedContracts.pool`)
     return
   }
 
@@ -54,7 +54,7 @@ async function getApprovedToken () {
  * it hasn't been set.
  */
 function getMolochAddress () {
-  return config.networks[buidlerArguments.network].deployedContracts.moloch
+  return config.networks[hardhatArguments.network].deployedContracts.moloch
 }
 
 /**
@@ -62,7 +62,7 @@ function getMolochAddress () {
  * it hasn't been set.
  */
 function getPoolAddress () {
-  return config.networks[buidlerArguments.network].deployedContracts.pool
+  return config.networks[hardhatArguments.network].deployedContracts.pool
 }
 
 async function giveAllowance (tokenContract, allowanceGiver, receiverContract, amount) {

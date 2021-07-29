@@ -28,7 +28,7 @@ task('pool-deploy', 'Deploys a new instance of the pool and activates it')
       return
     }
 
-    console.log('Deploying a new Pool to network ' + buidlerArguments.network)
+    console.log('Deploying a new Pool to network ' + hardhatArguments.network)
 
     console.log(
       'Deployment parameters:\n',
