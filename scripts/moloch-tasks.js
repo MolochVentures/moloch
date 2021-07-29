@@ -28,7 +28,6 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
       '  periodSeconds:', deploymentParams.PERIOD_DURATION_IN_SECONDS, '\n',
       '  votingPeriods:', deploymentParams.VOTING_DURATON_IN_PERIODS, '\n',
       '  gracePeriods:', deploymentParams.GRACE_DURATON_IN_PERIODS, '\n',
-      '  abortPeriods:', deploymentParams.ABORT_WINDOW_IN_PERIODS, '\n',
       '  proposalDeposit:', deploymentParams.PROPOSAL_DEPOSIT, '\n',
       '  dilutionBound:', deploymentParams.DILUTION_BOUND, '\n',
       '  processingReward:', deploymentParams.PROCESSING_REWARD, '\n'
@@ -51,7 +50,6 @@ task('moloch-deploy', 'Deploys a new instance of the Moloch DAO')
       deploymentParams.PERIOD_DURATION_IN_SECONDS,
       deploymentParams.VOTING_DURATON_IN_PERIODS,
       deploymentParams.GRACE_DURATON_IN_PERIODS,
-      deploymentParams.ABORT_WINDOW_IN_PERIODS,
       deploymentParams.PROPOSAL_DEPOSIT,
       deploymentParams.DILUTION_BOUND,
       deploymentParams.PROCESSING_REWARD
