@@ -54,7 +54,7 @@ The Moloch tests make heavy use of EVM snapshot & revert both to speed up the te
 
 The `beforeEach` is invoked before each unit test, and the `afterEach` is invoked after each unit test. The highest level `beforeEach` shown above takes a fresh snapshot, resets the global `proposal1` data to a predictable baseline, and transfers to the summoner their expected initial token balance. The `afterEach` simply reverts to the snapshot.
 
-Nested in the next `describe` test block is another `beforeEach` which is invoked before only the unit tests in the `desribe` test block. The higher level `beforeEach` above is still called before this one on every unit test in the block.
+Nested in the next `describe` test block is another `beforeEach` which is invoked before only the unit tests in the `describe` test block. The higher level `beforeEach` above is still called before this one on every unit test in the block.
 
 `beforeEach_1 -> beforeEach_2 -> { test } -> afterEach`
 
