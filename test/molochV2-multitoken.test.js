@@ -1454,7 +1454,7 @@ contract('Moloch', ([creator, summoner, applicant1, applicant2, processor, deleg
       }
     })
 
-    it.only('can still ragequit and withdraw', async function() {
+    it('can still ragequit and withdraw', async function() {
       this.timeout(1200000)
 
       const memberData = await moloch.members(proposal1.applicant)
