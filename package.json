@@ -18,7 +18,7 @@
     "eslint-plugin-promise": "^4.1.1",
     "eslint-plugin-standard": "^4.0.0",
     "eth-lightwallet": "3.0.0",
-    "hardhat": "^2.0.5",
+    "hardhat": "^2.12.5",
     "prompt-confirm": "^2.0.4",
     "standard": "^11.0.0",
     "web3": "^1.3.0"
